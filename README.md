@@ -1,0 +1,2 @@
+# gaziedu
+Gazi Web Sitesi
