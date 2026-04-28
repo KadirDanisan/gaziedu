@@ -12,7 +12,7 @@ const steps = [
 const details = [
   {
     title: "1- İhtiyaç Analizi Süreci",
-    image: "https://istanbulinstitute.com/files/analizpng_25-07-2023_16-01-34.png",
+    image: "/1.png",
     paragraphs: [
       "Şirketler tarafından talep edilen eğitim ya da danışmanlık hizmetleri ile ilgili alanında uzman danışmanlarımız tarafından ilgili, şirket yöneticileri ile yüz yüze görüşmeler yapılır. Görüşmelerde şu sorulara cevap aranır?.",
       "Alınan cevaplara uygun olarak şirketin kültürü ve gelecek stratejileri de dikkate alınarak şirket için en uygun eğitim içeriği, ilgili sektörde yetkin eğitmenlerimiz tarafından oluşturulur.",
@@ -26,7 +26,7 @@ const details = [
   {
     sectionTitle: "Ön Test Süreci",
     title: "2- Ön Test Süreci",
-    image: "https://istanbulinstitute.com/files/analizpng_25-07-2023_16-01-56.png",
+    image: "/2.png",
     paragraphs: [
       "Konuya göre değişmekle birlikte eğitime katılacak kişilerin konu hakkındaki bilgi düzeyi ve eğitime katılım konusundaki istekleri online testler ile ölçülür.",
       "Sonuçlar, eğitmenlerimiz tarafından değerlendirilerek eğitim içeriği ve uygulamalarının son halini alması sağlanır.",
@@ -35,7 +35,7 @@ const details = [
   {
     sectionTitle: "Öneri ve Teklif Süreci",
     title: "3- Öneri ve Teklif Süreci",
-    image: "https://istanbulinstitute.com/files/analizpng_25-07-2023_16-02-21.png",
+    image: "/3.png",
     paragraphs: [
       "Eğitim içeriğinin ve eğitmenin belirlenmesinden sonraki süreçte oluşturulan tüm rapor, öneri ve teklifimiz ilgili şirket yöneticileri ile paylaşılır.",
     ],
@@ -43,7 +43,7 @@ const details = [
   {
     sectionTitle: "Değerlendirme Süreci",
     title: "4- Değerlendirme Süreci",
-    image: "https://istanbulinstitute.com/files/analizpng_25-07-2023_16-02-37.png",
+    image: "/4.png",
     paragraphs: [
       "Eğitim sonrası öncelikle eğitmen tarafından hazırlanan değerlendirme raporları incelenir.",
       "Eğitimin verilmesinden kısa bir süre sonra tüm katılımcılara online olarak son test uygulanır. Sonuçlar ön testlerle karşılaştırılarak, eğitmen tarafından ayrıca oluşturulan değerlendirme raporları ile birlikte ilgili şirket yöneticileri ile paylaşılır.",
@@ -105,7 +105,7 @@ function CorporateTrainingPage() {
 
       <section className="corporate-image">
         <img
-          src="https://istanbulinstitute.com/files/corporate-educationpng-18-07-2023-17-16-30png_25-07-2023_16-03-00.png"
+          src="/work.png"
           alt="Kurumsal Eğitim Çözümleri"
         />
       </section>

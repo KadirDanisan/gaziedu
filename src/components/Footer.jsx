@@ -27,7 +27,7 @@ function Footer() {
       <div className="footer-top">
         <div className="footer-brand">
           <Link to="/">
-            <img src="https://istanbulinstitute.com/site/images/logo.svg" alt="Gazi Üniversitesi" />
+            <img src="/Gazi_Üniversitesi_logo.png" alt="Gazi Üniversitesi" />
           </Link>
         </div>
 

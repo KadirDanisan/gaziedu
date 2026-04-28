@@ -11,7 +11,7 @@ function HomePage() {
       <section className="section about" id="hakkimizda">
         <div className="about-media">
           <img
-            src="https://istanbulinstitute.com/files/peoplepng_11-07-2023_15-34-40.png"
+            src="/main1.png"
             alt="Hakkımızda"
           />
         </div>

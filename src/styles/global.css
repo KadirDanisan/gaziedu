@@ -94,8 +94,8 @@ a {
 
 .dropdown {
   position: relative;
-  padding-bottom: 12px;
-  margin-bottom: -12px;
+  padding-bottom: 0;
+  margin-bottom: 0;
 }
 
 .dropdown-trigger {
@@ -120,7 +120,7 @@ a {
 
 .dropdown-menu {
   position: absolute;
-  top: calc(100% + 2px);
+  top: 100%;
   left: 0;
   min-width: 320px;
   background: #fff;
@@ -154,10 +154,25 @@ a {
   transform: translateY(0);
 }
 
+.dropdown:focus-within .dropdown-menu {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
 .header-actions {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.mobile-menu-toggle {
+  display: none;
+}
+
+.mobile-menu {
+  display: none;
 }
 
 .account-dropdown {
@@ -254,7 +269,7 @@ a {
 
 .hero {
   min-height: 560px;
-  background-image: url("https://istanbulinstitute.com/files/home-banner-1-istjpeg_06-07-2023_09-57-16.jpeg");
+  background-image: url("/banner.png");
   background-size: cover;
   background-position: center;
 }
@@ -2243,14 +2258,140 @@ textarea {
 }
 
 @media (max-width: 900px) {
+  .topbar {
+    display: none;
+  }
+
+  .nav {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
   .nav nav {
     display: none;
   }
 
-  .topbar-contact {
-    flex-direction: column;
-    align-items: flex-start;
+  .nav > a {
+    flex-shrink: 0;
+  }
+
+  .header-actions {
+    margin-left: auto;
+  }
+
+  .header-actions .desktop-action {
+    display: none;
+  }
+
+  .mobile-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-menu {
+    display: none;
+    border-top: 1px solid #ececf2;
+    padding: 12px 4vw 14px;
+    background: #fff;
+  }
+
+  .mobile-menu.is-open {
+    display: grid;
+    gap: 12px;
+  }
+
+  .mobile-menu-contact {
+    display: grid;
+    gap: 8px;
+    font-size: 0.9rem;
+  }
+
+  .mobile-menu-contact a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #2b3550;
+  }
+
+  .mobile-menu-socials {
+    display: flex;
+    gap: 10px;
+    color: #1f2a40;
+  }
+
+  .mobile-menu-nav {
+    display: grid;
     gap: 6px;
+  }
+
+  .mobile-menu-nav > a,
+  .mobile-dropdown-trigger {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #f6f8fd;
+    color: #1d2740;
+    font-weight: 600;
+  }
+
+  .mobile-menu-nav > a.active {
+    color: #0d47a1;
+    background: #edf3ff;
+  }
+
+  .mobile-dropdown-trigger {
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .mobile-dropdown-menu {
+    display: none;
+    margin-top: 6px;
+    border: 1px solid #e6ecf7;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .mobile-dropdown.is-open .mobile-dropdown-menu {
+    display: block;
+  }
+
+  .mobile-dropdown-menu a {
+    display: block;
+    padding: 9px 12px;
+    border-bottom: 1px solid #edf1f8;
+    font-size: 0.92rem;
+  }
+
+  .mobile-dropdown-menu a:last-child {
+    border-bottom: 0;
+  }
+
+  .mobile-menu-bottom {
+    display: grid;
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  .mobile-auth-cta {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .mobile-account-links {
+    display: grid;
+    gap: 8px;
+  }
+
+  .mobile-account-user {
+    font-weight: 700;
+    color: #1d2740;
+    padding: 0 2px;
   }
 
   .hero-content {
@@ -2262,6 +2403,7 @@ textarea {
     max-width: 100%;
     min-height: 390px;
     margin-left: 0;
+    overflow: hidden;
   }
 
   .hero-course-card {
@@ -2485,10 +2627,6 @@ textarea {
     padding-bottom: 8px;
   }
 
-  .topbar-contact {
-    width: 100%;
-  }
-
   .nav {
     padding-top: 8px;
     padding-bottom: 8px;
@@ -2521,7 +2659,7 @@ textarea {
   }
 
   .hero-card-stack {
-    min-height: 360px;
+    min-height: 340px;
   }
 
   .hero-course-card {
