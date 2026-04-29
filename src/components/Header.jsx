@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { categories } from "../data/homeData";
 import { useAuth } from "../context/AuthContext";
@@ -8,14 +8,22 @@ function Header() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobileCoursesOpen, setIsMobileCoursesOpen] = useState(false);
   const { isLoggedIn, user, logout } = useAuth();
+  const desktopDropdownRef = useRef(null);
 
   const closeMobileMenu = () => {
     setIsMobileMenuOpen(false);
     setIsMobileCoursesOpen(false);
   };
 
+  const handleDesktopDropdownMouseLeave = () => {
+    const activeElement = document.activeElement;
+    if (desktopDropdownRef.current?.contains(activeElement)) {
+      activeElement.blur();
+    }
+  };
+
   return (
-    <header className="site-header">
+    <>
       <div className="topbar">
         <div className="topbar-contact">
           <a href="tel:+902122832402">
@@ -31,6 +39,7 @@ function Header() {
           <i className="fa-brands fa-instagram" />
         </div>
       </div>
+      <header className="site-header">
       <div className="nav">
         <Link to="/">
           <img
@@ -40,7 +49,7 @@ function Header() {
           />
         </Link>
         <nav>
-          <div className="dropdown">
+          <div className="dropdown" ref={desktopDropdownRef} onMouseLeave={handleDesktopDropdownMouseLeave}>
             <button className="dropdown-trigger" type="button">
               Eğitimler <i className="fa-solid fa-chevron-down" />
             </button>
@@ -190,7 +199,8 @@ function Header() {
           </button>
         </div>
       )}
-    </header>
+      </header>
+    </>
   );
 }
 

@@ -85,7 +85,7 @@ function Hero() {
           <div>
             <h1>Kariyerinizde fark yaratacak <br /> yenilikçi eğitimler</h1>
             <p>Üniversitemiz ayrıcalığıyla</p>
-            <button className="btn">Eğitimleri Görüntüle</button>
+            <button className="btn hero-cta-btn">Eğitimleri Görüntüle</button>
           </div>
 
           <div

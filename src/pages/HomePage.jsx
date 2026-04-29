@@ -9,13 +9,13 @@ function HomePage() {
     <>
       <Hero />
       <section className="section about" id="hakkimizda">
-        <div className="about-media">
+        <div className="about-media about-media-enter">
           <img
             src="/main1.png"
             alt="Hakkımızda"
           />
         </div>
-        <div className="about-content">
+        <div className="about-content about-content-enter">
           <span className="about-badge">Hakkımızda</span>
           <h2>Gazi Üniversitesi olarak,</h2>
           <p>
