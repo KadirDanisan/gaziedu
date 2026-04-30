@@ -1,0 +1,54 @@
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { ADMIN_MODULES } from "../modules";
+import { useAdminAuth } from "../context/AdminAuthContext";
+
+function SidebarLink({ item }) {
+  return (
+    <NavLink to={item.route} className={({ isActive }) => `admin-side-link ${isActive ? "is-active" : ""}`}>
+      <i className={item.icon} />
+      <span>{item.label}</span>
+    </NavLink>
+  );
+}
+
+export default function AdminLayout() {
+  const { session, logout, hasPermission } = useAdminAuth();
+  const location = useLocation();
+
+  return (
+    <div className="admin-shell">
+      <aside className="admin-sidebar">
+        <div className="admin-brand">
+          <strong>Gazi CRM</strong>
+          <small>Admin Panel</small>
+        </div>
+        <nav className="admin-side-nav">
+          {ADMIN_MODULES.map((module) =>
+            hasPermission(module.key, "canView") ? <SidebarLink key={module.key} item={module} /> : <SidebarLink key={module.key} item={module} />,
+          )}
+        </nav>
+      </aside>
+
+      <div className="admin-main">
+        <header className="admin-topbar">
+          <div>
+            <h1>Yönetim Paneli</h1>
+            <p>{location.pathname}</p>
+          </div>
+          <div className="admin-profile">
+            <div>
+              <strong>{session?.user?.firstName} {session?.user?.lastName}</strong>
+              <small>{session?.userType === "instructor" ? "Eğitmen" : "Yönetici"}</small>
+            </div>
+            <button type="button" className="btn btn-outline" onClick={logout}>
+              Çıkış
+            </button>
+          </div>
+        </header>
+        <main className="admin-content">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}
