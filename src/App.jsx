@@ -32,25 +32,23 @@ function App() {
       <AdminProviders>
         <BrowserRouter>
           <Routes>
-            <Route element={<SiteLayout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/egitim-takvimi" element={<TrainingCalendarPage />} />
-            <Route path="/tum-egitimler" element={<AllTrainingsPage />} />
-            <Route path="/hakkimizda" element={<AboutPage />} />
-            <Route path="/kurumsal-egitim-cozumleri" element={<CorporateTrainingPage />} />
-            <Route path="/iletisim" element={<ContactPage />} />
-            <Route path="/egitim-detay/:slug" element={<TrainingDetailPage />} />
-            <Route path="/kullanici-islemleri" element={<AuthPage />} />
+            <Route path="/" element={<SiteLayout />}>
+              <Route index element={<HomePage />} />
+              <Route path="egitim-takvimi" element={<TrainingCalendarPage />} />
+              <Route path="tum-egitimler" element={<AllTrainingsPage />} />
+              <Route path="hakkimizda" element={<AboutPage />} />
+              <Route path="kurumsal-egitim-cozumleri" element={<CorporateTrainingPage />} />
+              <Route path="iletisim" element={<ContactPage />} />
+              <Route path="egitim-detay/:slug" element={<TrainingDetailPage />} />
+              <Route path="kullanici-islemleri" element={<AuthPage />} />
 
-            <Route path="/hesabim" element={<AccountLayout />}>
-              <Route path="hesap-bilgilerim" element={<AccountProfilePage />} />
-              <Route path="siparislerim" element={<AccountOrdersPage />} />
-              <Route path="hesap-ayarlarim" element={<AccountSettingsPage />} />
-              <Route path="sifremi-degistir" element={<AccountChangePasswordPage />} />
-              <Route path="" element={<Navigate to="/hesabim/hesap-bilgilerim" replace />} />
-            </Route>
-
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="hesabim" element={<AccountLayout />}>
+                <Route path="hesap-bilgilerim" element={<AccountProfilePage />} />
+                <Route path="siparislerim" element={<AccountOrdersPage />} />
+                <Route path="hesap-ayarlarim" element={<AccountSettingsPage />} />
+                <Route path="sifremi-degistir" element={<AccountChangePasswordPage />} />
+                <Route index element={<Navigate to="/hesabim/hesap-bilgilerim" replace />} />
+              </Route>
             </Route>
 
             <Route path="/admin/giris" element={<AdminLoginPage />} />
@@ -80,6 +78,8 @@ function App() {
                 <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
               </Route>
             </Route>
+
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
       </AdminProviders>

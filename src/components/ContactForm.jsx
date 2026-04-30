@@ -7,7 +7,7 @@ function ContactForm({ className = "contact-form-grid" }) {
     let intervalId;
 
     const renderRecaptcha = () => {
-      if (!recaptchaRef.current || !window.grecaptcha) {
+      if (!recaptchaRef.current) {
         return false;
       }
 
@@ -15,12 +15,20 @@ function ContactForm({ className = "contact-form-grid" }) {
         return true;
       }
 
-      const widgetId = window.grecaptcha.render(recaptchaRef.current, {
-        sitekey: "6LclPlcnAAAAADqKZsm_wPO6Sum1dKe9mZFCjYeO",
-      });
+      const renderFn = window.grecaptcha && typeof window.grecaptcha.render === "function" ? window.grecaptcha.render : null;
+      if (!renderFn) {
+        return false;
+      }
 
-      recaptchaRef.current.dataset.widgetId = String(widgetId);
-      return true;
+      try {
+        const widgetId = renderFn(recaptchaRef.current, {
+          sitekey: "6LclPlcnAAAAADqKZsm_wPO6Sum1dKe9mZFCjYeO",
+        });
+        recaptchaRef.current.dataset.widgetId = String(widgetId);
+        return true;
+      } catch {
+        return false;
+      }
     };
 
     if (!renderRecaptcha()) {
