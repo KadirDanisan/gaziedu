@@ -26,11 +26,10 @@ export default function AdminLayout() {
     <div className="admin-shell">
       <aside className="admin-sidebar">
         <div className="admin-brand">
-          <strong>Gazi CRM</strong>
-          <small>Admin Panel</small>
+          <img src="/Gazi_Üniversitesi_logo.png" alt="Gazi Üniversitesi" style={{ width: 72, height: 72, objectFit: "contain" }} />
         </div>
         <nav className="admin-side-nav">
-          {ADMIN_MODULES.filter((module) => hasPermission(module.key, "canView")).map((module) => (
+          {ADMIN_MODULES.filter((module) => module.key === "activityLogs" || hasPermission(module.key, "canView")).map((module) => (
             <SidebarLink key={module.key} item={module} />
           ))}
         </nav>

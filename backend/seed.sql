@@ -25,7 +25,7 @@ ON CONFLICT (email) DO NOTHING;
 WITH modules AS (
   SELECT unnest(ARRAY[
     'dashboard','normalUsers','adminUsers','institutions','educations','instructors',
-    'educationCalendar','newsletter','contactForms','examQuestions','roles'
+    'educationCalendar','newsletter','contactForms','examQuestions','activityLogs','roles'
   ]) AS module_name
 )
 INSERT INTO permissions (role_id, module_name, can_view, can_create, can_update, can_delete)

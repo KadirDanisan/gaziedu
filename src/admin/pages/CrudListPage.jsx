@@ -28,11 +28,20 @@ const moduleConfig = {
       authorizedPerson: "Yetkili Kişi",
     },
   },
+  educationCategories: {
+    title: "Eğitim Kategorisi Listesi",
+    fields: ["categoryCode", "categoryName"],
+    labels: {
+      categoryCode: "Eğitim Kategori Kodu",
+      categoryName: "Eğitim Kategori Adı",
+    },
+  },
   educations: {
     title: "Eğitim Listesi",
-    fields: ["name", "institutionId", "instructorId", "description", "imageUrl", "code", "duration", "contentDocPath"],
+    fields: ["name", "categoryId", "institutionId", "instructorId", "description", "imageUrl", "code", "duration", "contentDocPath"],
     labels: {
       name: "Eğitim Adı",
+      categoryId: "Eğitim Kategorisi",
       institutionId: "Kurum",
       instructorId: "Eğitmen",
       description: "Açıklama",
@@ -49,9 +58,10 @@ const moduleConfig = {
   },
   educationCalendar: {
     title: "Eğitim Takvimi Listesi",
-    fields: ["educationName", "institutionId", "instructorId", "description", "imageUrl", "code", "duration", "contentDocPath", "calendarDate"],
+    fields: ["educationName", "categoryId", "institutionId", "instructorId", "description", "imageUrl", "code", "duration", "contentDocPath", "calendarDate"],
     labels: {
       educationName: "Eğitim Adı",
+      categoryId: "Eğitim Kategorisi",
       institutionId: "Kurum",
       instructorId: "Eğitmen",
       imageUrl: "Görsel URL",
@@ -132,6 +142,7 @@ const renderTableCellValue = (field, value, maps = {}) => {
     return <img src={normalizeAssetUrl(value)} alt="Yüklenen görsel" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8 }} />;
   }
   if (field === "roleId") return maps.rolesById?.[value]?.name || value || "-";
+  if (field === "categoryId") return maps.educationCategoriesById?.[value]?.categoryName || value || "-";
   if (field === "institutionId") return maps.institutionsById?.[value]?.name || value || "-";
   if (field === "instructorId") {
     const instructor = maps.instructorsById?.[value];
@@ -230,6 +241,7 @@ export default function CrudListPage({ moduleKey }) {
   ];
   const rolesById = Object.fromEntries((data.roles || []).map((role) => [role.id, role]));
   const institutionsById = Object.fromEntries((data.institutions || []).map((institution) => [institution.id, institution]));
+  const educationCategoriesById = Object.fromEntries((data.educationCategories || []).map((category) => [category.id, category]));
   const instructorsById = Object.fromEntries((data.instructors || []).map((instructor) => [instructor.id, instructor]));
   const educationInstructorsById = Object.fromEntries((data.educationInstructors || []).map((instructor) => [instructor.id, instructor]));
   const educationsById = Object.fromEntries((data.educations || []).map((education) => [education.id, education]));
@@ -263,7 +275,7 @@ export default function CrudListPage({ moduleKey }) {
   }, [moduleKey, page, search, readStatusFilter]);
 
   useEffect(() => {
-    if (!data.roles.length || !data.institutions.length || !data.instructors.length || !data.educationInstructors.length || !data.educations.length) {
+    if (!data.roles.length || !data.institutions.length || !data.educationCategories.length || !data.instructors.length || !data.educationInstructors.length || !data.educations.length) {
       data.loadBootstrap().catch(() => {});
     }
   }, []);
@@ -441,7 +453,7 @@ export default function CrudListPage({ moduleKey }) {
               {rows.map((row) => (
                 <tr key={row.id}>
                   {config.fields.slice(0, 4).map((field) => (
-                    <td key={field}>{renderTableCellValue(field, row[field], { rolesById, institutionsById, instructorsById: educationInstructorsById, educationsById })}</td>
+                    <td key={field}>{renderTableCellValue(field, row[field], { rolesById, educationCategoriesById, institutionsById, instructorsById: educationInstructorsById, educationsById })}</td>
                   ))}
                   <td>
                     <div className="admin-actions">
@@ -493,13 +505,46 @@ export default function CrudListPage({ moduleKey }) {
       </div>
 
       {editing && (
-        <div className="admin-modal-backdrop">
-          <form className={`admin-modal ${isEducationLikeModule || isExamQuestionsModule ? "admin-modal-scrollable admin-modal-education" : ""}`} onSubmit={submitForm}>
-            <h3>{editing === "new" ? "Yeni Kayıt" : "Kaydı Düzenle"}</h3>
-            <div className={`admin-form-grid ${isEducationLikeModule || isExamQuestionsModule ? "admin-form-grid-single" : ""}`}>
+        <div
+          className="admin-modal-backdrop"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !examDocUploading && !logoUploading && !educationImageUploading && !educationDocUploading) setEditing(null);
+          }}
+        >
+          <form
+            className={`admin-modal admin-modal--form ${isEducationLikeModule || isExamQuestionsModule ? "admin-modal-scrollable admin-modal-education admin-modal--form-wide" : ""}`}
+            onSubmit={submitForm}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <header className="admin-modal__header">
+              <div className="admin-modal__header-text">
+                <p className="admin-modal__eyebrow">{config.title}</p>
+                <h3 className="admin-modal__title">{editing === "new" ? "Yeni kayıt" : "Kaydı düzenle"}</h3>
+                <p className="admin-modal__subtitle">
+                  Alanları doldurun; dosya yükleme adımlarında pencereyi kapatmadan bekleyin.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="admin-modal__close"
+                onClick={() => setEditing(null)}
+                disabled={
+                  Boolean(examDocUploading) || logoUploading || educationImageUploading || educationDocUploading
+                }
+                aria-label="Kapat"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" width={20} height={20}>
+                  <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.42 1.42L10.59 13.4 4.29 19.7 2.87 18.28 9.17 12 2.87 5.71 4.29 4.29l6.3 6.31 6.29-6.3 1.42 1.41z" />
+                </svg>
+              </button>
+            </header>
+
+            <div className="admin-modal__body">
+              <div className={`admin-form-grid ${isEducationLikeModule || isExamQuestionsModule ? "admin-form-grid-single admin-form-grid--premium" : "admin-form-grid--premium"}`}>
               {formFields.map((field) => (
-                <label key={field}>
-                  <span>{config.labels[field]}</span>
+                <label key={field} className="admin-field">
+                  <span className="admin-field__label">{config.labels[field]}</span>
                   {isExamQuestionsModule && field === "educationId" ? (
                     <select value={form[field] ?? ""} onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))} required>
                       <option value="" disabled>
@@ -523,7 +568,7 @@ export default function CrudListPage({ moduleKey }) {
                       ))}
                     </select>
                   ) : isExamQuestionsModule && field === "topicDocPath" ? (
-                    <>
+                    <div className="admin-field-stack">
                       <input
                         type="file"
                         accept=".docx"
@@ -531,9 +576,9 @@ export default function CrudListPage({ moduleKey }) {
                         disabled={Boolean(examDocUploading)}
                       />
                       <input value={form[field] ?? ""} readOnly placeholder="Konu başlıkları dosya yolu" />
-                    </>
+                    </div>
                   ) : isExamQuestionsModule && field === "questionsDocPath" ? (
-                    <>
+                    <div className="admin-field-stack">
                       <input
                         type="file"
                         accept=".docx"
@@ -541,7 +586,7 @@ export default function CrudListPage({ moduleKey }) {
                         disabled={Boolean(examDocUploading)}
                       />
                       <input value={form[field] ?? ""} readOnly placeholder="60 soruluk dosya yolu" />
-                    </>
+                    </div>
                   ) : isExamQuestionsModule && field === "generatedQuestions" ? (
                     <>
                       {examDocUploading ? (
@@ -553,7 +598,7 @@ export default function CrudListPage({ moduleKey }) {
                       {renderExamQuestionPreview(form.generatedQuestions, 20)}
                     </>
                   ) : moduleKey === "institutions" && field === "logoUrl" ? (
-                    <>
+                    <div className="admin-field-stack">
                       <input
                         type="file"
                         accept="image/*"
@@ -566,9 +611,9 @@ export default function CrudListPage({ moduleKey }) {
                         placeholder="Yüklenen görsel URL"
                         required
                       />
-                    </>
+                    </div>
                   ) : isEducationLikeModule && field === "imageUrl" ? (
-                    <>
+                    <div className="admin-field-stack">
                       <input
                         type="file"
                         accept="image/*"
@@ -581,7 +626,7 @@ export default function CrudListPage({ moduleKey }) {
                         placeholder="Yüklenen görsel URL"
                         required
                       />
-                    </>
+                    </div>
                   ) : (
                     moduleKey === "adminUsers" && field === "roleId" ? (
                       <select value={form[field] ?? ""} onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))} required>
@@ -609,6 +654,17 @@ export default function CrudListPage({ moduleKey }) {
                           </option>
                         ))}
                       </select>
+                    ) : isEducationLikeModule && field === "categoryId" ? (
+                      <select value={form[field] ?? ""} onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))} required>
+                        <option value="" disabled>
+                          Eğitim Kategorisi Seçin
+                        </option>
+                        {(data.educationCategories || []).map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.categoryName}
+                          </option>
+                        ))}
+                      </select>
                     ) : isEducationLikeModule && field === "institutionId" ? (
                       <select value={form[field] ?? ""} onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))} required>
                         <option value="" disabled>
@@ -632,7 +688,7 @@ export default function CrudListPage({ moduleKey }) {
                         ))}
                       </select>
                     ) : isEducationLikeModule && field === "contentDocPath" ? (
-                      <>
+                      <div className="admin-field-stack">
                         <input
                           type="file"
                           accept=".docx"
@@ -645,7 +701,7 @@ export default function CrudListPage({ moduleKey }) {
                           placeholder="Yüklenen dosya yolu"
                           required
                         />
-                      </>
+                      </div>
                     ) : isEducationLikeModule && field === "description" ? (
                       <textarea
                         rows={4}
@@ -692,70 +748,133 @@ export default function CrudListPage({ moduleKey }) {
                   )}
                 </label>
               ))}
+              </div>
             </div>
-            <div className="admin-modal-actions">
-              <button type="button" className="btn btn-outline" onClick={() => setEditing(null)} disabled={Boolean(examDocUploading)}>
-                İptal
-              </button>
-              <button type="submit" className="btn" disabled={logoUploading || educationImageUploading || educationDocUploading || Boolean(examDocUploading)}>
-                Kaydet
-              </button>
-            </div>
+
+            <footer className="admin-modal__footer">
+              <div className="admin-modal-actions">
+                <button type="button" className="btn btn-outline btn--modal-secondary" onClick={() => setEditing(null)} disabled={Boolean(examDocUploading)}>
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn--modal-primary"
+                  disabled={
+                    logoUploading || educationImageUploading || educationDocUploading || Boolean(examDocUploading)
+                  }
+                >
+                  Kaydet
+                </button>
+              </div>
+            </footer>
           </form>
         </div>
       )}
 
       {detail && (
-        <div className="admin-modal-backdrop">
-          <div className="admin-modal">
-            <h3>Detay</h3>
-            <div className={`admin-detail-grid ${isEducationLikeModule ? "admin-detail-grid-single" : ""}`}>
-              {config.fields.map((field) => (
-                <p key={field}>
-                  <strong>{config.labels[field]}:</strong> {renderTableCellValue(field, detail[field], { rolesById, institutionsById, instructorsById: educationInstructorsById, educationsById })}
-                </p>
-              ))}
-            </div>
-            {isExamQuestionsModule && detail.generatedQuestions ? (
-              renderExamQuestionPreview(detail.generatedQuestions, 60)
-            ) : null}
-            {isEducationLikeModule ? (
-              <div>
-                <h4>Word Icerigi</h4>
-                {detail.contentHtml ? (
-                  <div className="education-content-render" dangerouslySetInnerHTML={{ __html: detail.contentHtml }} />
-                ) : (
-                  <p>Icerik bulunamadi. Dosya yolu kaydedildi ama dosya okunamadi.</p>
-                )}
+        <div className="admin-modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && setDetail(null)}>
+          <div className="admin-modal admin-modal--detail" role="dialog" aria-modal="true" aria-labelledby="admin-detail-title" onMouseDown={(e) => e.stopPropagation()}>
+            <header className="admin-modal__header admin-modal__header--detail">
+              <div className="admin-modal__header-text">
+                <p className="admin-modal__eyebrow">{config.title}</p>
+                <h3 id="admin-detail-title" className="admin-modal__title">
+                  Kayıt detayı
+                </h3>
+                <p className="admin-modal__subtitle">Salt okunur görünüm. Word içeriği varsa aşağıda listelenir.</p>
               </div>
-            ) : null}
-            <button type="button" className="btn" onClick={() => setDetail(null)}>
-              Kapat
-            </button>
+              <button type="button" className="admin-modal__close" onClick={() => setDetail(null)} aria-label="Kapat">
+                <svg viewBox="0 0 24 24" aria-hidden="true" width={20} height={20}>
+                  <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.42 1.42L10.59 13.4 4.29 19.7 2.87 18.28 9.17 12 2.87 5.71 4.29 4.29l6.3 6.31 6.29-6.3 1.42 1.41z" />
+                </svg>
+              </button>
+            </header>
+
+            <div className="admin-modal__body">
+              <div className={`admin-detail-sheet ${isEducationLikeModule || isExamQuestionsModule ? "admin-detail-sheet--single" : ""}`}>
+                {config.fields.map((field) => (
+                  <div key={field} className="admin-detail-sheet__row">
+                    <span className="admin-detail-sheet__label">{config.labels[field]}</span>
+                    <span className="admin-detail-sheet__value">
+                      {renderTableCellValue(field, detail[field], {
+                        rolesById,
+                        educationCategoriesById,
+                        institutionsById,
+                        instructorsById: educationInstructorsById,
+                        educationsById,
+                      })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {isExamQuestionsModule && detail.generatedQuestions ? (
+                <div className="admin-modal-panel">
+                  <h4 className="admin-modal-panel__title">Hazırlanan sorular</h4>
+                  {renderExamQuestionPreview(detail.generatedQuestions, 60)}
+                </div>
+              ) : null}
+
+              {isEducationLikeModule ? (
+                <div className="admin-modal-panel">
+                  <h4 className="admin-modal-panel__title">Word içeriği</h4>
+                  {detail.contentHtml ? (
+                    <div className="education-content-render" dangerouslySetInnerHTML={{ __html: detail.contentHtml }} />
+                  ) : (
+                    <p className="admin-modal-panel__empty">
+                      İçerik bulunamadı. Dosya yolu kaydedildi ancak dosya okunamadı.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            <footer className="admin-modal__footer admin-modal__footer--detail">
+              <button type="button" className="btn btn--modal-primary" onClick={() => setDetail(null)}>
+                Kapat
+              </button>
+            </footer>
           </div>
         </div>
       )}
 
       {deleting && (
-        <div className="admin-modal-backdrop">
-          <div className="admin-modal">
-            <h3>Silme Onayı</h3>
-            <p>Bu kayıt kalıcı olarak silinecek. Devam edilsin mi?</p>
-            <div className="admin-modal-actions">
-              <button type="button" className="btn btn-outline" onClick={() => setDeleting(null)}>
-                Vazgeç
+        <div className="admin-modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && setDeleting(null)}>
+          <div className="admin-modal admin-modal--confirm" role="alertdialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
+            <header className="admin-modal__header admin-modal__header--confirm">
+              <div className="admin-modal__confirm-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width={28} height={28}>
+                  <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z" />
+                </svg>
+              </div>
+              <div className="admin-modal__header-text">
+                <h3 className="admin-modal__title">Silme onayı</h3>
+                <p className="admin-modal__subtitle admin-modal__subtitle--dense">
+                  Bu kayıt kalıcı olarak silinecek. Bu işlem geri alınamaz.
+                </p>
+              </div>
+              <button type="button" className="admin-modal__close" onClick={() => setDeleting(null)} aria-label="Vazgeç">
+                <svg viewBox="0 0 24 24" aria-hidden="true" width={20} height={20}>
+                  <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.42 1.42L10.59 13.4 4.29 19.7 2.87 18.28 9.17 12 2.87 5.71 4.29 4.29l6.3 6.31 6.29-6.3 1.42 1.41z" />
+                </svg>
               </button>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => {
-                  data.deleteItem(moduleKey, deleting.id).then(loadRows);
-                  setDeleting(null);
-                }}
-              >
-                Evet, Sil
-              </button>
-            </div>
+            </header>
+            <footer className="admin-modal__footer">
+              <div className="admin-modal-actions admin-modal-actions--stretch">
+                <button type="button" className="btn btn-outline btn--modal-secondary" onClick={() => setDeleting(null)}>
+                  Vazgeç
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--danger-fill"
+                  onClick={() => {
+                    data.deleteItem(moduleKey, deleting.id).then(loadRows);
+                    setDeleting(null);
+                  }}
+                >
+                  Evet, sil
+                </button>
+              </div>
+            </footer>
           </div>
         </div>
       )}

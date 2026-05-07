@@ -27,6 +27,7 @@ export const adminApi = {
   login: (email, password) => request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   getBootstrap: () => request("/admin/bootstrap"),
   getDashboard: () => request("/admin/dashboard"),
+  getActivityLogs: (page = 1, pageSize = 100) => request(`/admin/activity-logs?page=${page}&pageSize=${pageSize}`),
   getModule: (moduleName, page = 1, search = "", readStatus = "all") =>
     request(`/admin/${moduleName}?page=${page}&search=${encodeURIComponent(search)}&readStatus=${encodeURIComponent(readStatus)}`),
   createItem: (moduleName, payload) => request(`/admin/${moduleName}`, { method: "POST", body: JSON.stringify(payload) }),

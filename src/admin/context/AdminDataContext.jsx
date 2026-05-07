@@ -8,6 +8,7 @@ export function AdminDataProvider({ children }) {
   const { setPermissions } = useAdminAuth();
   const [roles, setRoles] = useState([]);
   const [institutions, setInstitutions] = useState([]);
+  const [educationCategories, setEducationCategories] = useState([]);
   const [instructors, setInstructors] = useState([]);
   const [educationInstructors, setEducationInstructors] = useState([]);
   const [educations, setEducations] = useState([]);
@@ -16,6 +17,7 @@ export function AdminDataProvider({ children }) {
     const result = await adminApi.getBootstrap();
     setRoles(result.roles || []);
     setInstitutions(result.institutions || []);
+    setEducationCategories(result.educationCategories || []);
     setInstructors(result.instructors || []);
     setEducationInstructors(result.educationInstructors || []);
     setEducations(result.educations || []);
@@ -38,10 +40,12 @@ export function AdminDataProvider({ children }) {
     return updated;
   };
   const getDashboard = async () => adminApi.getDashboard();
+  const getActivityLogs = async (page, pageSize) => adminApi.getActivityLogs(page, pageSize);
 
   const value = {
     roles,
     institutions,
+    educationCategories,
     instructors,
     educationInstructors,
     educations,
@@ -56,6 +60,7 @@ export function AdminDataProvider({ children }) {
     uploadExamDoc,
     updatePermission,
     getDashboard,
+    getActivityLogs,
   };
 
   return <AdminDataContext.Provider value={value}>{children}</AdminDataContext.Provider>;

@@ -24,6 +24,7 @@ import CrudListPage from "./admin/pages/CrudListPage";
 import RolePermissionPage from "./admin/pages/RolePermissionPage";
 import ExamGeneratorPage from "./admin/pages/ExamGeneratorPage";
 import NoAccessPage from "./admin/pages/NoAccessPage";
+import ActivityLogsPage from "./admin/pages/ActivityLogsPage";
 
 function App() {
   return (
@@ -64,6 +65,7 @@ function App() {
                 <Route path="/admin/kayit-listesi" element={<ModulePermissionGuard moduleKey="normalUsers"><CrudListPage moduleKey="normalUsers" /></ModulePermissionGuard>} />
                 <Route path="/admin/yonetim-listesi" element={<ModulePermissionGuard moduleKey="adminUsers"><CrudListPage moduleKey="adminUsers" /></ModulePermissionGuard>} />
                 <Route path="/admin/kurum-listesi" element={<ModulePermissionGuard moduleKey="institutions"><CrudListPage moduleKey="institutions" /></ModulePermissionGuard>} />
+                <Route path="/admin/egitim-kategorisi-listesi" element={<ModulePermissionGuard moduleKey="educationCategories"><CrudListPage moduleKey="educationCategories" /></ModulePermissionGuard>} />
                 <Route path="/admin/egitim-listesi" element={<ModulePermissionGuard moduleKey="educations"><CrudListPage moduleKey="educations" /></ModulePermissionGuard>} />
                 <Route path="/admin/egitmen-listesi" element={<ModulePermissionGuard moduleKey="instructors"><CrudListPage moduleKey="instructors" /></ModulePermissionGuard>} />
                 <Route path="/admin/egitim-takvimi-listesi" element={<ModulePermissionGuard moduleKey="educationCalendar"><CrudListPage moduleKey="educationCalendar" /></ModulePermissionGuard>} />
@@ -71,6 +73,7 @@ function App() {
                 <Route path="/admin/iletisim-formlari" element={<ModulePermissionGuard moduleKey="contactForms"><CrudListPage moduleKey="contactForms" /></ModulePermissionGuard>} />
                 <Route path="/admin/sinav-sorulari" element={<ModulePermissionGuard moduleKey="examQuestions"><CrudListPage moduleKey="examQuestions" /></ModulePermissionGuard>} />
                 <Route path="/admin/sinav-olusturucu" element={<ModulePermissionGuard moduleKey="examQuestions"><ExamGeneratorPage /></ModulePermissionGuard>} />
+                <Route path="/admin/aktivite-listesi" element={<ActivityLogsPage />} />
                 <Route path="/admin/rol-yetki" element={<ModulePermissionGuard moduleKey="roles"><RolePermissionPage /></ModulePermissionGuard>} />
                 <Route path="/admin/yetki-yok" element={<NoAccessPage />} />
                 <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />

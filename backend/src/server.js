@@ -110,6 +110,20 @@ const migrateEducationCalendarColumns = async () => {
   await pool.query(`ALTER TABLE education_calendar ALTER COLUMN calendar_date TYPE TIMESTAMPTZ USING calendar_date::timestamptz`);
 };
 
+const migrateEducationCategoryColumns = async () => {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS education_categories (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      category_code TEXT NOT NULL UNIQUE,
+      category_name TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`,
+  );
+  await pool.query(`ALTER TABLE educations ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES education_categories(id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE education_calendar ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES education_categories(id) ON DELETE SET NULL`);
+};
+
 const migrateExamQuestionBatchColumns = async () => {
   await pool.query(`ALTER TABLE exam_questions ALTER COLUMN question_text DROP NOT NULL`);
   await pool.query(`ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS topic_doc_path TEXT`);
@@ -123,6 +137,7 @@ const moduleConfig = {
   normalUsers: { table: "normal_users", actionKey: "normalUsers", searchable: ["first_name", "last_name", "email"] },
   adminUsers: { table: "admin_users", actionKey: "adminUsers", searchable: ["first_name", "last_name", "email", "phone"] },
   institutions: { table: "institutions", actionKey: "institutions", searchable: ["name", "code", "authorized_person"] },
+  educationCategories: { table: "education_categories", actionKey: "educationCategories", searchable: ["category_code", "category_name"] },
   educations: { table: "educations", actionKey: "educations", searchable: ["name", "code", "description"] },
   instructors: { table: "instructors", actionKey: "instructors", searchable: ["first_name", "last_name", "email"] },
   educationCalendar: { table: "education_calendar", actionKey: "educationCalendar", searchable: ["education_name", "code", "description", "instructor_info"] },
@@ -132,12 +147,29 @@ const moduleConfig = {
   roles: { table: "roles", actionKey: "roles", searchable: ["name", "code"] },
 };
 
+const permissionModules = [
+  "dashboard",
+  "normalUsers",
+  "adminUsers",
+  "institutions",
+  "educationCategories",
+  "educations",
+  "instructors",
+  "educationCalendar",
+  "newsletter",
+  "contactForms",
+  "examQuestions",
+  "activityLogs",
+  "roles",
+];
+
 const dbToApiMap = {
   first_name: "firstName",
   last_name: "lastName",
   password_hash: "passwordHash",
   institution_id: "institutionId",
   role_id: "roleId",
+  category_id: "categoryId",
   authorized_person: "authorizedPerson",
   logo_url: "logoUrl",
   website_url: "websiteUrl",
@@ -164,12 +196,17 @@ const dbToApiMap = {
   updated_at: "updatedAt",
   content_doc_path: "contentDocPath",
   content_doc_name: "contentDocName",
+  category_code: "categoryCode",
+  category_name: "categoryName",
   content_html: "contentHtml",
   topic_doc_path: "topicDocPath",
   topic_doc_name: "topicDocName",
   questions_doc_path: "questionsDocPath",
   questions_doc_name: "questionsDocName",
   generated_questions: "generatedQuestions",
+  admin_first_name: "adminFirstName",
+  admin_last_name: "adminLastName",
+  admin_email: "adminEmail",
 };
 
 const apiToDbMap = Object.fromEntries(Object.entries(dbToApiMap).map(([k, v]) => [v, k]));
@@ -598,6 +635,21 @@ const publishDueEducationCalendarItems = async () => {
   }
 };
 
+const ensurePermissionRows = async () => {
+  await pool.query(
+    `INSERT INTO permissions (role_id, module_name, can_view, can_create, can_update, can_delete)
+     SELECT r.id, m.module_name,
+       CASE WHEN r.code = 'superadmin' THEN TRUE ELSE FALSE END,
+       CASE WHEN r.code = 'superadmin' THEN TRUE ELSE FALSE END,
+       CASE WHEN r.code = 'superadmin' THEN TRUE ELSE FALSE END,
+       CASE WHEN r.code = 'superadmin' THEN TRUE ELSE FALSE END
+     FROM roles r
+     CROSS JOIN unnest($1::text[]) AS m(module_name)
+     ON CONFLICT (role_id, module_name) DO NOTHING`,
+    [permissionModules],
+  );
+};
+
 app.post("/api/auth/login", async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -829,10 +881,12 @@ app.post("/api/admin/uploads/exam-doc", auth, uploadDoc.single("file"), async (r
 
 app.get("/api/admin/bootstrap", auth, async (req, res, next) => {
   try {
-    const [permissions, roles, institutions, instructors, educationInstructors, educations] = await Promise.all([
-      pool.query(`SELECT * FROM permissions WHERE role_id = $1`, [req.user.roleId]),
+    await ensurePermissionRows();
+    const [permissions, roles, institutions, educationCategories, instructors, educationInstructors, educations] = await Promise.all([
+      pool.query(`SELECT * FROM permissions`),
       pool.query(`SELECT * FROM roles ORDER BY created_at DESC`),
       pool.query(`SELECT * FROM institutions ORDER BY created_at DESC`),
+      pool.query(`SELECT * FROM education_categories ORDER BY created_at DESC`),
       pool.query(
         `SELECT a.id, a.first_name, a.last_name, a.email
          FROM admin_users a
@@ -854,6 +908,7 @@ app.get("/api/admin/bootstrap", auth, async (req, res, next) => {
       permissions: permissions.rows.map(toApiObject),
       roles: roles.rows.map(toApiObject),
       institutions: institutions.rows.map(toApiObject),
+      educationCategories: educationCategories.rows.map(toApiObject),
       instructors: instructors.rows.map(toApiObject),
       educationInstructors: educationInstructors.rows.map(toApiObject),
       educations: educations.rows.map(toApiObject),
@@ -907,6 +962,41 @@ app.get("/api/admin/dashboard", auth, checkPermission("dashboard", "can_view"), 
       latestUsers: latestUsers.rows.map(toApiObject),
       latestContacts: latestContacts.rows.map(toApiObject),
       latestLogs: latestLogs.rows.map(toApiObject),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/admin/activity-logs", auth, async (req, res, next) => {
+  try {
+    const permissionResult = await pool.query(
+      `SELECT can_view FROM permissions WHERE role_id = $1 AND module_name = 'dashboard' LIMIT 1`,
+      [req.user.roleId],
+    );
+    if (!permissionResult.rows[0]?.can_view) return res.status(403).json({ message: "Yetkiniz yok." });
+
+    const page = Math.max(1, Number(req.query.page || 1));
+    const pageSize = Math.max(1, Number(req.query.pageSize || 100));
+    const offset = (page - 1) * pageSize;
+
+    const countResult = await pool.query(`SELECT COUNT(*)::int AS total FROM activity_logs`);
+    const result = await pool.query(
+      `SELECT l.*, a.first_name AS admin_first_name, a.last_name AS admin_last_name, a.email AS admin_email
+       FROM activity_logs l
+       LEFT JOIN admin_users a ON a.id = l.admin_user_id
+       ORDER BY l.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, offset],
+    );
+    res.json({
+      data: result.rows.map(toApiObject),
+      pagination: {
+        page,
+        pageSize,
+        total: countResult.rows[0].total,
+        totalPages: Math.max(1, Math.ceil(countResult.rows[0].total / pageSize)),
+      },
     });
   } catch (error) {
     next(error);
@@ -1198,6 +1288,7 @@ const startServer = async () => {
     await migrateInstructorAdminLinkColumn();
     await migrateEducationDocColumns();
     await migrateEducationCalendarColumns();
+    await migrateEducationCategoryColumns();
     await migrateExamQuestionBatchColumns();
     await migrateContactFormTimestampsToIstanbul();
   } catch (error) {
