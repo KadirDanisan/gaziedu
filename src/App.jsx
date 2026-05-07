@@ -19,7 +19,6 @@ import AdminLayout from "./admin/components/AdminLayout";
 import ProtectedAdminRoute from "./admin/components/ProtectedAdminRoute";
 import ModulePermissionGuard from "./admin/components/ModulePermissionGuard";
 import AdminLoginPage from "./admin/pages/AdminLoginPage";
-import InstructorLoginPage from "./admin/pages/InstructorLoginPage";
 import AdminDashboardPage from "./admin/pages/AdminDashboardPage";
 import CrudListPage from "./admin/pages/CrudListPage";
 import RolePermissionPage from "./admin/pages/RolePermissionPage";
@@ -52,7 +51,6 @@ function App() {
             </Route>
 
             <Route path="/admin/giris" element={<AdminLoginPage />} />
-            <Route path="/egitmen/giris" element={<InstructorLoginPage />} />
             <Route element={<ProtectedAdminRoute />}>
               <Route element={<AdminLayout />}>
                 <Route

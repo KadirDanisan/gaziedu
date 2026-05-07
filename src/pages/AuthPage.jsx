@@ -4,22 +4,63 @@ import { useAuth } from "../context/AuthContext";
 
 function AuthPage() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { loginUser, registerUser } = useAuth();
   const [isResetMode, setIsResetMode] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [registerFirstName, setRegisterFirstName] = useState("");
+  const [registerLastName, setRegisterLastName] = useState("");
+  const [registerEmail, setRegisterEmail] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
   const [registerPasswordRepeat, setRegisterPasswordRepeat] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [registerError, setRegisterError] = useState("");
+  const [registerSuccess, setRegisterSuccess] = useState("");
+  const [loadingLogin, setLoadingLogin] = useState(false);
+  const [loadingRegister, setLoadingRegister] = useState(false);
 
   const passwordMismatch =
     registerPasswordRepeat.length > 0 && registerPassword !== registerPasswordRepeat;
 
-  const handleLogin = (event) => {
+  const handleLogin = async (event) => {
     event.preventDefault();
-    login({
-      email: loginEmail || "kadir@fadestudio.com.tr",
-      fullName: "kadir danışan",
-    });
-    navigate("/hesabim/hesap-bilgilerim");
+    setLoadingLogin(true);
+    setLoginError("");
+    try {
+      await loginUser({ email: loginEmail, password: loginPassword });
+      navigate("/hesabim/hesap-bilgilerim");
+    } catch (error) {
+      setLoginError(error.message);
+    } finally {
+      setLoadingLogin(false);
+    }
+  };
+
+  const handleRegister = async (event) => {
+    event.preventDefault();
+    if (passwordMismatch) return;
+    setLoadingRegister(true);
+    setRegisterError("");
+    setRegisterSuccess("");
+    try {
+      await registerUser({
+        firstName: registerFirstName,
+        lastName: registerLastName,
+        email: registerEmail,
+        password: registerPassword,
+      });
+      setRegisterSuccess("Hesabınız oluşmuştur, giriş yapabilirsiniz.");
+      setRegisterFirstName("");
+      setRegisterLastName("");
+      setRegisterEmail("");
+      setRegisterPassword("");
+      setRegisterPasswordRepeat("");
+      setLoginEmail(registerEmail);
+    } catch (error) {
+      setRegisterError(error.message);
+    } finally {
+      setLoadingRegister(false);
+    }
   };
 
   return (
@@ -42,8 +83,15 @@ function AuthPage() {
                 </div>
                 <div className="auth-field">
                   <label htmlFor="login-password">Şifreniz *</label>
-                  <input id="login-password" type="password" required />
+                  <input
+                    id="login-password"
+                    type="password"
+                    required
+                    value={loginPassword}
+                    onChange={(event) => setLoginPassword(event.target.value)}
+                  />
                 </div>
+                {loginError ? <small className="auth-error">{loginError}</small> : null}
 
                 <div className="auth-row">
                   <label className="auth-check">
@@ -59,7 +107,7 @@ function AuthPage() {
                   </button>
                 </div>
 
-                <button type="submit" className="btn auth-submit-btn">
+                <button type="submit" className="btn auth-submit-btn" disabled={loadingLogin}>
                   Giriş Yap <i className="fa-solid fa-arrow-right" />
                 </button>
               </form>
@@ -93,21 +141,39 @@ function AuthPage() {
 
         <div className="auth-card">
           <h3>Hesap Oluştur</h3>
-          <form className="auth-form">
+          <form className="auth-form" onSubmit={handleRegister}>
             <div className="auth-two-col">
               <div className="auth-field">
                 <label htmlFor="register-name">Adınız *</label>
-                <input id="register-name" type="text" required />
+                <input
+                  id="register-name"
+                  type="text"
+                  required
+                  value={registerFirstName}
+                  onChange={(event) => setRegisterFirstName(event.target.value)}
+                />
               </div>
               <div className="auth-field">
                 <label htmlFor="register-surname">Soyadınız *</label>
-                <input id="register-surname" type="text" required />
+                <input
+                  id="register-surname"
+                  type="text"
+                  required
+                  value={registerLastName}
+                  onChange={(event) => setRegisterLastName(event.target.value)}
+                />
               </div>
             </div>
 
             <div className="auth-field">
               <label htmlFor="register-email">E-Posta Adresiniz *</label>
-              <input id="register-email" type="email" required />
+              <input
+                id="register-email"
+                type="email"
+                required
+                value={registerEmail}
+                onChange={(event) => setRegisterEmail(event.target.value)}
+              />
             </div>
 
             <div className="auth-field">
@@ -135,9 +201,11 @@ function AuthPage() {
               )}
             </div>
 
-            <button type="submit" className="btn auth-submit-btn" disabled={passwordMismatch}>
-              Üye Ol <i className="fa-solid fa-arrow-right" />
+            <button type="submit" className="btn auth-submit-btn" disabled={passwordMismatch || loadingRegister}>
+              {loadingRegister ? "Kaydediliyor..." : "Üye Ol"} <i className="fa-solid fa-arrow-right" />
             </button>
+            {registerError ? <small className="auth-error">{registerError}</small> : null}
+            {registerSuccess ? <small className="account-success-text">{registerSuccess}</small> : null}
           </form>
         </div>
       </div>

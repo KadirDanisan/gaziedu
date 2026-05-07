@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAdminData } from "../context/AdminDataContext";
 
 function StatCard({ label, value, icon }) {
@@ -15,11 +15,16 @@ function StatCard({ label, value, icon }) {
 
 export default function AdminDashboardPage() {
   const data = useAdminData();
+  const [dashboard, setDashboard] = useState(null);
+
+  useEffect(() => {
+    data.getDashboard().then(setDashboard).catch(() => setDashboard(null));
+  }, []);
 
   const monthlyUsers = useMemo(() => {
-    const total = data.normalUsers.length;
+    const total = dashboard?.stats?.normalUsers || 0;
     return [10, 14, 20, 19, 23, 25, 27, total];
-  }, [data.normalUsers.length]);
+  }, [dashboard?.stats?.normalUsers]);
 
   return (
     <section className="admin-page">
@@ -31,14 +36,14 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="admin-stats-grid">
-        <StatCard label="Toplam Kayıtlı Kullanıcı" value={data.normalUsers.length} icon="fa-solid fa-users" />
-        <StatCard label="Toplam Yönetici" value={data.adminUsers.length} icon="fa-solid fa-user-shield" />
-        <StatCard label="Toplam Kurum" value={data.institutions.length} icon="fa-solid fa-building" />
-        <StatCard label="Toplam Eğitim" value={data.educations.length} icon="fa-solid fa-graduation-cap" />
-        <StatCard label="Toplam Eğitmen" value={data.instructors.length} icon="fa-solid fa-chalkboard-user" />
-        <StatCard label="Toplam Bülten Kaydı" value={data.newsletter.length} icon="fa-solid fa-envelope-open-text" />
-        <StatCard label="İletişim Formu" value={data.contactForms.length} icon="fa-solid fa-comments" />
-        <StatCard label="Yaklaşan Takvim Kaydı" value={data.educationCalendar.length} icon="fa-solid fa-calendar-days" />
+        <StatCard label="Toplam Kayıtlı Kullanıcı" value={dashboard?.stats?.normalUsers || 0} icon="fa-solid fa-users" />
+        <StatCard label="Toplam Yönetici" value={dashboard?.stats?.adminUsers || 0} icon="fa-solid fa-user-shield" />
+        <StatCard label="Toplam Kurum" value={dashboard?.stats?.institutions || 0} icon="fa-solid fa-building" />
+        <StatCard label="Toplam Eğitim" value={dashboard?.stats?.educations || 0} icon="fa-solid fa-graduation-cap" />
+        <StatCard label="Toplam Eğitmen" value={dashboard?.stats?.instructors || 0} icon="fa-solid fa-chalkboard-user" />
+        <StatCard label="Toplam Bülten Kaydı" value={dashboard?.stats?.newsletter || 0} icon="fa-solid fa-envelope-open-text" />
+        <StatCard label="İletişim Formu" value={dashboard?.stats?.contactForms || 0} icon="fa-solid fa-comments" />
+        <StatCard label="Yaklaşan Takvim Kaydı" value={dashboard?.stats?.educationCalendar || 0} icon="fa-solid fa-calendar-days" />
       </div>
 
       <div className="admin-dashboard-grid">
@@ -56,7 +61,7 @@ export default function AdminDashboardPage() {
         <article className="admin-panel-card">
           <h3>Son Kayıt Olan Kullanıcılar</h3>
           <ul className="admin-activity-list">
-            {data.normalUsers.slice(0, 6).map((user) => (
+            {(dashboard?.latestUsers || []).map((user) => (
               <li key={user.id}>
                 <strong>
                   {user.firstName} {user.lastName}
@@ -70,7 +75,7 @@ export default function AdminDashboardPage() {
         <article className="admin-panel-card">
           <h3>Son Gelen İletişim Formları</h3>
           <ul className="admin-activity-list">
-            {data.contactForms.slice(0, 6).map((form) => (
+            {(dashboard?.latestContacts || []).map((form) => (
               <li key={form.id}>
                 <strong>{form.fullName}</strong>
                 <span>{form.subject}</span>

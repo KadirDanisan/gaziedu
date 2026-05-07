@@ -1,5 +1,5 @@
-import { createContext, useContext, useMemo, useState } from "react";
-import { useAdminData } from "./AdminDataContext";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { adminApi } from "../api";
 
 const AdminAuthContext = createContext(null);
 
@@ -12,26 +12,49 @@ const getPermissionMap = (permissions, roleId) =>
     }, {});
 
 export function AdminAuthProvider({ children }) {
-  const { adminUsers, instructors, permissions } = useAdminData();
-  const [session, setSession] = useState(null);
+  const [session, setSession] = useState(() => {
+    const raw = localStorage.getItem("adminSession");
+    return raw ? JSON.parse(raw) : null;
+  });
+  const [permissions, setPermissions] = useState([]);
+  const [isReady, setIsReady] = useState(false);
 
-  const loginAdmin = (email, password) => {
-    const user = adminUsers.find((item) => item.email === email && item.password === password);
-    if (!user) return { ok: false, message: "E-posta veya şifre hatalı." };
-    setSession({ userType: "admin", user });
-    return { ok: true };
+  const loginAdmin = async (email, password) => {
+    try {
+      const result = await adminApi.login(email, password);
+      localStorage.setItem("adminToken", result.token);
+      localStorage.setItem("adminSession", JSON.stringify({ userType: "admin", user: result.user }));
+      setSession({ userType: "admin", user: result.user });
+      const bootstrap = await adminApi.getBootstrap();
+      setPermissions(bootstrap.permissions);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: error.message };
+    }
   };
 
-  const loginInstructor = (email, password) => {
-    const user = instructors.find((item) => item.email === email && item.password === password);
-    if (!user) return { ok: false, message: "Eğitmen bilgileri hatalı." };
-    setSession({ userType: "instructor", user });
-    return { ok: true };
+  const hydrateSession = async () => {
+    if (!localStorage.getItem("adminToken")) return;
+    try {
+      const bootstrap = await adminApi.getBootstrap();
+      setPermissions(bootstrap.permissions);
+    } catch {
+      localStorage.removeItem("adminToken");
+      localStorage.removeItem("adminSession");
+      setSession(null);
+      setPermissions([]);
+    }
+    setIsReady(true);
   };
 
-  const logout = () => setSession(null);
+  const logout = () => {
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("adminSession");
+    setSession(null);
+    setPermissions([]);
+  };
 
-  const roleId = session?.userType === "admin" ? session.user.roleId : "r-instructor";
+  const roleId = session?.user?.roleId;
   const permissionMap = useMemo(() => getPermissionMap(permissions, roleId), [permissions, roleId]);
 
   const hasPermission = (moduleName, action = "canView") => {
@@ -40,8 +63,12 @@ export function AdminAuthProvider({ children }) {
     return Boolean(modulePermission[action]);
   };
 
+  useEffect(() => {
+    hydrateSession().finally(() => setIsReady(true));
+  }, []);
+
   return (
-    <AdminAuthContext.Provider value={{ session, loginAdmin, loginInstructor, logout, hasPermission, permissionMap }}>
+    <AdminAuthContext.Provider value={{ session, loginAdmin, logout, hasPermission, permissionMap, permissions, setPermissions, hydrateSession, isReady }}>
       {children}
     </AdminAuthContext.Provider>
   );

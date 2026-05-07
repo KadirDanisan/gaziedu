@@ -327,10 +327,22 @@
   padding: 16px;
 }
 
+.admin-modal-scrollable {
+  max-height: 85vh;
+}
+
+.admin-modal-education {
+  width: min(720px, 94vw);
+}
+
 .admin-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.admin-form-grid-single {
+  grid-template-columns: 1fr;
 }
 
 .admin-form-grid label,
@@ -345,6 +357,90 @@
   border: 1px solid #d9e2f2;
   border-radius: 10px;
   padding: 10px;
+}
+
+.admin-form-grid textarea,
+.admin-form-grid select {
+  border: 1px solid #d9e2f2;
+  border-radius: 10px;
+  padding: 10px;
+  width: 100%;
+}
+
+.education-content-render {
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid #d9e2f2;
+  border-radius: 10px;
+  max-height: 38vh;
+  overflow: auto;
+}
+
+.education-content-render h1,
+.education-content-render h2,
+.education-content-render h3,
+.education-content-render h4,
+.education-content-render h5,
+.education-content-render h6 {
+  margin: 12px 0 8px;
+}
+
+.education-content-render p,
+.education-content-render li {
+  white-space: pre-wrap;
+}
+
+.exam-question-preview {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #d9e2f2;
+  border-radius: 10px;
+  padding: 12px;
+  max-height: 44vh;
+  overflow: auto;
+  background: #f8fbff;
+}
+
+.exam-question-preview h4 {
+  margin: 0 0 8px;
+}
+
+.exam-question-preview p {
+  margin: 0 0 6px;
+  line-height: 1.45;
+}
+
+.exam-question-card {
+  background: #fff;
+  border: 1px solid #e1e8f5;
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.exam-question-card ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.exam-question-card small {
+  color: #255f38;
+  font-weight: 700;
+}
+
+.exam-ai-loading {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px solid #b8cef7;
+  border-radius: 10px;
+  background: #eef5ff;
+  color: #23406d;
+}
+
+.exam-ai-loading span {
+  font-size: 0.9rem;
 }
 
 .admin-modal-actions {
@@ -363,6 +459,10 @@
 
 .admin-detail-grid p {
   margin: 0;
+}
+
+.admin-detail-grid-single {
+  grid-template-columns: 1fr;
 }
 
 .admin-checkbox {

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { ADMIN_MODULES, PERMISSION_ACTIONS } from "../modules";
 import { useAdminData } from "../context/AdminDataContext";
+import { useAdminAuth } from "../context/AdminAuthContext";
 
 const actionLabels = {
   canView: "Görüntüle",
@@ -10,7 +11,9 @@ const actionLabels = {
 };
 
 export default function RolePermissionPage() {
-  const { roles, permissions, setPermissions } = useAdminData();
+  const { roles } = useAdminData();
+  const { permissions } = useAdminAuth();
+  const data = useAdminData();
 
   const grouped = useMemo(
     () =>
@@ -22,7 +25,9 @@ export default function RolePermissionPage() {
   );
 
   const handleToggle = (permissionId, action) => {
-    setPermissions((prev) => prev.map((item) => (item.id === permissionId ? { ...item, [action]: !item[action] } : item)));
+    const permission = permissions.find((item) => item.id === permissionId);
+    if (!permission) return;
+    data.updatePermission(permissionId, { [action]: !permission[action] });
   };
 
   return (

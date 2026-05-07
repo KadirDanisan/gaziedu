@@ -3,8 +3,8 @@ import { AdminDataProvider } from "./AdminDataContext";
 
 export default function AdminProviders({ children }) {
   return (
-    <AdminDataProvider>
-      <AdminAuthProvider>{children}</AdminAuthProvider>
-    </AdminDataProvider>
+    <AdminAuthProvider>
+      <AdminDataProvider>{children}</AdminDataProvider>
+    </AdminAuthProvider>
   );
 }

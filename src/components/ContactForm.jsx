@@ -1,7 +1,18 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 
 function ContactForm({ className = "contact-form-grid" }) {
   const recaptchaRef = useRef(null);
+  const [form, setForm] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    subject: "",
+    message: "",
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [status, setStatus] = useState({ type: "", message: "" });
 
   useEffect(() => {
     let intervalId;
@@ -46,27 +57,68 @@ function ContactForm({ className = "contact-form-grid" }) {
     };
   }, []);
 
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setStatus({ type: "", message: "" });
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/contact-forms`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || "Gönderim sırasında hata oluştu.");
+      }
+
+      setForm({
+        fullName: "",
+        email: "",
+        phone: "",
+        subject: "",
+        message: "",
+      });
+      setStatus({ type: "success", message: "Mesajınız başarıyla gönderildi." });
+    } catch (error) {
+      setStatus({ type: "error", message: error.message || "Bir hata oluştu." });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
-    <form className={className}>
+    <form className={className} onSubmit={handleSubmit}>
       <div className="contact-row">
         <div className="contact-field">
           <label htmlFor="name">Adınız Soyadınız *:</label>
-          <input id="name" name="name" required />
+          <input id="name" name="fullName" value={form.fullName} onChange={handleChange} required />
         </div>
         <div className="contact-field">
           <label htmlFor="email">E-Posta Adresiniz... *:</label>
-          <input id="email" name="email" type="email" required />
+          <input id="email" name="email" type="email" value={form.email} onChange={handleChange} required />
         </div>
       </div>
 
       <div className="contact-field">
         <label htmlFor="phone">Telefon Numaranız:</label>
-        <input id="phone" name="phone" />
+        <input id="phone" name="phone" value={form.phone} onChange={handleChange} />
+      </div>
+
+      <div className="contact-field">
+        <label htmlFor="subject">Konu:</label>
+        <input id="subject" name="subject" value={form.subject} onChange={handleChange} />
       </div>
 
       <div className="contact-field">
         <label htmlFor="message">Mesajınız *:</label>
-        <textarea id="message" name="message" rows="5" required />
+        <textarea id="message" name="message" rows="5" value={form.message} onChange={handleChange} required />
       </div>
 
       <label className="check-line">
@@ -81,9 +133,12 @@ function ContactForm({ className = "contact-form-grid" }) {
 
       <div ref={recaptchaRef} className="contact-recaptcha" />
 
-      <button className="btn contact-submit" type="submit">
+      <button className="btn contact-submit" type="submit" disabled={isSubmitting}>
         Gönder
       </button>
+      {status.message && (
+        <p className={status.type === "error" ? "admin-form-error" : ""}>{status.message}</p>
+      )}
     </form>
   );
 }

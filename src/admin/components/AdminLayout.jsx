@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { ADMIN_MODULES } from "../modules";
 import { useAdminAuth } from "../context/AdminAuthContext";
+import { useAdminData } from "../context/AdminDataContext";
 
 function SidebarLink({ item }) {
   return (
@@ -13,7 +15,12 @@ function SidebarLink({ item }) {
 
 export default function AdminLayout() {
   const { session, logout, hasPermission } = useAdminAuth();
+  const { loadBootstrap } = useAdminData();
   const location = useLocation();
+
+  useEffect(() => {
+    loadBootstrap();
+  }, []);
 
   return (
     <div className="admin-shell">
@@ -23,9 +30,9 @@ export default function AdminLayout() {
           <small>Admin Panel</small>
         </div>
         <nav className="admin-side-nav">
-          {ADMIN_MODULES.map((module) =>
-            hasPermission(module.key, "canView") ? <SidebarLink key={module.key} item={module} /> : <SidebarLink key={module.key} item={module} />,
-          )}
+          {ADMIN_MODULES.filter((module) => hasPermission(module.key, "canView")).map((module) => (
+            <SidebarLink key={module.key} item={module} />
+          ))}
         </nav>
       </aside>
 
@@ -38,7 +45,7 @@ export default function AdminLayout() {
           <div className="admin-profile">
             <div>
               <strong>{session?.user?.firstName} {session?.user?.lastName}</strong>
-              <small>{session?.userType === "instructor" ? "Eğitmen" : "Yönetici"}</small>
+              <small>{session?.user?.roleName || "Yönetici"}</small>
             </div>
             <button type="button" className="btn btn-outline" onClick={logout}>
               Çıkış

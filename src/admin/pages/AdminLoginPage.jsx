@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAdminAuth } from "../context/AdminAuthContext";
 
 export default function AdminLoginPage() {
@@ -9,9 +9,9 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("123456");
   const [error, setError] = useState("");
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    const result = loginAdmin(email, password);
+    const result = await loginAdmin(email, password);
     if (!result.ok) {
       setError(result.message);
       return;
@@ -36,7 +36,6 @@ export default function AdminLoginPage() {
         <button type="submit" className="btn">
           Giriş Yap
         </button>
-        <Link to="/egitmen/giris">Eğitmen girişine git</Link>
       </form>
     </section>
   );

@@ -2,7 +2,11 @@ import { NavLink, Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 function AccountLayout() {
-  const { isLoggedIn, user, logout } = useAuth();
+  const { isLoggedIn, isReady, user, logout } = useAuth();
+
+  if (!isReady) {
+    return null;
+  }
 
   if (!isLoggedIn) {
     return <Navigate to="/kullanici-islemleri" replace />;
