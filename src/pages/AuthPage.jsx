@@ -1,6 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { isValidTurkishNationalId, normalizeTurkishNationalId } from "../utils/turkishNationalId";
+import {
+  clearRememberLogin,
+  getRememberLogin,
+  setRememberLogin,
+} from "../utils/rememberLoginCookie";
 
 function AuthPage() {
   const navigate = useNavigate();
@@ -8,9 +14,15 @@ function AuthPage() {
   const [isResetMode, setIsResetMode] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+  const [hasSavedLogin, setHasSavedLogin] = useState(false);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [showRegisterPasswordRepeat, setShowRegisterPasswordRepeat] = useState(false);
   const [registerFirstName, setRegisterFirstName] = useState("");
   const [registerLastName, setRegisterLastName] = useState("");
   const [registerEmail, setRegisterEmail] = useState("");
+  const [registerNationalId, setRegisterNationalId] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
   const [registerPasswordRepeat, setRegisterPasswordRepeat] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -19,8 +31,43 @@ function AuthPage() {
   const [loadingLogin, setLoadingLogin] = useState(false);
   const [loadingRegister, setLoadingRegister] = useState(false);
 
+  useEffect(() => {
+    const saved = getRememberLogin();
+    if (saved?.email?.trim()) {
+      setLoginEmail(saved.email);
+      setLoginPassword(saved.password || "");
+      setRememberMe(true);
+      setHasSavedLogin(true);
+    }
+  }, []);
+
+  /** Beni Hatırla açıkken e-posta / şifre değiştikçe localStorage + çerez güncellenir */
+  useEffect(() => {
+    if (!rememberMe) return;
+    const t = window.setTimeout(() => {
+      if (loginEmail.trim() && loginPassword.length > 0) {
+        setRememberLogin({ email: loginEmail.trim(), password: loginPassword });
+        setHasSavedLogin(true);
+      }
+    }, 350);
+    return () => window.clearTimeout(t);
+  }, [rememberMe, loginEmail, loginPassword]);
+
   const passwordMismatch =
     registerPasswordRepeat.length > 0 && registerPassword !== registerPasswordRepeat;
+
+  const handleClearSavedLogin = () => {
+    clearRememberLogin();
+    setRememberMe(false);
+    setHasSavedLogin(false);
+    setLoginEmail("");
+    setLoginPassword("");
+  };
+
+  const registerTcDigits = normalizeTurkishNationalId(registerNationalId);
+  const registerTcValid =
+    registerTcDigits.length === 11 && isValidTurkishNationalId(registerNationalId);
+  const registerTcShowInvalid = registerTcDigits.length === 11 && !registerTcValid;
 
   const handleLogin = async (event) => {
     event.preventDefault();
@@ -28,6 +75,13 @@ function AuthPage() {
     setLoginError("");
     try {
       await loginUser({ email: loginEmail, password: loginPassword });
+      if (rememberMe) {
+        setRememberLogin({ email: loginEmail.trim(), password: loginPassword });
+        setHasSavedLogin(true);
+      } else {
+        clearRememberLogin();
+        setHasSavedLogin(false);
+      }
       navigate("/hesabim/hesap-bilgilerim");
     } catch (error) {
       setLoginError(error.message);
@@ -38,24 +92,27 @@ function AuthPage() {
 
   const handleRegister = async (event) => {
     event.preventDefault();
-    if (passwordMismatch) return;
+    if (passwordMismatch || !registerTcValid) return;
     setLoadingRegister(true);
     setRegisterError("");
     setRegisterSuccess("");
+    const savedEmail = registerEmail;
     try {
       await registerUser({
         firstName: registerFirstName,
         lastName: registerLastName,
         email: registerEmail,
         password: registerPassword,
+        nationalId: registerTcDigits,
       });
       setRegisterSuccess("Hesabınız oluşmuştur, giriş yapabilirsiniz.");
       setRegisterFirstName("");
       setRegisterLastName("");
       setRegisterEmail("");
+      setRegisterNationalId("");
       setRegisterPassword("");
       setRegisterPasswordRepeat("");
-      setLoginEmail(registerEmail);
+      setLoginEmail(savedEmail);
     } catch (error) {
       setRegisterError(error.message);
     } finally {
@@ -77,25 +134,53 @@ function AuthPage() {
                     id="login-email"
                     type="email"
                     required
+                    autoComplete="username"
                     value={loginEmail}
                     onChange={(event) => setLoginEmail(event.target.value)}
                   />
                 </div>
                 <div className="auth-field">
                   <label htmlFor="login-password">Şifreniz *</label>
-                  <input
-                    id="login-password"
-                    type="password"
-                    required
-                    value={loginPassword}
-                    onChange={(event) => setLoginPassword(event.target.value)}
-                  />
+                  <div className="auth-password-wrap">
+                    <input
+                      id="login-password"
+                      type={showLoginPassword ? "text" : "password"}
+                      required
+                      autoComplete="current-password"
+                      value={loginPassword}
+                      onChange={(event) => setLoginPassword(event.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="auth-password-toggle"
+                      aria-label={showLoginPassword ? "Şifreyi gizle" : "Şifreyi göster"}
+                      onClick={() => setShowLoginPassword((prev) => !prev)}
+                    >
+                      <i className={`fa-solid ${showLoginPassword ? "fa-eye-slash" : "fa-eye"}`} aria-hidden />
+                    </button>
+                  </div>
                 </div>
                 {loginError ? <small className="auth-error">{loginError}</small> : null}
 
                 <div className="auth-row">
                   <label className="auth-check">
-                    <input type="checkbox" />
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setRememberMe(checked);
+                        if (!checked) {
+                          clearRememberLogin();
+                          setHasSavedLogin(false);
+                          return;
+                        }
+                        if (loginEmail.trim() && loginPassword.length > 0) {
+                          setRememberLogin({ email: loginEmail.trim(), password: loginPassword });
+                          setHasSavedLogin(true);
+                        }
+                      }}
+                    />
                     <span>Beni Hatırla</span>
                   </label>
                   <button
@@ -177,31 +262,81 @@ function AuthPage() {
             </div>
 
             <div className="auth-field">
-              <label htmlFor="register-password">Şifreniz *</label>
+              <label htmlFor="register-tc">T.C. Kimlik Numaranız *</label>
               <input
-                id="register-password"
-                type="password"
+                id="register-tc"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
                 required
-                value={registerPassword}
-                onChange={(event) => setRegisterPassword(event.target.value)}
+                maxLength={11}
+                placeholder="11 hane"
+                value={registerNationalId}
+                onChange={(event) => setRegisterNationalId(event.target.value.replace(/\D/g, "").slice(0, 11))}
               />
+              {registerTcShowInvalid ? (
+                <small className="auth-error">Geçerli bir T.C. kimlik numarası giriniz.</small>
+              ) : null}
+              {registerTcDigits.length > 0 && registerTcDigits.length < 11 ? (
+                <small className="auth-error">T.C. kimlik numarası 11 hanedir.</small>
+              ) : null}
+            </div>
+
+            <div className="auth-field">
+              <label htmlFor="register-password">Şifreniz *</label>
+              <div className="auth-password-wrap">
+                <input
+                  id="register-password"
+                  type={showRegisterPassword ? "text" : "password"}
+                  required
+                  autoComplete="new-password"
+                  value={registerPassword}
+                  onChange={(event) => setRegisterPassword(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="auth-password-toggle"
+                  aria-label={showRegisterPassword ? "Şifreyi gizle" : "Şifreyi göster"}
+                  onClick={() => setShowRegisterPassword((prev) => !prev)}
+                >
+                  <i className={`fa-solid ${showRegisterPassword ? "fa-eye-slash" : "fa-eye"}`} aria-hidden />
+                </button>
+              </div>
             </div>
 
             <div className="auth-field">
               <label htmlFor="register-password-repeat">Şifreniz Tekrar *</label>
-              <input
-                id="register-password-repeat"
-                type="password"
-                required
-                value={registerPasswordRepeat}
-                onChange={(event) => setRegisterPasswordRepeat(event.target.value)}
-              />
+              <div className="auth-password-wrap">
+                <input
+                  id="register-password-repeat"
+                  type={showRegisterPasswordRepeat ? "text" : "password"}
+                  required
+                  autoComplete="new-password"
+                  value={registerPasswordRepeat}
+                  onChange={(event) => setRegisterPasswordRepeat(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="auth-password-toggle"
+                  aria-label={showRegisterPasswordRepeat ? "Şifreyi gizle" : "Şifreyi göster"}
+                  onClick={() => setShowRegisterPasswordRepeat((prev) => !prev)}
+                >
+                  <i
+                    className={`fa-solid ${showRegisterPasswordRepeat ? "fa-eye-slash" : "fa-eye"}`}
+                    aria-hidden
+                  />
+                </button>
+              </div>
               {passwordMismatch && (
                 <small className="auth-error">Yazdığınız şifreler birbiri ile aynı değil.</small>
               )}
             </div>
 
-            <button type="submit" className="btn auth-submit-btn" disabled={passwordMismatch || loadingRegister}>
+            <button
+              type="submit"
+              className="btn auth-submit-btn"
+              disabled={passwordMismatch || !registerTcValid || loadingRegister}
+            >
               {loadingRegister ? "Kaydediliyor..." : "Üye Ol"} <i className="fa-solid fa-arrow-right" />
             </button>
             {registerError ? <small className="auth-error">{registerError}</small> : null}

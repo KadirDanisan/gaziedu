@@ -145,7 +145,8 @@ const renderTableCellValue = (field, value, maps = {}) => {
   if (field === "categoryId") return maps.educationCategoriesById?.[value]?.categoryName || value || "-";
   if (field === "institutionId") return maps.institutionsById?.[value]?.name || value || "-";
   if (field === "instructorId") {
-    const instructor = maps.instructorsById?.[value];
+    /** Eğitim / takvim / sınav soruları FK’si `instructors.id`; isim bootstrap `educationInstructors` listesinden gelir. */
+    const instructor = maps.educationInstructorsById?.[value];
     if (!instructor) return value || "-";
     return instructor.fullName || `${instructor.firstName || ""} ${instructor.lastName || ""}`.trim() || value || "-";
   }
@@ -233,6 +234,7 @@ export default function CrudListPage({ moduleKey }) {
   const isEducationCalendarModule = moduleKey === "educationCalendar";
   const isEducationLikeModule = isEducationsModule || isEducationCalendarModule;
   const isExamQuestionsModule = moduleKey === "examQuestions";
+  const isUserPasswordModule = moduleKey === "adminUsers" || moduleKey === "normalUsers";
   const roleOptions = [
     { code: "superadmin", label: "Süper Admin" },
     { code: "admin", label: "Admin" },
@@ -242,7 +244,6 @@ export default function CrudListPage({ moduleKey }) {
   const rolesById = Object.fromEntries((data.roles || []).map((role) => [role.id, role]));
   const institutionsById = Object.fromEntries((data.institutions || []).map((institution) => [institution.id, institution]));
   const educationCategoriesById = Object.fromEntries((data.educationCategories || []).map((category) => [category.id, category]));
-  const instructorsById = Object.fromEntries((data.instructors || []).map((instructor) => [instructor.id, instructor]));
   const educationInstructorsById = Object.fromEntries((data.educationInstructors || []).map((instructor) => [instructor.id, instructor]));
   const educationsById = Object.fromEntries((data.educations || []).map((education) => [education.id, education]));
   const formFields = isContactFormsModule
@@ -299,12 +300,17 @@ export default function CrudListPage({ moduleKey }) {
     setEducationImageUploading(false);
     setEducationDocUploading(false);
     setExamDocUploading("");
-    setForm(config.fields.reduce((acc, key) => ({ ...acc, [key]: row[key] ?? "" }), {}));
+    const initial = config.fields.reduce((acc, key) => ({ ...acc, [key]: row[key] ?? "" }), {});
+    if (isUserPasswordModule) initial.password = "";
+    setForm(initial);
   };
 
   const submitForm = async (event) => {
     event.preventDefault();
     const payload = { ...form };
+    if (isUserPasswordModule && editing !== "new" && !String(payload.password ?? "").trim()) {
+      delete payload.password;
+    }
     if (isContactFormsModule) {
       delete payload.createdAt;
       if (editing === "new") {
@@ -453,7 +459,7 @@ export default function CrudListPage({ moduleKey }) {
               {rows.map((row) => (
                 <tr key={row.id}>
                   {config.fields.slice(0, 4).map((field) => (
-                    <td key={field}>{renderTableCellValue(field, row[field], { rolesById, educationCategoriesById, institutionsById, instructorsById: educationInstructorsById, educationsById })}</td>
+                    <td key={field}>{renderTableCellValue(field, row[field], { rolesById, educationCategoriesById, institutionsById, educationInstructorsById, educationsById })}</td>
                   ))}
                   <td>
                     <div className="admin-actions">
@@ -742,6 +748,19 @@ export default function CrudListPage({ moduleKey }) {
                         onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
                         required
                       />
+                    ) : isUserPasswordModule && field === "password" ? (
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={form[field] ?? ""}
+                        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+                        placeholder={
+                          editing === "new"
+                            ? ""
+                            : "**********"
+                        }
+                        required={editing === "new"}
+                      />
                     ) : (
                       <input value={form[field] ?? ""} onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))} required />
                     )
@@ -799,7 +818,7 @@ export default function CrudListPage({ moduleKey }) {
                         rolesById,
                         educationCategoriesById,
                         institutionsById,
-                        instructorsById: educationInstructorsById,
+                        educationInstructorsById,
                         educationsById,
                       })}
                     </span>

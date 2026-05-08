@@ -124,6 +124,191 @@ const migrateEducationCategoryColumns = async () => {
   await pool.query(`ALTER TABLE education_calendar ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES education_categories(id) ON DELETE SET NULL`);
 };
 
+const migrateUserFavoritesTable = async () => {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS user_favorites (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES normal_users(id) ON DELETE CASCADE,
+      education_id UUID NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(user_id, education_id)
+    )`,
+  );
+};
+
+/** Eski tek kolon şemayı education + takvim satırlarını ayırt edecek yapıya taşır. */
+const migrateUserFavoritesDualSupport = async () => {
+  await pool.query(`ALTER TABLE user_favorites ADD COLUMN IF NOT EXISTS target_type TEXT`);
+  await pool.query(`UPDATE user_favorites SET target_type = 'education' WHERE target_type IS NULL OR btrim(target_type) = ''`);
+  await pool.query(`ALTER TABLE user_favorites ALTER COLUMN target_type SET DEFAULT 'education'`);
+  await pool.query(`ALTER TABLE user_favorites ALTER COLUMN target_type SET NOT NULL`);
+
+  await pool.query(
+    `ALTER TABLE user_favorites ADD COLUMN IF NOT EXISTS calendar_id UUID REFERENCES education_calendar(id) ON DELETE CASCADE`,
+  );
+
+  await pool.query(`ALTER TABLE user_favorites DROP CONSTRAINT IF EXISTS user_favorites_user_id_education_id_key`);
+
+  await pool.query(`ALTER TABLE user_favorites ALTER COLUMN education_id DROP NOT NULL`);
+
+  await pool.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS user_favorites_user_education_unique ON user_favorites (user_id, education_id) WHERE target_type = 'education' AND education_id IS NOT NULL`,
+  );
+  await pool.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS user_favorites_user_calendar_unique ON user_favorites (user_id, calendar_id) WHERE target_type = 'calendar' AND calendar_id IS NOT NULL`,
+  );
+};
+
+const migrateEducationReviewsTable = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS education_reviews (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES normal_users(id) ON DELETE CASCADE,
+      target_type TEXT NOT NULL CHECK (target_type IN ('education', 'calendar')),
+      education_id UUID REFERENCES educations(id) ON DELETE CASCADE,
+      calendar_id UUID REFERENCES education_calendar(id) ON DELETE CASCADE,
+      rating SMALLINT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+      comment TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK (
+        (target_type = 'education' AND education_id IS NOT NULL AND calendar_id IS NULL)
+        OR (target_type = 'calendar' AND calendar_id IS NOT NULL AND education_id IS NULL)
+      )
+    )
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS education_reviews_user_education_unique
+      ON education_reviews (user_id, education_id) WHERE target_type = 'education'
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS education_reviews_user_calendar_unique
+      ON education_reviews (user_id, calendar_id) WHERE target_type = 'calendar'
+  `);
+};
+
+const migrateEducationRatingAggregates = async () => {
+  await pool.query(`ALTER TABLE educations ADD COLUMN IF NOT EXISTS rating_average NUMERIC(4,2)`);
+  await pool.query(`ALTER TABLE educations ADD COLUMN IF NOT EXISTS rating_count INT NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE education_calendar ADD COLUMN IF NOT EXISTS rating_average NUMERIC(4,2)`);
+  await pool.query(`ALTER TABLE education_calendar ADD COLUMN IF NOT EXISTS rating_count INT NOT NULL DEFAULT 0`);
+
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION refresh_education_rating_aggregate(p_target TEXT, p_education_id UUID, p_calendar_id UUID)
+    RETURNS VOID AS $$
+    DECLARE
+      v_cnt INT;
+      v_avg NUMERIC(4,2);
+    BEGIN
+      IF p_target = 'education' AND p_education_id IS NOT NULL THEN
+        SELECT COUNT(*)::INT, CASE WHEN COUNT(*) > 0 THEN ROUND(AVG(rating)::NUMERIC, 2) ELSE NULL END
+        INTO v_cnt, v_avg
+        FROM education_reviews
+        WHERE target_type = 'education' AND education_id = p_education_id;
+        UPDATE educations SET rating_count = v_cnt, rating_average = v_avg WHERE id = p_education_id;
+      ELSIF p_target = 'calendar' AND p_calendar_id IS NOT NULL THEN
+        SELECT COUNT(*)::INT, CASE WHEN COUNT(*) > 0 THEN ROUND(AVG(rating)::NUMERIC, 2) ELSE NULL END
+        INTO v_cnt, v_avg
+        FROM education_reviews
+        WHERE target_type = 'calendar' AND calendar_id = p_calendar_id;
+        UPDATE education_calendar SET rating_count = v_cnt, rating_average = v_avg WHERE id = p_calendar_id;
+      END IF;
+    END;
+    $$ LANGUAGE plpgsql
+  `);
+
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION education_reviews_aggregate_trigger()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      IF TG_OP = 'DELETE' THEN
+        PERFORM refresh_education_rating_aggregate(OLD.target_type, OLD.education_id, OLD.calendar_id);
+      ELSIF TG_OP = 'UPDATE' THEN
+        IF OLD.target_type IS DISTINCT FROM NEW.target_type
+           OR OLD.education_id IS DISTINCT FROM NEW.education_id
+           OR OLD.calendar_id IS DISTINCT FROM NEW.calendar_id THEN
+          PERFORM refresh_education_rating_aggregate(OLD.target_type, OLD.education_id, OLD.calendar_id);
+          PERFORM refresh_education_rating_aggregate(NEW.target_type, NEW.education_id, NEW.calendar_id);
+        ELSE
+          PERFORM refresh_education_rating_aggregate(NEW.target_type, NEW.education_id, NEW.calendar_id);
+        END IF;
+      ELSE
+        PERFORM refresh_education_rating_aggregate(NEW.target_type, NEW.education_id, NEW.calendar_id);
+      END IF;
+      RETURN COALESCE(NEW, OLD);
+    END;
+    $$ LANGUAGE plpgsql
+  `);
+
+  await pool.query(`DROP TRIGGER IF EXISTS education_reviews_refresh_aggregate_trg ON education_reviews`);
+  await pool.query(`
+    CREATE TRIGGER education_reviews_refresh_aggregate_trg
+    AFTER INSERT OR UPDATE OR DELETE ON education_reviews
+    FOR EACH ROW EXECUTE PROCEDURE education_reviews_aggregate_trigger()
+  `);
+
+  await pool.query(`
+    UPDATE educations e
+    SET rating_count = s.cnt, rating_average = s.avg
+    FROM (
+      SELECT education_id,
+        COUNT(*)::INT AS cnt,
+        ROUND(AVG(rating::NUMERIC), 2) AS avg
+      FROM education_reviews
+      WHERE target_type = 'education'
+      GROUP BY education_id
+    ) s
+    WHERE e.id = s.education_id
+  `);
+
+  await pool.query(`
+    UPDATE education_calendar ec
+    SET rating_count = s.cnt, rating_average = s.avg
+    FROM (
+      SELECT calendar_id,
+        COUNT(*)::INT AS cnt,
+        ROUND(AVG(rating::NUMERIC), 2) AS avg
+      FROM education_reviews
+      WHERE target_type = 'calendar'
+      GROUP BY calendar_id
+    ) s
+    WHERE ec.id = s.calendar_id
+  `);
+};
+
+const migrateNormalUserDetails = async () => {
+  await pool.query(`CREATE TABLE IF NOT EXISTS normal_user_details (
+    user_id UUID PRIMARY KEY REFERENCES normal_users(id) ON DELETE CASCADE,
+    national_id VARCHAR(11),
+    gender TEXT,
+    user_type TEXT,
+    address_line1 TEXT,
+    address_line2 TEXT,
+    country_code TEXT,
+    city TEXT,
+    district TEXT,
+    postal_code VARCHAR(32),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+};
+
+const migrateNormalUserDetailsAddressColumns = async () => {
+  await pool.query(`ALTER TABLE normal_user_details ADD COLUMN IF NOT EXISTS address_line1 TEXT`);
+  await pool.query(`ALTER TABLE normal_user_details ADD COLUMN IF NOT EXISTS address_line2 TEXT`);
+  await pool.query(`ALTER TABLE normal_user_details ADD COLUMN IF NOT EXISTS country_code TEXT`);
+  await pool.query(`ALTER TABLE normal_user_details ADD COLUMN IF NOT EXISTS city TEXT`);
+  await pool.query(`ALTER TABLE normal_user_details ADD COLUMN IF NOT EXISTS district TEXT`);
+  await pool.query(`ALTER TABLE normal_user_details ADD COLUMN IF NOT EXISTS postal_code VARCHAR(32)`);
+};
+
+const migrateNormalUserDetailsNationalIdUnique = async () => {
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS normal_user_details_national_id_key
+    ON normal_user_details (national_id)
+    WHERE national_id IS NOT NULL
+  `);
+};
+
 const migrateExamQuestionBatchColumns = async () => {
   await pool.query(`ALTER TABLE exam_questions ALTER COLUMN question_text DROP NOT NULL`);
   await pool.query(`ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS topic_doc_path TEXT`);
@@ -220,6 +405,128 @@ const toDbObject = (obj) =>
   Object.fromEntries(
     Object.entries(obj).map(([key, value]) => [apiToDbMap[key] || key, value]),
   );
+
+/** T.C. kimlik no: 11 hane, 0 ile başlamaz, 10. ve 11. haneler kontrol formülü */
+const isValidTurkishNationalId = (digits11) => {
+  if (typeof digits11 !== "string" || digits11.length !== 11 || !/^\d{11}$/.test(digits11)) return false;
+  const d = digits11.split("").map((c) => Number(c));
+  if (d[0] === 0) return false;
+  const oddSum = d[0] + d[2] + d[4] + d[6] + d[8];
+  const evenSum = d[1] + d[3] + d[5] + d[7];
+  let check10 = (oddSum * 7 - evenSum) % 10;
+  if (check10 < 0) check10 += 10;
+  if (check10 !== d[9]) return false;
+  const sumFirst10 = d.slice(0, 10).reduce((a, n) => a + n, 0) % 10;
+  if (sumFirst10 !== d[10]) return false;
+  return true;
+};
+
+const NORMAL_USER_GENDER_LABELS = { "1": "Kadın", "2": "Erkek", "3": "Belirtmek İstemiyorum" };
+const NORMAL_USER_TYPE_LABELS = { bireysel: "Bireysel", kurumsal: "Kurumsal" };
+/** Ülke seçimi (Hesap Ayarları ile aynı kodlar) */
+const NORMAL_USER_COUNTRY_LABELS = {
+  "215": "Türkiye",
+  "13": "Australia",
+  "38": "Canada",
+  "81": "Germany",
+  "222": "United Kingdom",
+  "223": "United States",
+};
+
+const formatNormalUserMeResponse = (user, details) => {
+  const g = details?.gender != null && details.gender !== "" ? String(details.gender) : "";
+  const ut = details?.user_type || null;
+  const cc = details?.country_code != null && details.country_code !== "" ? String(details.country_code) : "";
+  return {
+    id: user.id,
+    firstName: user.first_name,
+    lastName: user.last_name,
+    fullName: `${user.first_name} ${user.last_name}`.trim(),
+    email: user.email,
+    nationalId: details?.national_id ? String(details.national_id) : "",
+    gender: g,
+    genderLabel: g ? NORMAL_USER_GENDER_LABELS[g] || g : "Seçim yapılmadı",
+    userType: ut ? NORMAL_USER_TYPE_LABELS[ut] || ut : "Belirtilmedi",
+    customerType: ut === "kurumsal" ? "2" : "1",
+    addressLine1: details?.address_line1 ? String(details.address_line1) : "",
+    addressLine2: details?.address_line2 ? String(details.address_line2) : "",
+    countryCode: cc,
+    countryLabel: cc ? NORMAL_USER_COUNTRY_LABELS[cc] || cc : "",
+    city: details?.city ? String(details.city) : "",
+    district: details?.district ? String(details.district) : "",
+    postalCode: details?.postal_code ? String(details.postal_code) : "",
+  };
+};
+
+const formatRatingAggregateFields = (row) => {
+  const ratingCount = Number(row.rating_count ?? 0) || 0;
+  const rawAvg = row.rating_average;
+  const ratingAverage = rawAvg != null && rawAvg !== "" ? Number(rawAvg) : null;
+  const hasRating = ratingAverage != null && !Number.isNaN(ratingAverage) && ratingCount > 0;
+  return {
+    rating: hasRating ? ratingAverage.toFixed(1) : "",
+    ratingAverage: hasRating ? ratingAverage : null,
+    ratingCount,
+  };
+};
+
+const formatPublicCourseInstructor = (row) => {
+  const first = row.instructor_first_name ? String(row.instructor_first_name).trim() : "";
+  const last = row.instructor_last_name ? String(row.instructor_last_name).trim() : "";
+  const full = [first, last].filter(Boolean).join(" ").trim();
+  const info = row.instructor_info != null && row.instructor_info !== "" ? String(row.instructor_info).trim() : "";
+  const about = row.instructor_about != null && row.instructor_about !== "" ? String(row.instructor_about).trim() : "";
+  const hasStructuredInstructor = Boolean(row.instructor_id && full);
+  return {
+    instructorId: row.instructor_id || null,
+    instructorName: full,
+    instructorTitle: row.instructor_title != null && row.instructor_title !== "" ? String(row.instructor_title).trim() : "",
+    instructorDepartment: row.instructor_department != null && row.instructor_department !== "" ? String(row.instructor_department).trim() : "",
+    instructorAbout: about,
+    instructorEmail: row.instructor_email != null && row.instructor_email !== "" ? String(row.instructor_email).trim().toLowerCase() : "",
+    instructorLegacyInfo: !hasStructuredInstructor && info ? info : "",
+  };
+};
+
+const formatPublicCourse = (row) => ({
+  id: row.id,
+  title: row.name || row.education_name || row.title || "Eğitim",
+  categoryId: row.category_id || null,
+  category: row.category_name || null,
+  calendarDate: row.calendar_date || null,
+  date: row.calendar_date
+    ? new Date(row.calendar_date).toLocaleDateString("tr-TR", { day: "2-digit", month: "long", year: "numeric" })
+    : null,
+  mode: row.mode || "Uzaktan Eğitim",
+  duration: row.duration || "Belirtilmedi",
+  attendees: row.attendees || "Kontenjan Sınırı Yoktur ",
+  image: row.image_url || "https://istanbulinstitute.com/thumb.php?src=site/images/no_image.jpg&size=526x282",
+  description: row.description || "",
+  contentDocPath: row.content_doc_path || "",
+  contentHtml: row.content_html || "",
+  code: row.code || "",
+  sourceType: row.source_type || "education",
+  institutionId: row.institution_id || null,
+  institutionName: row.institution_name ? String(row.institution_name) : "",
+  institutionLogo: row.institution_logo_url ? String(row.institution_logo_url) : "",
+  institutionWebsite: row.institution_website_url ? String(row.institution_website_url) : "",
+  ...formatRatingAggregateFields(row),
+  ...formatPublicCourseInstructor(row),
+});
+
+const formatEducationReviewRow = (row) => {
+  const first = String(row.first_name || "").trim();
+  const last = String(row.last_name || "").trim();
+  const initial = last.length ? `${last.charAt(0).toUpperCase()}.` : "";
+  const authorLabel = [first, initial].filter(Boolean).join(" ").trim() || "Katılımcı";
+  return {
+    id: row.id,
+    rating: row.rating,
+    comment: row.comment || "",
+    createdAt: row.created_at,
+    authorLabel,
+  };
+};
 
 const auth = async (req, res, next) => {
   const token = req.headers.authorization?.replace("Bearer ", "");
@@ -685,35 +992,66 @@ app.post("/api/auth/login", async (req, res, next) => {
 
 app.post("/api/users/register", async (req, res, next) => {
   try {
-    const { firstName, lastName, email, password } = req.body || {};
-    if (!firstName || !lastName || !email || !password) {
-      return res.status(400).json({ message: "Ad, soyad, e-posta ve şifre zorunludur." });
+    const { firstName, lastName, email, password, nationalId } = req.body || {};
+    const tcEmpty =
+      nationalId === undefined || nationalId === null || String(nationalId).replace(/\D/g, "").length === 0;
+    if (!firstName || !lastName || !email || !password || tcEmpty) {
+      return res.status(400).json({ message: "Ad, soyad, e-posta, şifre ve T.C. kimlik numarası zorunludur." });
+    }
+
+    const digits = String(nationalId).replace(/\D/g, "");
+    if (digits.length !== 11) {
+      return res.status(400).json({ message: "T.C. kimlik numarası 11 haneli olmalıdır." });
+    }
+    if (!isValidTurkishNationalId(digits)) {
+      return res.status(400).json({ message: "Geçerli bir T.C. kimlik numarası giriniz." });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const result = await pool.query(
-      `INSERT INTO normal_users (first_name, last_name, email, password_hash)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, first_name, last_name, email, created_at, updated_at`,
-      [firstName, lastName, email, passwordHash],
-    );
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query(
+        `INSERT INTO normal_users (first_name, last_name, email, password_hash)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, first_name, last_name, email, created_at, updated_at`,
+        [String(firstName).trim(), String(lastName).trim(), String(email).trim().toLowerCase(), passwordHash],
+      );
+      const user = result.rows[0];
+      await client.query(
+        `INSERT INTO normal_user_details (user_id, national_id, updated_at) VALUES ($1, $2, NOW())`,
+        [user.id, digits],
+      );
+      await client.query("COMMIT");
 
-    const user = result.rows[0];
-    const token = jwt.sign({ id: user.id, userType: "normalUser" }, jwtSecret, { expiresIn: "12h" });
-    return res.status(201).json({
-      token,
-      user: {
-        id: user.id,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        fullName: `${user.first_name} ${user.last_name}`.trim(),
-        email: user.email,
-      },
-    });
-  } catch (error) {
-    if (error?.code === "23505") {
-      return res.status(409).json({ message: "Bu e-posta ile daha önce kayıt olunmuş." });
+      const token = jwt.sign({ id: user.id, userType: "normalUser" }, jwtSecret, { expiresIn: "12h" });
+      return res.status(201).json({
+        token,
+        user: {
+          id: user.id,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          fullName: `${user.first_name} ${user.last_name}`.trim(),
+          email: user.email,
+        },
+      });
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      if (err?.code === "23505") {
+        const detail = String(err.detail || "").toLowerCase();
+        const c = String(err.constraint || "").toLowerCase();
+        const isNational =
+          detail.includes("national_id") || c.includes("national_id") || c.includes("national");
+        if (isNational) {
+          return res.status(409).json({ message: "Bu T.C. kimlik numarası ile zaten kayıt bulunmaktadır." });
+        }
+        return res.status(409).json({ message: "Bu e-posta ile daha önce kayıt olunmuş." });
+      }
+      throw err;
+    } finally {
+      client.release();
     }
+  } catch (error) {
     return next(error);
   }
 });
@@ -757,17 +1095,427 @@ app.post("/api/users/login", async (req, res, next) => {
 app.get("/api/users/me", userAuth, async (req, res, next) => {
   try {
     const result = await pool.query(
-      `SELECT id, first_name, last_name, email FROM normal_users WHERE id = $1 LIMIT 1`,
+      `SELECT u.id, u.first_name, u.last_name, u.email,
+              d.national_id, d.gender, d.user_type,
+              d.address_line1, d.address_line2, d.country_code, d.city, d.district, d.postal_code
+       FROM normal_users u
+       LEFT JOIN normal_user_details d ON d.user_id = u.id
+       WHERE u.id = $1
+       LIMIT 1`,
       [req.user.id],
     );
-    const user = result.rows[0];
-    if (!user) return res.status(404).json({ message: "Kullanıcı bulunamadı." });
-    return res.json({
-      id: user.id,
-      firstName: user.first_name,
-      lastName: user.last_name,
-      fullName: `${user.first_name} ${user.last_name}`.trim(),
-      email: user.email,
+    const row = result.rows[0];
+    if (!row) return res.status(404).json({ message: "Kullanıcı bulunamadı." });
+    const user = { id: row.id, first_name: row.first_name, last_name: row.last_name, email: row.email };
+    const details = {
+      national_id: row.national_id,
+      gender: row.gender,
+      user_type: row.user_type,
+      address_line1: row.address_line1,
+      address_line2: row.address_line2,
+      country_code: row.country_code,
+      city: row.city,
+      district: row.district,
+      postal_code: row.postal_code,
+    };
+    return res.json(formatNormalUserMeResponse(user, details));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.patch("/api/users/me", userAuth, async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const userId = req.user.id;
+    const {
+      firstName,
+      lastName,
+      email,
+      nationalId,
+      gender,
+      customerType,
+      addressLine1,
+      addressLine2,
+      countryCode,
+      city,
+      district,
+      postalCode,
+    } = body;
+
+    const curUserResult = await pool.query(
+      `SELECT id, first_name, last_name, email FROM normal_users WHERE id = $1 LIMIT 1`,
+      [userId],
+    );
+    const curUser = curUserResult.rows[0];
+    if (!curUser) return res.status(404).json({ message: "Kullanıcı bulunamadı." });
+
+    if (email !== undefined) {
+      const nextEmail = String(email).trim().toLowerCase();
+      if (!nextEmail) {
+        return res.status(400).json({ message: "E-posta boş olamaz." });
+      }
+      if (nextEmail !== curUser.email) {
+        const dup = await pool.query(`SELECT 1 FROM normal_users WHERE lower(email) = $1 AND id <> $2 LIMIT 1`, [
+          nextEmail,
+          userId,
+        ]);
+        if (dup.rows[0]) {
+          return res.status(409).json({ message: "Bu e-posta adresi başka bir hesapta kullanılıyor." });
+        }
+      }
+    }
+
+    if (firstName !== undefined && !String(firstName).trim()) {
+      return res.status(400).json({ message: "Ad boş olamaz." });
+    }
+    if (lastName !== undefined && !String(lastName).trim()) {
+      return res.status(400).json({ message: "Soyad boş olamaz." });
+    }
+
+    const userUpdates = [];
+    const userVals = [];
+    if (firstName !== undefined) {
+      userVals.push(String(firstName).trim());
+      userUpdates.push(`first_name = $${userVals.length}`);
+    }
+    if (lastName !== undefined) {
+      userVals.push(String(lastName).trim());
+      userUpdates.push(`last_name = $${userVals.length}`);
+    }
+    if (email !== undefined) {
+      userVals.push(String(email).trim().toLowerCase());
+      userUpdates.push(`email = $${userVals.length}`);
+    }
+    if (userUpdates.length) {
+      userVals.push(userId);
+      await pool.query(
+        `UPDATE normal_users SET ${userUpdates.join(", ")}, updated_at = NOW() WHERE id = $${userVals.length}`,
+        userVals,
+      );
+    }
+
+    const detailKey = (k) => Object.prototype.hasOwnProperty.call(body, k);
+    const hasDetailPatch =
+      detailKey("nationalId") ||
+      detailKey("gender") ||
+      detailKey("customerType") ||
+      detailKey("addressLine1") ||
+      detailKey("addressLine2") ||
+      detailKey("countryCode") ||
+      detailKey("city") ||
+      detailKey("district") ||
+      detailKey("postalCode");
+
+    if (hasDetailPatch) {
+      const detRes = await pool.query(
+        `SELECT national_id, gender, user_type, address_line1, address_line2, country_code, city, district, postal_code
+         FROM normal_user_details WHERE user_id = $1 LIMIT 1`,
+        [userId],
+      );
+      const curDet = detRes.rows[0];
+      let nextNational = curDet?.national_id ?? null;
+      let nextGender = curDet?.gender ?? null;
+      let nextUserType = curDet?.user_type ?? null;
+      let nextAddr1 = curDet?.address_line1 ?? null;
+      let nextAddr2 = curDet?.address_line2 ?? null;
+      let nextCountry = curDet?.country_code ?? null;
+      let nextCity = curDet?.city ?? null;
+      let nextDistrict = curDet?.district ?? null;
+      let nextPostal = curDet?.postal_code ?? null;
+
+      if (detailKey("nationalId")) {
+        const raw = nationalId === null || nationalId === undefined ? "" : String(nationalId).replace(/\D/g, "");
+        if (raw && raw.length !== 11) {
+          return res.status(400).json({ message: "T.C. kimlik numarası 11 haneli olmalıdır." });
+        }
+        nextNational = raw || null;
+      }
+
+      if (detailKey("gender")) {
+        const gv =
+          gender === null || gender === undefined || gender === "" ? null : String(gender);
+        if (gv && !["1", "2", "3"].includes(gv)) {
+          return res.status(400).json({ message: "Geçersiz cinsiyet seçimi." });
+        }
+        nextGender = gv;
+      }
+
+      if (detailKey("customerType")) {
+        const ct = String(customerType);
+        if (!["1", "2"].includes(ct)) {
+          return res.status(400).json({ message: "Geçersiz kullanıcı tipi." });
+        }
+        nextUserType = ct === "2" ? "kurumsal" : "bireysel";
+      }
+
+      const trimOrNull = (v, maxLen) => {
+        if (v === null || v === undefined) return null;
+        const s = String(v).trim();
+        if (!s) return null;
+        return maxLen ? s.slice(0, maxLen) : s;
+      };
+
+      if (detailKey("addressLine1")) {
+        const v = trimOrNull(addressLine1, 500);
+        if (!v) {
+          return res.status(400).json({ message: "Adres satırı zorunludur." });
+        }
+        nextAddr1 = v;
+      }
+
+      if (detailKey("addressLine2")) {
+        nextAddr2 = trimOrNull(addressLine2, 500);
+      }
+
+      if (detailKey("countryCode")) {
+        const raw = countryCode === null || countryCode === undefined ? "" : String(countryCode).trim();
+        if (!raw) {
+          return res.status(400).json({ message: "Ülke seçimi zorunludur." });
+        }
+        nextCountry = raw.slice(0, 16);
+      }
+
+      if (detailKey("city")) {
+        const v = trimOrNull(city, 120);
+        if (!v) {
+          return res.status(400).json({ message: "Şehir zorunludur." });
+        }
+        nextCity = v;
+      }
+
+      if (detailKey("district")) {
+        const v = trimOrNull(district, 120);
+        if (!v) {
+          return res.status(400).json({ message: "İlçe / bölge zorunludur." });
+        }
+        nextDistrict = v;
+      }
+
+      if (detailKey("postalCode")) {
+        const v = trimOrNull(postalCode, 32);
+        if (!v) {
+          return res.status(400).json({ message: "Posta kodu zorunludur." });
+        }
+        nextPostal = v;
+      }
+
+      await pool.query(
+        `INSERT INTO normal_user_details (
+           user_id, national_id, gender, user_type,
+           address_line1, address_line2, country_code, city, district, postal_code,
+           updated_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET
+           national_id = EXCLUDED.national_id,
+           gender = EXCLUDED.gender,
+           user_type = EXCLUDED.user_type,
+           address_line1 = EXCLUDED.address_line1,
+           address_line2 = EXCLUDED.address_line2,
+           country_code = EXCLUDED.country_code,
+           city = EXCLUDED.city,
+           district = EXCLUDED.district,
+           postal_code = EXCLUDED.postal_code,
+           updated_at = NOW()`,
+        [
+          userId,
+          nextNational,
+          nextGender,
+          nextUserType,
+          nextAddr1,
+          nextAddr2,
+          nextCountry,
+          nextCity,
+          nextDistrict,
+          nextPostal,
+        ],
+      );
+    }
+
+    const fresh = await pool.query(
+      `SELECT u.id, u.first_name, u.last_name, u.email,
+              d.national_id, d.gender, d.user_type,
+              d.address_line1, d.address_line2, d.country_code, d.city, d.district, d.postal_code
+       FROM normal_users u
+       LEFT JOIN normal_user_details d ON d.user_id = u.id
+       WHERE u.id = $1
+       LIMIT 1`,
+      [userId],
+    );
+    const r = fresh.rows[0];
+    const userOut = { id: r.id, first_name: r.first_name, last_name: r.last_name, email: r.email };
+    const detailsOut = {
+      national_id: r.national_id,
+      gender: r.gender,
+      user_type: r.user_type,
+      address_line1: r.address_line1,
+      address_line2: r.address_line2,
+      country_code: r.country_code,
+      city: r.city,
+      district: r.district,
+      postal_code: r.postal_code,
+    };
+    return res.json(formatNormalUserMeResponse(userOut, detailsOut));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/api/users/favorites", userAuth, async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      `SELECT f.created_at AS sort_date, e.id, e.name, e.description, e.image_url, e.code, e.duration, e.content_doc_path, e.category_id, c.category_name, NULL::timestamptz AS calendar_date, f.target_type AS source_type, e.rating_average, e.rating_count, e.institution_id, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url
+       FROM user_favorites f
+       INNER JOIN educations e ON f.target_type = 'education' AND e.id = f.education_id
+       LEFT JOIN education_categories c ON c.id = e.category_id
+       LEFT JOIN institutions i ON i.id = e.institution_id
+       WHERE f.user_id = $1
+       UNION ALL
+       SELECT f.created_at, ec.id, ec.education_name AS name, ec.description, ec.image_url, ec.code, ec.duration, ec.content_doc_path, ec.category_id, c2.category_name, ec.calendar_date, f.target_type AS source_type, ec.rating_average, ec.rating_count, ec.institution_id, inst2.name AS institution_name, inst2.logo_url AS institution_logo_url, inst2.website_url AS institution_website_url
+       FROM user_favorites f
+       INNER JOIN education_calendar ec ON f.target_type = 'calendar' AND ec.id = f.calendar_id
+       LEFT JOIN education_categories c2 ON c2.id = ec.category_id
+       LEFT JOIN institutions inst2 ON inst2.id = ec.institution_id
+       WHERE f.user_id = $1
+       ORDER BY sort_date DESC`,
+      [req.user.id],
+    );
+    const rowsWithContent = await Promise.all(
+      result.rows.map(async (row) => ({
+        ...row,
+        content_html: await extractEducationContentHtml(row.content_doc_path),
+      })),
+    );
+    return res.json(rowsWithContent.map((row) => formatPublicCourse(row)));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/api/users/favorites", userAuth, async (req, res, next) => {
+  try {
+    const { educationId, calendarId } = req.body || {};
+    const hasE = Boolean(educationId);
+    const hasC = Boolean(calendarId);
+    if (hasE === hasC) {
+      return res.status(400).json({ message: "Yalnızca educationId veya calendarId gönderin." });
+    }
+    if (educationId) {
+      const education = await pool.query(`SELECT id FROM educations WHERE id = $1 LIMIT 1`, [educationId]);
+      if (!education.rows[0]) {
+        return res.status(404).json({ message: "Eğitim bulunamadı." });
+      }
+      await pool.query(
+        `INSERT INTO user_favorites (user_id, target_type, education_id, calendar_id)
+         SELECT $1, 'education', $2, NULL
+         WHERE NOT EXISTS (
+           SELECT 1 FROM user_favorites WHERE user_id = $1 AND target_type = 'education' AND education_id = $2
+         )`,
+        [req.user.id, educationId],
+      );
+    } else {
+      const cal = await pool.query(`SELECT id FROM education_calendar WHERE id = $1 LIMIT 1`, [calendarId]);
+      if (!cal.rows[0]) {
+        return res.status(404).json({ message: "Takvim kaydı bulunamadı." });
+      }
+      await pool.query(
+        `INSERT INTO user_favorites (user_id, target_type, education_id, calendar_id)
+         SELECT $1, 'calendar', NULL, $2
+         WHERE NOT EXISTS (
+           SELECT 1 FROM user_favorites WHERE user_id = $1 AND target_type = 'calendar' AND calendar_id = $2
+         )`,
+        [req.user.id, calendarId],
+      );
+    }
+    return res.status(201).json({ ok: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.delete("/api/users/favorites", userAuth, async (req, res, next) => {
+  try {
+    const educationId = String(req.query.educationId || "").trim();
+    const calendarId = String(req.query.calendarId || "").trim();
+    if (Boolean(educationId) === Boolean(calendarId)) {
+      return res.status(400).json({ message: "Yalnızca educationId veya calendarId query parametresi gönderin." });
+    }
+    if (educationId) {
+      await pool.query(
+        `DELETE FROM user_favorites WHERE user_id = $1 AND target_type = 'education' AND education_id = $2`,
+        [req.user.id, educationId],
+      );
+    } else {
+      await pool.query(
+        `DELETE FROM user_favorites WHERE user_id = $1 AND target_type = 'calendar' AND calendar_id = $2`,
+        [req.user.id, calendarId],
+      );
+    }
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/api/users/education-reviews", userAuth, async (req, res, next) => {
+  try {
+    const { educationId, calendarId, rating: rawRating, comment: rawComment } = req.body || {};
+    const eId = String(educationId || "").trim();
+    const cId = String(calendarId || "").trim();
+    const hasE = Boolean(eId);
+    const hasC = Boolean(cId);
+    if (hasE === hasC) {
+      return res.status(400).json({ message: "Yalnızca educationId veya calendarId gönderin." });
+    }
+
+    let rating = Number(rawRating);
+    if (!Number.isFinite(rating)) rating = 5;
+    rating = Math.min(5, Math.max(1, Math.round(rating)));
+
+    const commentText = rawComment != null ? String(rawComment).trim() : "";
+    const comment = commentText.length ? commentText.slice(0, 4000) : null;
+
+    let result;
+    if (eId) {
+      const education = await pool.query(`SELECT id FROM educations WHERE id = $1 LIMIT 1`, [eId]);
+      if (!education.rows[0]) {
+        return res.status(404).json({ message: "Eğitim bulunamadı." });
+      }
+      result = await pool.query(
+        `INSERT INTO education_reviews (user_id, target_type, education_id, calendar_id, rating, comment)
+         VALUES ($1, 'education', $2, NULL, $3, $4)
+         ON CONFLICT (user_id, education_id) WHERE target_type = 'education'
+         DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment
+         RETURNING id, rating, comment, created_at`,
+        [req.user.id, eId, rating, comment],
+      );
+    } else {
+      const cal = await pool.query(`SELECT id FROM education_calendar WHERE id = $1 LIMIT 1`, [cId]);
+      if (!cal.rows[0]) {
+        return res.status(404).json({ message: "Takvim kaydı bulunamadı." });
+      }
+      result = await pool.query(
+        `INSERT INTO education_reviews (user_id, target_type, education_id, calendar_id, rating, comment)
+         VALUES ($1, 'calendar', NULL, $2, $3, $4)
+         ON CONFLICT (user_id, calendar_id) WHERE target_type = 'calendar'
+         DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment
+         RETURNING id, rating, comment, created_at`,
+        [req.user.id, cId, rating, comment],
+      );
+    }
+
+    const userRow = await pool.query(`SELECT first_name, last_name FROM normal_users WHERE id = $1 LIMIT 1`, [
+      req.user.id,
+    ]);
+    const aggRow = eId
+      ? (await pool.query(`SELECT rating_average, rating_count FROM educations WHERE id = $1 LIMIT 1`, [eId])).rows[0]
+      : (await pool.query(`SELECT rating_average, rating_count FROM education_calendar WHERE id = $1 LIMIT 1`, [cId]))
+          .rows[0];
+    return res.status(200).json({
+      ok: true,
+      review: formatEducationReviewRow({ ...result.rows[0], ...userRow.rows[0] }),
+      ...formatRatingAggregateFields(aggRow || {}),
     });
   } catch (error) {
     return next(error);
@@ -813,6 +1561,338 @@ app.post("/api/newsletter", async (req, res, next) => {
     if (error?.code === "23505") {
       return res.status(409).json({ message: "Bu e-posta zaten bültene kayıtlı." });
     }
+    return next(error);
+  }
+});
+
+app.get("/api/public/education-reviews", async (req, res, next) => {
+  try {
+    const educationId = String(req.query.educationId || "").trim();
+    const calendarId = String(req.query.calendarId || "").trim();
+    const hasE = Boolean(educationId);
+    const hasC = Boolean(calendarId);
+    if (hasE === hasC) {
+      return res.status(400).json({ message: "Yalnızca educationId veya calendarId query parametresi gönderin." });
+    }
+
+    let result;
+    if (educationId) {
+      result = await pool.query(
+        `SELECT r.id, r.rating, r.comment, r.created_at, u.first_name, u.last_name
+         FROM education_reviews r
+         INNER JOIN normal_users u ON u.id = r.user_id
+         WHERE r.target_type = 'education' AND r.education_id = $1
+         ORDER BY r.created_at DESC`,
+        [educationId],
+      );
+    } else {
+      result = await pool.query(
+        `SELECT r.id, r.rating, r.comment, r.created_at, u.first_name, u.last_name
+         FROM education_reviews r
+         INNER JOIN normal_users u ON u.id = r.user_id
+         WHERE r.target_type = 'calendar' AND r.calendar_id = $1
+         ORDER BY r.created_at DESC`,
+        [calendarId],
+      );
+    }
+
+    return res.json({ reviews: result.rows.map(formatEducationReviewRow) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+const escapeIlikePattern = (raw) =>
+  String(raw || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/%/g, "\\%")
+    .replace(/_/g, "\\_");
+
+/** Eğitim kataloğu + takvim başlıklarında büyük/küçük harf duyarsız arama */
+app.get("/api/public/search/trainings", async (req, res, next) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (q.length < 2) {
+      return res.json({ results: [] });
+    }
+    const limit = Math.min(30, Math.max(1, Number(req.query.limit || 20)));
+    const pattern = `%${escapeIlikePattern(q)}%`;
+    const [edu, cal] = await Promise.all([
+      pool.query(
+        `SELECT e.id, e.name, e.image_url, e.category_id, 'education'::text AS source_type
+         FROM educations e
+         WHERE e.name ILIKE $1 ESCAPE '\\'
+         ORDER BY e.name ASC
+         LIMIT $2`,
+        [pattern, limit],
+      ),
+      pool.query(
+        `SELECT ec.id, ec.education_name AS name, ec.image_url, ec.category_id, 'calendar'::text AS source_type
+         FROM education_calendar ec
+         WHERE ec.education_name ILIKE $1 ESCAPE '\\'
+         ORDER BY ec.education_name ASC
+         LIMIT $2`,
+        [pattern, limit],
+      ),
+    ]);
+    const mapRow = (row) => ({
+      id: row.id,
+      title: row.name,
+      image: row.image_url || null,
+      sourceType: row.source_type,
+      categoryId: row.category_id,
+    });
+    const combined = [...edu.rows.map(mapRow), ...cal.rows.map(mapRow)];
+    combined.sort((a, b) => String(a.title).localeCompare(String(b.title), "tr", { sensitivity: "base" }));
+    return res.json({ results: combined.slice(0, limit) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Tüm Eğitimler sayfası: yalnızca `educations`, sayfalı; kategori, arama, sıralama sunucuda */
+app.get("/api/public/educations", async (req, res, next) => {
+  try {
+    const page = Math.max(1, Number(req.query.page || 1));
+    const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize || 9)));
+    const searchRaw = String(req.query.search || "").trim();
+    const sortRaw = String(req.query.sort || "newest").toLowerCase();
+    const sort =
+      sortRaw === "oldest" ? "oldest" : sortRaw === "rating" || sortRaw === "degerlendirme" ? "rating" : "newest";
+
+    const catRaw = req.query.category;
+    const categoryList = (Array.isArray(catRaw) ? catRaw : catRaw != null && catRaw !== "" ? [catRaw] : [])
+      .map((s) => String(s || "").trim().toLowerCase())
+      .filter(Boolean);
+
+    const params = [];
+    const conditions = [];
+
+    if (searchRaw) {
+      params.push(`%${escapeIlikePattern(searchRaw)}%`);
+      conditions.push(`e.name ILIKE $${params.length} ESCAPE '\\'`);
+    }
+
+    if (categoryList.length) {
+      params.push(categoryList);
+      conditions.push(`LOWER(TRIM(COALESCE(c.category_name, ''))) = ANY($${params.length}::text[])`);
+    }
+
+    const whereSql = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const orderSql =
+      sort === "oldest"
+        ? `e.created_at ASC`
+        : sort === "rating"
+          ? `e.rating_average DESC NULLS LAST, e.rating_count DESC, e.created_at DESC`
+          : `e.created_at DESC`;
+
+    const offset = (page - 1) * pageSize;
+
+    const baseCountSql = `SELECT COUNT(*)::int AS total
+      FROM educations e
+      LEFT JOIN education_categories c ON c.id = e.category_id
+      ${whereSql}`;
+
+    const listSql = `SELECT e.id, e.name, e.description, e.image_url, e.code, e.duration, e.content_doc_path, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
+          ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email,
+          NULL::text AS instructor_info
+       FROM educations e
+       LEFT JOIN education_categories c ON c.id = e.category_id
+       LEFT JOIN institutions i ON i.id = e.institution_id
+       LEFT JOIN instructors ins ON ins.id = e.instructor_id
+       ${whereSql}
+       ORDER BY ${orderSql}
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+
+    const [countResult, listResult, categoryRows] = await Promise.all([
+      pool.query(baseCountSql, params),
+      pool.query(listSql, [...params, pageSize, offset]),
+      pool.query(`SELECT id, category_name FROM education_categories ORDER BY category_name ASC`),
+    ]);
+
+    const rowsWithEmptyContent = listResult.rows.map((row) => ({ ...row, content_html: "" }));
+    const data = rowsWithEmptyContent.map((row) => formatPublicCourse(row));
+    const categories = [
+      { id: "", name: "Tüm Eğitimler" },
+      ...categoryRows.rows.map((row) => ({ id: row.id, name: row.category_name })),
+    ];
+    const total = countResult.rows[0]?.total || 0;
+
+    return res.json({
+      categories,
+      data,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/public/courses", async (req, res, next) => {
+  try {
+    const page = Math.max(1, Number(req.query.page || 1));
+    const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize || 6)));
+    const sort = String(req.query.sort || "oldest").toLowerCase() === "newest" ? "DESC" : "ASC";
+    const categoryId = String(req.query.categoryId || "").trim();
+    const category = String(req.query.category || "").trim().toLowerCase();
+    const dateFrom = String(req.query.dateFrom || "").trim();
+    const dateTo = String(req.query.dateTo || "").trim();
+    const search = String(req.query.search || "").trim().toLowerCase();
+    const calendarParams = [];
+    const calendarConditions = [];
+
+    if (categoryId) {
+      calendarParams.push(categoryId);
+      calendarConditions.push(`ec.category_id = $${calendarParams.length}`);
+    } else if (category) {
+      calendarParams.push(category);
+      calendarConditions.push(`LOWER(COALESCE(c.category_name, '')) = $${calendarParams.length}`);
+    }
+
+    if (dateFrom) {
+      calendarParams.push(dateFrom);
+      calendarConditions.push(`ec.calendar_date >= $${calendarParams.length}::timestamptz`);
+    }
+
+    if (dateTo) {
+      calendarParams.push(dateTo);
+      calendarConditions.push(`ec.calendar_date <= ($${calendarParams.length}::date + interval '1 day' - interval '1 second')`);
+    }
+
+    if (search) {
+      calendarParams.push(`%${search}%`);
+      calendarConditions.push(`LOWER(COALESCE(ec.education_name, '')) LIKE $${calendarParams.length}`);
+    }
+
+    const calendarWhere = calendarConditions.length ? `WHERE ${calendarConditions.join(" AND ")}` : "";
+    const countSql = `SELECT COUNT(*)::int AS total
+                      FROM education_calendar ec
+                      LEFT JOIN education_categories c ON c.id = ec.category_id
+                      ${calendarWhere}`;
+    const listSql = `SELECT ec.id, ec.education_name, ec.description, ec.image_url, ec.code, ec.duration, ec.content_doc_path, ec.calendar_date, ec.category_id, ec.institution_id, ec.instructor_id, ec.instructor_info, ec.rating_average, ec.rating_count, c.category_name, 'calendar'::text AS source_type, inst.name AS institution_name, inst.logo_url AS institution_logo_url, inst.website_url AS institution_website_url,
+                     ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email
+                     FROM education_calendar ec
+                     LEFT JOIN education_categories c ON c.id = ec.category_id
+                     LEFT JOIN institutions inst ON inst.id = ec.institution_id
+                     LEFT JOIN instructors ins ON ins.id = ec.instructor_id
+                     ${calendarWhere}
+                     ORDER BY ec.calendar_date ${sort}
+                     LIMIT $${calendarParams.length + 1}
+                     OFFSET $${calendarParams.length + 2}`;
+    const offset = (page - 1) * pageSize;
+
+    const [educations, calendarCount, calendar, categoryRows] = await Promise.all([
+      pool.query(
+        `SELECT e.id, e.name, e.description, e.image_url, e.code, e.duration, e.content_doc_path, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
+          ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email,
+          NULL::text AS instructor_info
+         FROM educations e
+         LEFT JOIN education_categories c ON c.id = e.category_id
+         LEFT JOIN institutions i ON i.id = e.institution_id
+         LEFT JOIN instructors ins ON ins.id = e.instructor_id
+         ORDER BY e.created_at DESC`,
+      ),
+      pool.query(countSql, calendarParams),
+      pool.query(listSql, [...calendarParams, pageSize, offset]),
+      pool.query(`SELECT id, category_name FROM education_categories ORDER BY category_name ASC`),
+    ]);
+
+    const educationRowsWithContent = await Promise.all(
+      educations.rows.map(async (row) => ({
+        ...row,
+        content_html: await extractEducationContentHtml(row.content_doc_path),
+      })),
+    );
+    const calendarRowsWithContent = await Promise.all(
+      calendar.rows.map(async (row) => ({
+        ...row,
+        content_html: await extractEducationContentHtml(row.content_doc_path),
+      })),
+    );
+    const educationItems = educationRowsWithContent.map((row) => formatPublicCourse(row));
+    let calendarItems = calendarRowsWithContent.map((row) => formatPublicCourse(row));
+    const categories = [
+      { id: "", name: "Tüm Eğitimler" },
+      ...categoryRows.rows.map((row) => ({ id: row.id, name: row.category_name })),
+    ];
+    let total = calendarCount.rows[0]?.total || 0;
+    if (total === 0) {
+      const fallbackParams = [];
+      const fallbackConditions = [];
+
+      if (categoryId) {
+        fallbackParams.push(categoryId);
+        fallbackConditions.push(`e.category_id = $${fallbackParams.length}`);
+      } else if (category) {
+        fallbackParams.push(category);
+        fallbackConditions.push(`LOWER(COALESCE(c.category_name, '')) = $${fallbackParams.length}`);
+      }
+
+      if (dateFrom) {
+        fallbackParams.push(dateFrom);
+        fallbackConditions.push(`e.created_at >= $${fallbackParams.length}::timestamptz`);
+      }
+
+      if (dateTo) {
+        fallbackParams.push(dateTo);
+        fallbackConditions.push(`e.created_at <= ($${fallbackParams.length}::date + interval '1 day' - interval '1 second')`);
+      }
+
+      if (search) {
+        fallbackParams.push(`%${search}%`);
+        fallbackConditions.push(`LOWER(COALESCE(e.name, '')) LIKE $${fallbackParams.length}`);
+      }
+
+      const fallbackWhere = fallbackConditions.length ? `WHERE ${fallbackConditions.join(" AND ")}` : "";
+      const fallbackCountSql = `SELECT COUNT(*)::int AS total
+                                FROM educations e
+                                LEFT JOIN education_categories c ON c.id = e.category_id
+                                ${fallbackWhere}`;
+      const fallbackListSql = `SELECT e.id, e.name AS education_name, e.description, e.image_url, e.code, e.duration, e.content_doc_path, e.created_at AS calendar_date, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
+                               ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email,
+                               NULL::text AS instructor_info
+                               FROM educations e
+                               LEFT JOIN education_categories c ON c.id = e.category_id
+                               LEFT JOIN institutions i ON i.id = e.institution_id
+                               LEFT JOIN instructors ins ON ins.id = e.instructor_id
+                               ${fallbackWhere}
+                               ORDER BY e.created_at ${sort}
+                               LIMIT $${fallbackParams.length + 1}
+                               OFFSET $${fallbackParams.length + 2}`;
+      const [fallbackCount, fallbackList] = await Promise.all([
+        pool.query(fallbackCountSql, fallbackParams),
+        pool.query(fallbackListSql, [...fallbackParams, pageSize, offset]),
+      ]);
+      total = fallbackCount.rows[0]?.total || 0;
+      const fallbackRowsWithContent = await Promise.all(
+        fallbackList.rows.map(async (row) => ({
+          ...row,
+          content_html: await extractEducationContentHtml(row.content_doc_path),
+        })),
+      );
+      calendarItems = fallbackRowsWithContent.map((row) => formatPublicCourse(row));
+    }
+
+    const allItems = [...educationItems, ...calendarItems];
+
+    return res.json({
+      categories,
+      educations: educationItems,
+      educationCalendar: calendarItems,
+      courses: allItems,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+    });
+  } catch (error) {
     return next(error);
   }
 });
@@ -1289,6 +2369,13 @@ const startServer = async () => {
     await migrateEducationDocColumns();
     await migrateEducationCalendarColumns();
     await migrateEducationCategoryColumns();
+    await migrateUserFavoritesTable();
+    await migrateUserFavoritesDualSupport();
+    await migrateEducationReviewsTable();
+    await migrateEducationRatingAggregates();
+    await migrateNormalUserDetails();
+    await migrateNormalUserDetailsAddressColumns();
+    await migrateNormalUserDetailsNationalIdUnique();
     await migrateExamQuestionBatchColumns();
     await migrateContactFormTimestampsToIstanbul();
   } catch (error) {

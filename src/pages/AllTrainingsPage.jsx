@@ -1,71 +1,242 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { categories, makeSlug, upcomingCourses } from "../data/homeData";
+import { Link, useSearchParams } from "react-router-dom";
+import { publicApi, resolvePublicImageUrl } from "../api/publicApi";
+import CourseCardThumb from "../components/CourseCardThumb";
+import { makeSlug } from "../data/homeData";
+import { useAuth } from "../context/AuthContext";
 
-const trainingTypes = ["Hibrit Eğitim", "Uzaktan Eğitim", "Yüzyüze Eğitim"];
+function CourseRatingStars({ value, max = 5 }) {
+  const v = Math.min(max, Math.max(0, Number(value) || 0));
+  const stars = [];
+  for (let i = 1; i <= max; i += 1) {
+    const diff = v - (i - 1);
+    if (diff >= 1) {
+      stars.push(<i key={i} className="fa-solid fa-star" aria-hidden />);
+    } else if (diff >= 0.5) {
+      stars.push(<i key={i} className="fa-solid fa-star-half-stroke" aria-hidden />);
+    } else {
+      stars.push(<i key={i} className="fa-regular fa-star" aria-hidden />);
+    }
+  }
+  return <span className="course-rating-stars-row course-rating-stars-row--card">{stars}</span>;
+}
+
+function courseCardStarValue(course) {
+  const cnt = Number(course.ratingCount ?? 0) || 0;
+  const avg = course.ratingAverage;
+  if (cnt <= 0 || avg == null || Number.isNaN(Number(avg))) return 0;
+  return Number(avg);
+}
+
+function categoriesKey(arr) {
+  return [...arr].sort().join("\u0001");
+}
+
+function sameCategorySelection(a, b) {
+  return categoriesKey(a) === categoriesKey(b);
+}
+
+const defaultPagination = { page: 1, pageSize: 9, total: 0, totalPages: 1 };
 
 function AllTrainingsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [layout, setLayout] = useState("grid");
-  const [query, setQuery] = useState("");
-  const [sortBy, setSortBy] = useState("onerilen");
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [sortBy, setSortBy] = useState("newest");
   const [selectedCategories, setSelectedCategories] = useState([]);
-  const [selectedTypes, setSelectedTypes] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6;
+  const [listItems, setListItems] = useState([]);
+  const [pagination, setPagination] = useState(defaultPagination);
+  const [availableCategories, setAvailableCategories] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { isLoggedIn, isFavorite, toggleFavorite } = useAuth();
+  const itemsPerPage = 9;
 
-  const allCourses = useMemo(
-    () =>
-      [...upcomingCourses, ...upcomingCourses].slice(0, 12).map((course, idx) => ({
-        ...course,
-        id: `${course.title}-${idx}`,
-        category: categories[(idx % (categories.length - 1)) + 1],
-      })),
-    []
-  );
-
-  const filteredCourses = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    let items = allCourses.filter((course) => {
-      const matchesQuery = !q || course.title.toLowerCase().includes(q);
-      const matchesCategory =
-        selectedCategories.length === 0 || selectedCategories.includes(course.category);
-      const matchesType = selectedTypes.length === 0 || selectedTypes.includes(course.mode);
-      return matchesQuery && matchesCategory && matchesType;
-    });
-
-    if (sortBy === "degerlendirme") {
-      items = [...items].sort((a, b) => {
-        const aScore = Number.parseInt(String(a.rating || "").replace(/\D/g, ""), 10) || 0;
-        const bScore = Number.parseInt(String(b.rating || "").replace(/\D/g, ""), 10) || 0;
-        return bScore - aScore;
-      });
-    }
-
-    return items;
-  }, [allCourses, query, selectedCategories, selectedTypes, sortBy]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredCourses.length / itemsPerPage));
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 350);
+    return () => window.clearTimeout(t);
+  }, [searchInput]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [query, selectedCategories, selectedTypes, sortBy]);
+  }, [debouncedSearch, selectedCategories, sortBy]);
 
-  const paginatedCourses = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredCourses.slice(start, start + itemsPerPage);
-  }, [currentPage, filteredCourses]);
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    publicApi
+      .getEducationsCatalog({
+        page: currentPage,
+        pageSize: itemsPerPage,
+        search: debouncedSearch,
+        categories: selectedCategories,
+        sort: sortBy,
+      })
+      .then((data) => {
+        if (!active) return;
+        const rows = Array.isArray(data?.data) ? data.data : [];
+        setListItems(
+          rows.map((course, idx) => ({
+            ...course,
+            id: course.id || `${course.title}-${idx}`,
+            image: resolvePublicImageUrl(course.image),
+            attendees: course.attendees || "Sınırsız Kayıt",
+            mode: course.mode || "Uzaktan Eğitim",
+          })),
+        );
+        if (data?.pagination) {
+          const next = {
+            page: data.pagination.page || 1,
+            pageSize: data.pagination.pageSize || itemsPerPage,
+            total: data.pagination.total ?? 0,
+            totalPages: Math.max(1, data.pagination.totalPages || 1),
+          };
+          setPagination((prev) =>
+            prev.page === next.page &&
+            prev.pageSize === next.pageSize &&
+            prev.total === next.total &&
+            prev.totalPages === next.totalPages
+              ? prev
+              : next,
+          );
+        } else {
+          setPagination((prev) => (prev.total === 0 && prev.totalPages === 1 ? prev : defaultPagination));
+        }
+        if (Array.isArray(data?.categories) && data.categories.length) {
+          const categoryNames = data.categories
+            .map((item) => (typeof item === "string" ? item : item.name))
+            .filter((item) => item && item !== "Tüm Eğitimler");
+          setAvailableCategories((prev) =>
+            prev.length === categoryNames.length && prev.every((v, i) => v === categoryNames[i])
+              ? prev
+              : categoryNames,
+          );
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        setListItems([]);
+        setPagination((prev) => (prev.total === 0 && prev.totalPages === 1 ? prev : defaultPagination));
+        setAvailableCategories((prev) => (prev.length === 0 ? prev : []));
+      })
+      .finally(() => {
+        if (!active) return;
+        setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [currentPage, debouncedSearch, selectedCategories, sortBy, itemsPerPage]);
+
+  useEffect(() => {
+    const raw = searchParams.get("kategori");
+    if (!raw || !raw.trim()) {
+      setSelectedCategories((prev) => (prev.length === 0 ? prev : []));
+      return;
+    }
+    if (!availableCategories.length) return;
+    const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    const valid = parts.filter((p) => availableCategories.includes(p));
+    const next = valid.length ? valid : [];
+    setSelectedCategories((prev) => (sameCategorySelection(prev, next) ? prev : next));
+  }, [searchParams, availableCategories]);
+
+  useEffect(() => {
+    if (currentPage <= pagination.totalPages) return;
+    setCurrentPage(pagination.totalPages);
+  }, [currentPage, pagination.totalPages]);
+
+  const totalCount = pagination.total;
 
   const toggleCategory = (category) => {
-    setSelectedCategories((prev) =>
-      prev.includes(category) ? prev.filter((item) => item !== category) : [...prev, category]
-    );
+    setSelectedCategories((prev) => {
+      const nextCategories = prev.includes(category)
+        ? prev.filter((item) => item !== category)
+        : [...prev, category];
+      const nextParams = new URLSearchParams(searchParams);
+      if (nextCategories.length) {
+        nextParams.set("kategori", nextCategories.join(","));
+      } else {
+        nextParams.delete("kategori");
+      }
+      setSearchParams(nextParams, { replace: true });
+      return nextCategories;
+    });
   };
 
-  const toggleType = (type) => {
-    setSelectedTypes((prev) =>
-      prev.includes(type) ? prev.filter((item) => item !== type) : [...prev, type]
-    );
+  const handleFavoriteClick = async (course) => {
+    if (!isLoggedIn) {
+      alert("Favorilere eklemek için giriş yapmalısınız.");
+      return;
+    }
+    try {
+      await toggleFavorite(course.id, course.sourceType || "education");
+    } catch (error) {
+      alert(error.message || "Favori işlemi başarısız.");
+    }
   };
+
+  const totalPages = pagination.totalPages;
+
+  const pageButtons = useMemo(() => Array.from({ length: totalPages }, (_, idx) => idx + 1), [totalPages]);
+
+  const filterHead = useMemo(() => {
+    const cats = [...selectedCategories].sort((a, b) => a.localeCompare(b, "tr"));
+    const hasSearch = Boolean(debouncedSearch);
+    const hasCats = cats.length > 0;
+
+    if (!hasCats && !hasSearch) {
+      return {
+        title: "Tüm Eğitimler",
+        showAllTrainingsCrumb: false,
+        currentCrumb: null,
+      };
+    }
+
+    const catLabel = hasCats ? (cats.length === 1 ? cats[0] : cats.join(", ")) : null;
+    let currentCrumb = "";
+    if (hasCats && hasSearch) {
+      currentCrumb = `${catLabel} · “${debouncedSearch}”`;
+    } else if (hasCats) {
+      currentCrumb = catLabel;
+    } else {
+      currentCrumb = `“${debouncedSearch}”`;
+    }
+
+    let title = "Tüm Eğitimler";
+    if (hasCats && hasSearch) {
+      title = `${catLabel} — “${debouncedSearch}”`;
+    } else if (hasCats) {
+      title = cats.length === 1 ? cats[0] : catLabel;
+    } else if (hasSearch) {
+      title = `Arama: “${debouncedSearch}”`;
+    }
+
+    return {
+      title,
+      showAllTrainingsCrumb: true,
+      currentCrumb,
+    };
+  }, [selectedCategories, debouncedSearch]);
+
+  const resultsLine = useMemo(() => {
+    const n = totalCount;
+    const cats = [...selectedCategories].sort((a, b) => a.localeCompare(b, "tr"));
+    if (debouncedSearch && cats.length) {
+      return `${n} eğitim bulundu (${cats.join(", ")} · “${debouncedSearch}”).`;
+    }
+    if (debouncedSearch) {
+      return `${n} eğitim bulundu (“${debouncedSearch}”).`;
+    }
+    if (cats.length === 1) {
+      return `${n} eğitim bulundu (${cats[0]}).`;
+    }
+    if (cats.length > 1) {
+      return `${n} eğitim bulundu (${cats.length} kategori).`;
+    }
+    return `${n} eğitim bulundu.`;
+  }, [totalCount, selectedCategories, debouncedSearch]);
 
   return (
     <>
@@ -73,13 +244,27 @@ function AllTrainingsPage() {
         <div className="all-trainings-hero-inner">
           <div>
             <ul className="all-trainings-breadcrumb">
-              <li>Anasayfa</li>
               <li>
+                <Link to="/">Anasayfa</Link>
+              </li>
+              <li aria-hidden>
                 <i className="fa-solid fa-chevron-right" />
               </li>
-              <li>Tüm Eğitimler</li>
+              {filterHead.showAllTrainingsCrumb ? (
+                <>
+                  <li>
+                    <Link to="/tum-egitimler">Tüm Eğitimler</Link>
+                  </li>
+                  <li aria-hidden>
+                    <i className="fa-solid fa-chevron-right" />
+                  </li>
+                  <li>{filterHead.currentCrumb}</li>
+                </>
+              ) : (
+                <li>Tüm Eğitimler</li>
+              )}
             </ul>
-            <h1>Tüm Eğitimler</h1>
+            <h1>{filterHead.title}</h1>
           </div>
         </div>
 
@@ -101,7 +286,7 @@ function AllTrainingsPage() {
             >
               <i className="fa-solid fa-list" />
             </button>
-            <span className="course-index">{filteredCourses.length} eğitim bulundu.</span>
+            <span className="course-index">{resultsLine}</span>
           </div>
 
           <div className="all-trainings-sort">
@@ -111,8 +296,9 @@ function AllTrainingsPage() {
               value={sortBy}
               onChange={(event) => setSortBy(event.target.value)}
             >
-              <option value="onerilen">Önerilen</option>
-              <option value="degerlendirme">Değerlendirme</option>
+              <option value="newest">En yeni</option>
+              <option value="oldest">En eski</option>
+              <option value="rating">Değerlendirme</option>
             </select>
           </div>
         </div>
@@ -125,8 +311,8 @@ function AllTrainingsPage() {
               <input
                 type="text"
                 placeholder="Eğitim Arayın..."
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
               />
               <i className="fa-solid fa-magnifying-glass" />
             </div>
@@ -135,7 +321,7 @@ function AllTrainingsPage() {
           <div className="sidebar-widget">
             <h4>Kategoriler</h4>
             <div className="sidebar-check-list">
-              {categories.slice(1).map((category) => (
+              {availableCategories.map((category) => (
                 <label key={category} className="sidebar-check-item">
                   <input
                     type="checkbox"
@@ -147,66 +333,67 @@ function AllTrainingsPage() {
               ))}
             </div>
           </div>
-
-          <div className="sidebar-widget">
-            <h4>Eğitim Türleri</h4>
-            <div className="sidebar-check-list">
-              {trainingTypes.map((type) => (
-                <label key={type} className="sidebar-check-item">
-                  <input
-                    type="checkbox"
-                    checked={selectedTypes.includes(type)}
-                    onChange={() => toggleType(type)}
-                  />
-                  <span>{type}</span>
-                </label>
-              ))}
-            </div>
-          </div>
         </aside>
 
         <div className={`all-trainings-grid ${layout === "list" ? "list" : ""}`}>
-          {paginatedCourses.map((course) => (
-            <article className="all-training-card" key={course.id}>
-              <div className="all-training-card-image">
-                <img src={course.image} alt={course.title} />
-              </div>
+          {isLoading && (
+            <article className="all-training-card">
               <div className="all-training-card-body">
-                {!!course.rating && (
-                  <p className="all-training-rating">
-                    <i className="fa-solid fa-star" />
-                    <i className="fa-solid fa-star" />
-                    <i className="fa-solid fa-star" />
-                    <i className="fa-solid fa-star" />
-                    <i className="fa-solid fa-star" />
-                    <span>({course.rating})</span>
-                  </p>
-                )}
-                <h3>{course.title}</h3>
-                <ul className="all-training-meta">
-                  <li>
-                    <i className="fa-regular fa-user" /> {course.attendees}
-                  </li>
-                  <li>
-                    <i className="fa-regular fa-calendar" /> {course.date}
-                  </li>
-                  <li>
-                    <i className="fa-regular fa-clock" /> {course.duration}
-                  </li>
-                  <li>
-                    <i className="fa-solid fa-globe" /> {course.mode}
-                  </li>
-                </ul>
-                <Link
-                  to={`/egitim-detay/${makeSlug(course.title)}`}
-                  state={{ course }}
-                  className="all-training-link"
-                >
-                  Egitimi Incele <i className="fa-solid fa-arrow-right-long" />
-                </Link>
+                <h3>Yükleniyor...</h3>
               </div>
             </article>
-          ))}
+          )}
+          {!isLoading &&
+            listItems.map((course) => (
+              <article className="all-training-card" key={`${course.sourceType || "education"}-${course.id}`}>
+                <div className="all-training-card-image">
+                  <CourseCardThumb course={course} variant="grid" />
+                  <button
+                    type="button"
+                    className={`card-favorite-btn${isFavorite(course) ? " is-active" : ""}`}
+                    aria-label={isFavorite(course) ? "Favorilerden çıkar" : "Favorilere ekle"}
+                    onClick={() => handleFavoriteClick(course)}
+                  >
+                    <i className={`${isFavorite(course) ? "fa-solid" : "fa-regular"} fa-heart`} aria-hidden />
+                  </button>
+                </div>
+                <div className="all-training-card-body">
+                  <p className="all-training-rating" aria-label="Değerlendirme puanı">
+                    <CourseRatingStars value={courseCardStarValue(course)} />
+                    <span>{course.ratingCount > 0 && course.rating ? course.rating : "—"}</span>
+                  </p>
+                  <h3>{course.title}</h3>
+                  <ul className="all-training-meta">
+                    <li>
+                      <i className="fa-regular fa-user" /> {course.attendees}
+                    </li>
+                    <li>
+                      <i className="fa-regular fa-calendar" /> {course.date}
+                    </li>
+                    <li>
+                      <i className="fa-regular fa-clock" /> {course.duration}
+                    </li>
+                    <li>
+                      <i className="fa-solid fa-globe" /> {course.mode}
+                    </li>
+                  </ul>
+                  <Link
+                    to={`/egitim-detay/${makeSlug(course.title)}`}
+                    state={{ course }}
+                    className="all-training-link"
+                  >
+                    Egitimi Incele <i className="fa-solid fa-arrow-right-long" />
+                  </Link>
+                </div>
+              </article>
+            ))}
+          {!isLoading && !listItems.length && (
+            <article className="all-training-card">
+              <div className="all-training-card-body">
+                <h3>Filtreye uygun eğitim bulunamadı.</h3>
+              </div>
+            </article>
+          )}
         </div>
       </section>
 
@@ -221,7 +408,7 @@ function AllTrainingsPage() {
             >
               ‹
             </button>
-            {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((page) => (
+            {pageButtons.map((page) => (
               <button
                 type="button"
                 key={page}

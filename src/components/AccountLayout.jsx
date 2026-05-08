@@ -23,9 +23,13 @@ function AccountLayout() {
               <i className="fa-solid fa-house" />
               <span>Hesap Bilgilerim</span>
             </NavLink>
-            <NavLink to="/hesabim/siparislerim">
-              <i className="fa-solid fa-bag-shopping" />
-              <span>Siparişlerim</span>
+            <NavLink to="/hesabim/sertifikalarim">
+              <i className="fa-solid fa-certificate" />
+              <span>Sertifikalarım</span>
+            </NavLink>
+            <NavLink to="/hesabim/favorilerim">
+              <i className="fa-solid fa-heart" />
+              <span>Favorilerim</span>
             </NavLink>
           </nav>
 

@@ -1,5 +1,19 @@
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { makeSlug, upcomingCourses } from "../data/homeData";
+import { makeSlug } from "../data/homeData";
+import { publicApi, resolvePublicImageUrl } from "../api/publicApi";
+import { userApi } from "../api/userApi";
+import { useAuth } from "../context/AuthContext";
+
+const COURSE_ID_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function normalizeExternalUrl(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
+  if (/^https?:\/\//i.test(s)) return s;
+  return `https://${s}`;
+}
 
 const defaultHighlights = [
   "Proje yönetiminin temel kavramları ve süreç grupları",
@@ -7,34 +21,365 @@ const defaultHighlights = [
   "Gerçek vaka örnekleri, soru setleri ve uygulamalı çalışmalar",
 ];
 
-const defaultReviews = [
-  {
-    name: "Veli A.",
-    text: "Guzel ve faydali bir egitimdi.",
-  },
-  {
-    name: "Tolgahan K.",
-    text: "Egitmenler cok yetkin, programdan bekledigimden fazlasini aldim.",
-  },
-  {
-    name: "Serdar I.",
-    text: "Is hayatinda kullanabilecegim sistematik bir bakis acisi kazandirdI.",
-  },
-];
-
 const sectionTabs = [
   { id: "genel-bilgi", label: "Genel Bilgi" },
   { id: "egitim-icerigi", label: "Egitim Icerigi" },
+  { id: "egitmen", label: "Egitmen" },
   { id: "kayit-bilgileri", label: "Kayit Bilgileri" },
   { id: "yorumlar", label: "Yorumlar" },
 ];
+
+function getSiteHeaderScrollOffsetPx() {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue("--site-header-scroll-offset").trim();
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 140;
+}
+
+/** Sabit navbar altındaki görünür alanda hedef bloğu dikeyde ortalar; URL hash güncellenir. */
+function scrollTrainingDetailSectionIntoView(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const headerOffset = getSiteHeaderScrollOffsetPx();
+  const rect = el.getBoundingClientRect();
+  const elementCenterY = rect.top + window.scrollY + rect.height / 2;
+  const viewportContentMidY = headerOffset + (window.innerHeight - headerOffset) / 2;
+  const targetY = elementCenterY - viewportContentMidY;
+  window.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
+  if (history.replaceState) {
+    history.replaceState(null, "", `#${id}`);
+  }
+}
+
+function formatReviewDate(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function CourseRatingStars({ value, max = 5, variant }) {
+  const v = Math.min(max, Math.max(0, Number(value) || 0));
+  const stars = [];
+  for (let i = 1; i <= max; i += 1) {
+    const diff = v - (i - 1);
+    if (diff >= 1) {
+      stars.push(<i key={i} className="fa-solid fa-star" aria-hidden />);
+    } else if (diff >= 0.5) {
+      stars.push(<i key={i} className="fa-solid fa-star-half-stroke" aria-hidden />);
+    } else {
+      stars.push(<i key={i} className="fa-regular fa-star" aria-hidden />);
+    }
+  }
+  const cls = variant === "hero" ? "course-rating-stars-row course-rating-stars-row--hero" : "course-rating-stars-row";
+  return <span className={cls}>{stars}</span>;
+}
+
+function TrainingReviewsSection({ course, onRatingUpdated }) {
+  const { isLoggedIn } = useAuth();
+  const sourceType = course.sourceType || "education";
+  const isCalendar = sourceType === "calendar";
+  const targetId = course.id;
+  const canSync = typeof targetId === "string" && COURSE_ID_UUID.test(String(targetId));
+
+  const [reviews, setReviews] = useState([]);
+  const [loadingReviews, setLoadingReviews] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [formOk, setFormOk] = useState("");
+  const [comment, setComment] = useState("");
+  const [rating, setRating] = useState(null);
+  const [hoverStar, setHoverStar] = useState(0);
+
+  useEffect(() => {
+    if (!canSync) {
+      setLoadingReviews(false);
+      setReviews([]);
+      return;
+    }
+    let active = true;
+    setLoadingReviews(true);
+    const promise = isCalendar
+      ? publicApi.getEducationReviews({ calendarId: targetId })
+      : publicApi.getEducationReviews({ educationId: targetId });
+    promise
+      .then((data) => {
+        if (!active) return;
+        setReviews(Array.isArray(data?.reviews) ? data.reviews : []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setReviews([]);
+      })
+      .finally(() => {
+        if (!active) return;
+        setLoadingReviews(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [canSync, isCalendar, targetId]);
+
+  const displayStars = hoverStar || (rating ?? 5);
+
+  const handleSubmitReview = async (event) => {
+    event.preventDefault();
+    setFormError("");
+    setFormOk("");
+    if (!canSync) return;
+    if (!isLoggedIn) {
+      setFormError("Yorum veya puan vermek için giriş yapmalısınız.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const payload = { rating: rating ?? 5 };
+      const text = comment.trim();
+      if (text) payload.comment = text;
+      if (isCalendar) payload.calendarId = targetId;
+      else payload.educationId = targetId;
+      const result = await userApi.submitEducationReview(payload);
+      setFormOk("Değerlendirmeniz kaydedildi. Teşekkür ederiz.");
+      onRatingUpdated?.({
+        rating: result.rating ?? "",
+        ratingAverage: result.ratingAverage ?? null,
+        ratingCount: result.ratingCount ?? 0,
+      });
+      const refreshed = isCalendar
+        ? await publicApi.getEducationReviews({ calendarId: targetId })
+        : await publicApi.getEducationReviews({ educationId: targetId });
+      setReviews(Array.isArray(refreshed?.reviews) ? refreshed.reviews : []);
+    } catch (err) {
+      setFormError(err?.message || "Gönderilemedi.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <h3>Katılımcı yorumları</h3>
+      {!canSync && (
+        <p className="training-review-unavailable">
+          Bu eğitim kaydı için değerlendirme listesi şu an kullanılamıyor. Lütfen listeden sayfayı yeniden açın.
+        </p>
+      )}
+
+      {canSync && (
+        <>
+          <div className="training-review-compose">
+            <div className="training-review-compose-head">
+              <span className="training-review-compose-title">Değerlendirme</span>
+            </div>
+
+            {isLoggedIn ? (
+              <form className="training-review-form" onSubmit={handleSubmitReview}>
+                <div className="training-review-stars-row">
+                  <span className="training-review-label">Puanınız</span>
+                  <div
+                    className="training-review-stars-input"
+                    role="group"
+                    aria-label="Yıldız puanı"
+                    onMouseLeave={() => setHoverStar(0)}
+                  >
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        className={`training-review-star-btn${n <= displayStars ? " is-on" : ""}`}
+                        onMouseEnter={() => setHoverStar(n)}
+                        onClick={() => setRating(n)}
+                        aria-label={`${n} yıldız`}
+                      >
+                        <i className="fa-solid fa-star" aria-hidden />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="training-review-field">
+                  <span className="training-review-label">Yorumunuz (isteğe bağlı)</span>
+                  <textarea
+                    rows={4}
+                    maxLength={4000}
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    placeholder="Deneyiminizi paylaşın..."
+                    className="training-review-textarea"
+                  />
+                </label>
+
+                {formError ? <p className="training-review-msg is-error">{formError}</p> : null}
+                {formOk ? <p className="training-review-msg is-ok">{formOk}</p> : null}
+
+                <button type="submit" className="btn training-review-submit" disabled={submitting}>
+                  {submitting ? "Gönderiliyor..." : "Gönder"}
+                </button>
+              </form>
+            ) : (
+              <p className="training-review-login-prompt">
+                Değerlendirme yapmak için{" "}
+                <Link to="/kullanici-islemleri" className="training-review-login-link">
+                  giriş yapın
+                </Link>
+                .
+              </p>
+            )}
+          </div>
+
+          <div className="training-detail-reviews">
+            {loadingReviews && <p className="training-review-loading">Yorumlar yükleniyor...</p>}
+            {!loadingReviews && !reviews.length && (
+              <p className="training-review-empty">Henüz yorum yok. İlk değerlendirmeyi siz paylaşabilirsiniz.</p>
+            )}
+            {!loadingReviews &&
+              reviews.map((review) => (
+                <article key={review.id} className="training-detail-review">
+                  <div className="training-review-card-head">
+                    <strong>{review.authorLabel}</strong>
+                    <div className="training-review-stars-readonly" aria-hidden>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <i
+                          key={n}
+                          className={n <= review.rating ? "fa-solid fa-star" : "fa-regular fa-star"}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  {!!review.comment?.trim() && <p className="training-review-body">{review.comment.trim()}</p>}
+                  {!review.comment?.trim() && (
+                    <p className="training-review-body is-muted">Yorumsuz</p>
+                  )}
+                  <time className="training-review-date" dateTime={review.createdAt}>
+                    {formatReviewDate(review.createdAt)}
+                  </time>
+                </article>
+              ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function TrainingInstructorBlock({ course }) {
+  const name = String(course?.instructorName ?? "").trim();
+  const title = String(course?.instructorTitle ?? "").trim();
+  const department = String(course?.instructorDepartment ?? "").trim();
+  const about = String(course?.instructorAbout ?? "").trim();
+  const email = String(course?.instructorEmail ?? "").trim();
+  const legacy = String(course?.instructorLegacyInfo ?? "").trim();
+  const metaLine = [title, department].filter(Boolean).join(" · ");
+
+  if (legacy) {
+    return (
+      <div className="training-detail-instructor training-detail-instructor--legacy">
+        <div className="training-detail-instructor-avatar" aria-hidden>
+          <i className="fa-solid fa-chalkboard-user" />
+        </div>
+        <p className="training-detail-instructor-legacy-text">{legacy}</p>
+      </div>
+    );
+  }
+
+  if (!name && !metaLine && !about && !email) {
+    return <p className="training-detail-instructor-empty">Bu eğitim için eğitmen bilgisi henüz eklenmedi.</p>;
+  }
+
+  return (
+    <div className="training-detail-instructor">
+      <div className="training-detail-instructor-avatar" aria-hidden>
+        <i className="fa-solid fa-chalkboard-user" />
+      </div>
+      <div className="training-detail-instructor-body">
+        {name ? <p className="training-detail-instructor-name">{name}</p> : null}
+        {metaLine ? <p className="training-detail-instructor-meta">{metaLine}</p> : null}
+        {about ? <p className="training-detail-instructor-about">{about}</p> : null}
+        {email ? (
+          <a className="training-detail-instructor-email" href={`mailto:${email}`}>
+            {email}
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 function TrainingDetailPage() {
   const { slug } = useParams();
   const location = useLocation();
   const stateCourse = location.state?.course;
-  const matchedCourse = upcomingCourses.find((item) => makeSlug(item.title) === slug);
-  const course = stateCourse || matchedCourse || upcomingCourses[0];
+  const [apiCourses, setApiCourses] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [ratingLive, setRatingLive] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    publicApi
+      .getCourses()
+      .then((data) => {
+        if (!active) return;
+        const items = Array.isArray(data?.courses) ? data.courses : [];
+        setApiCourses(
+          items.map((course, idx) => ({
+            ...course,
+            id: course.id || `${course.title}-${idx}`,
+            sourceType: course.sourceType || "education",
+            image: resolvePublicImageUrl(course.image),
+            attendees: course.attendees || "Sınırsız Kayıt",
+            mode: course.mode || "Uzaktan Eğitim",
+          })),
+        );
+      })
+      .catch(() => {
+        if (!active) return;
+        setApiCourses([]);
+      })
+      .finally(() => {
+        if (!active) return;
+        setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const fallbackCourse = useMemo(() => stateCourse || null, [stateCourse]);
+  const apiMatchedCourse = apiCourses.find((item) => makeSlug(item.title) === slug);
+  const course = apiMatchedCourse || fallbackCourse;
+
+  useEffect(() => {
+    setRatingLive(null);
+  }, [course?.id]);
+
+  useEffect(() => {
+    if (!course?.id) return;
+    const hash = (window.location.hash || "").replace(/^#/, "").trim();
+    if (!hash || !sectionTabs.some((t) => t.id === hash)) return;
+    const timer = window.setTimeout(() => scrollTrainingDetailSectionIntoView(hash), 120);
+    return () => window.clearTimeout(timer);
+  }, [course?.id, slug]);
+
+  const displayCourse = useMemo(() => {
+    if (!course) return null;
+    return ratingLive ? { ...course, ...ratingLive } : course;
+  }, [course, ratingLive]);
+
+  if (isLoading && !course) {
+    return <section className="section"><h2>Yükleniyor...</h2></section>;
+  }
+
+  if (!course) {
+    return <section className="section"><h2>Eğitim bulunamadı.</h2></section>;
+  }
+
+  const c = displayCourse || course;
+
+  const institutionLogoSrc =
+    c.institutionLogo && String(c.institutionLogo).trim().length > 0
+      ? resolvePublicImageUrl(c.institutionLogo)
+      : null;
+  const institutionSiteHref = normalizeExternalUrl(c.institutionWebsite);
 
   return (
     <>
@@ -49,9 +394,25 @@ function TrainingDetailPage() {
               <Link to="/tum-egitimler">Egitimler</Link>
             </li>
             <li>/</li>
-            <li>{course.title}</li>
+            <li>{c.title}</li>
           </ul>
-          <h1>{course.title}</h1>
+          <h1>{c.title}</h1>
+          <div className="training-detail-hero-rating" aria-label="Eğitim değerlendirmesi">
+            {c.ratingAverage != null && c.ratingCount > 0 ? (
+              <div className="training-detail-hero-rating-inner">
+                <CourseRatingStars value={c.ratingAverage} variant="hero" />
+                <span className="training-detail-hero-rating-meta">
+                  <span className="training-detail-hero-rating-score">{c.rating}</span>
+                  <span className="training-detail-hero-rating-sep" aria-hidden>
+                    ·
+                  </span>
+                  <span className="training-detail-hero-rating-count">{c.ratingCount} değerlendirme</span>
+                </span>
+              </div>
+            ) : (
+              <span className="training-detail-hero-rating-empty">Henüz değerlendirme yok</span>
+            )}
+          </div>
           <p className="training-detail-description">
             Gazi Universitesi surekli egitim vizyonu ile hazirlanan bu programda teorik altyapi,
             uygulamali icerik ve guncel sektor deneyimi birlikte sunulur.
@@ -61,22 +422,20 @@ function TrainingDetailPage() {
           </p>
           <ul className="rbt-meta training-detail-meta">
             <li>
-              <i className="fa-regular fa-user" /> {course.attendees}
+              <i className="fa-regular fa-user" /> {c.attendees}
             </li>
             <li>
-              <i className="fa-regular fa-calendar" /> {course.date}
+              <i className="fa-regular fa-calendar" /> {c.date}
             </li>
             <li>
-              <i className="fa-regular fa-clock" /> {course.duration}
+              <i className="fa-regular fa-clock" /> {c.duration}
             </li>
             <li>
-              <i className="fa-solid fa-globe" /> {course.mode}
+              <i className="fa-solid fa-globe" /> {c.mode}
             </li>
           </ul>
           <p className="training-detail-code">
-            <strong>Course Identifier:</strong> 100202
-            <br />
-            <strong>PMI Assigned Claim Code:</strong> 4292P16AZS
+            <strong>Eğitim Kodu:</strong> {c.code || "Belirtilmedi"}
           </p>
           <div className="training-detail-badges">
             <div className="training-badge">PMI</div>
@@ -88,12 +447,20 @@ function TrainingDetailPage() {
       <section className="training-detail-content section">
         <div className="training-detail-main">
           <div className="training-detail-cover rbt-shadow-box">
-            <img src={course.image} alt={course.title} />
+            <img src={c.image} alt={c.title} />
           </div>
 
-          <nav className="training-detail-tabs">
+          <nav className="training-detail-tabs" aria-label="Eğitim bölümleri">
             {sectionTabs.map((tab) => (
-              <a key={tab.id} href={`#${tab.id}`} className="training-detail-tab">
+              <a
+                key={tab.id}
+                href={`#${tab.id}`}
+                className="training-detail-tab"
+                onClick={(event) => {
+                  event.preventDefault();
+                  scrollTrainingDetailSectionIntoView(tab.id);
+                }}
+              >
                 {tab.label}
               </a>
             ))}
@@ -103,9 +470,7 @@ function TrainingDetailPage() {
             <h3>Egitimin Amaci ve Katilim Sartlari</h3>
             <div className="training-detail-inline-title">Egitimin Amaci</div>
             <p>
-              Bu program, proje yonetimi alaninda sistematik bilgi kazanmak isteyen katilimcilara;
-              kapsam, zaman, maliyet, kalite ve risk yonetimi basliklarinda uygulamaya donuk bir
-              cerceve sunar.
+              {c.description || "Bu eğitim için açıklama henüz eklenmedi."}
             </p>
             <ul>
               {defaultHighlights.map((item) => (
@@ -116,62 +481,76 @@ function TrainingDetailPage() {
 
           <div id="egitim-icerigi" className="training-detail-box rbt-shadow-box">
             <h3>Egitim Icerigi</h3>
-            <p>
-              Program; proje yonetimine giris, surec gruplari, bilgi alanlari, paydas yonetimi ve
-              sinav hazirlik modullerinden olusur. Icerik, guncel ornekler ve olcu-degerlendirme
-              adimlari ile desteklenir.
-            </p>
+            {c.contentHtml ? (
+              <div dangerouslySetInnerHTML={{ __html: c.contentHtml }} />
+            ) : (
+              <p>
+                Eğitim içeriği henüz eklenmedi.
+              </p>
+            )}
+          </div>
+
+          <div id="egitmen" className="training-detail-box rbt-shadow-box">
+            <h3>Eğitmen</h3>
+            <TrainingInstructorBlock course={c} />
           </div>
 
           <div id="kayit-bilgileri" className="training-detail-box rbt-shadow-box">
             <h3>Kayit Bilgileri</h3>
             <p>
-              Egitim ucreti ve odeme planini gormek icin sisteme uye olabilirsiniz. Kaydinizi online
-              tamamlayabilir veya danisman destegiyle telefon uzerinden basvuru yapabilirsiniz.
+              Anlaşmalı olduğumuz kurumlar içerisinde eğitimlere ulaşıp sertifika için gerekli materyallerin tamamladıktan sonra Gazi Üniversitesi tarafından sertifika alabilirsiniz.
             </p>
           </div>
 
           <div id="yorumlar" className="training-detail-box rbt-shadow-box">
-            <h3>Katilimci Yorumlari</h3>
-            <div className="training-detail-reviews">
-              {defaultReviews.map((review) => (
-                <article key={review.name} className="training-detail-review">
-                  <strong>{review.name}</strong>
-                  <p>{review.text}</p>
-                </article>
-              ))}
-            </div>
+            <TrainingReviewsSection course={course} onRatingUpdated={setRatingLive} />
           </div>
         </div>
 
         <aside className="training-detail-sidebar rbt-shadow-box">
-          <div className="training-detail-side-image">
-            <img src={course.image} alt={course.title} />
-            <p>{course.title}</p>
+          <div className="training-detail-side-brand">
+            {institutionLogoSrc ? (
+              <img
+                src={institutionLogoSrc}
+                alt={c.institutionName || "Kurum"}
+                className="training-detail-side-brand-logo"
+              />
+            ) : (
+              <div className="training-detail-side-brand-placeholder" aria-hidden>
+                <i className="fa-solid fa-building-columns" />
+              </div>
+            )}
+            <p className="training-detail-side-brand-title">{c.title}</p>
           </div>
-          <div className="training-detail-price">20.000,00 TL</div>
-          <Link className="btn training-detail-btn" to="/kullanici-islemleri">
-            Sepete Ekle
-          </Link>
           <Link className="btn btn-outline training-detail-btn" to="/iletisim">
             Bilgi Talep Et
           </Link>
+          {institutionSiteHref ? (
+            <a
+              className="btn btn-outline training-detail-btn training-detail-btn-external"
+              href={institutionSiteHref}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Eğitime git <i className="fa-solid fa-arrow-up-right-from-square" aria-hidden />
+            </a>
+          ) : null}
           <ul className="training-detail-side-list">
             <li>
               <span>Egitim Tarihi</span>
-              <strong>{course.date}</strong>
+              <strong>{c.date}</strong>
             </li>
             <li>
               <span>Egitim Suresi</span>
-              <strong>{course.duration}</strong>
+              <strong>{c.duration}</strong>
             </li>
             <li>
               <span>Kontenjan</span>
-              <strong>{course.attendees}</strong>
+              <strong>{c.attendees}</strong>
             </li>
             <li>
               <span>Egitim Turu</span>
-              <strong>{course.mode}</strong>
+              <strong>{c.mode}</strong>
             </li>
           </ul>
           <div className="training-detail-socials">

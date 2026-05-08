@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import ScrollToTop from "./components/ScrollToTop";
 import SiteLayout from "./components/SiteLayout";
 import HomePage from "./pages/HomePage";
 import TrainingCalendarPage from "./pages/TrainingCalendarPage";
@@ -10,6 +11,7 @@ import TrainingDetailPage from "./pages/TrainingDetailPage";
 import AuthPage from "./pages/AuthPage";
 import AccountProfilePage from "./pages/AccountProfilePage";
 import AccountOrdersPage from "./pages/AccountOrdersPage";
+import AccountFavoritesPage from "./pages/AccountFavoritesPage";
 import AccountSettingsPage from "./pages/AccountSettingsPage";
 import AccountChangePasswordPage from "./pages/AccountChangePasswordPage";
 import AccountLayout from "./components/AccountLayout";
@@ -31,6 +33,7 @@ function App() {
     <AuthProvider>
       <AdminProviders>
         <BrowserRouter>
+          <ScrollToTop />
           <Routes>
             <Route path="/" element={<SiteLayout />}>
               <Route index element={<HomePage />} />
@@ -44,7 +47,9 @@ function App() {
 
               <Route path="hesabim" element={<AccountLayout />}>
                 <Route path="hesap-bilgilerim" element={<AccountProfilePage />} />
-                <Route path="siparislerim" element={<AccountOrdersPage />} />
+                <Route path="sertifikalarim" element={<AccountOrdersPage />} />
+                <Route path="siparislerim" element={<Navigate to="/hesabim/sertifikalarim" replace />} />
+                <Route path="favorilerim" element={<AccountFavoritesPage />} />
                 <Route path="hesap-ayarlarim" element={<AccountSettingsPage />} />
                 <Route path="sifremi-degistir" element={<AccountChangePasswordPage />} />
                 <Route index element={<Navigate to="/hesabim/hesap-bilgilerim" replace />} />

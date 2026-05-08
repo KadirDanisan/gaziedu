@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { userApi } from "../api/userApi";
 
 const genderOptions = [
   { value: "", label: "Seçilmedi" },
@@ -47,14 +48,13 @@ const cityOptions = [
 ];
 
 function AccountSettingsPage() {
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [form, setForm] = useState({
-    name: user.fullName.split(" ")[0] || "",
-    surname: user.fullName.split(" ").slice(1).join(" ") || "",
-    email: user.email || "",
-    phone: user.phone || "",
-    job: user.profession || "",
+    name: "",
+    surname: "",
+    email: "",
     gender: "",
     customerType: "1",
     identityNumber: "",
@@ -69,6 +69,38 @@ function AccountSettingsPage() {
     postCode: "",
   });
 
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      name: user.firstName || user.fullName?.split(" ")?.[0] || "",
+      surname: user.lastName || user.fullName?.split(" ")?.slice(1)?.join(" ") || "",
+      email: user.email || "",
+      gender: user.gender != null ? String(user.gender) : "",
+      customerType: user.customerType || "1",
+      identityNumber: user.nationalId || "",
+      address: user.addressLine1 || "",
+      address2: user.addressLine2 || "",
+      country: user.countryCode || "215",
+      city: user.city || "",
+      suburb: user.district || "",
+      postCode: user.postalCode || "",
+    }));
+  }, [
+    user.firstName,
+    user.lastName,
+    user.fullName,
+    user.email,
+    user.gender,
+    user.customerType,
+    user.nationalId,
+    user.addressLine1,
+    user.addressLine2,
+    user.countryCode,
+    user.city,
+    user.district,
+    user.postalCode,
+  ]);
+
   const isCorporate = form.customerType === "2";
   const currentTitle = useMemo(
     () => (isCorporate ? "Kurumsal" : "Bireysel"),
@@ -78,12 +110,34 @@ function AccountSettingsPage() {
   const handleChange = (event) => {
     const { name, value } = event.target;
     setSaved(false);
+    setSaveError("");
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    setSaved(true);
+    setSaved(false);
+    setSaveError("");
+    try {
+      await userApi.updateMe({
+        firstName: form.name.trim(),
+        lastName: form.surname.trim(),
+        email: form.email.trim(),
+        nationalId: form.identityNumber.trim() || null,
+        gender: form.gender,
+        customerType: form.customerType,
+        addressLine1: form.address.trim(),
+        addressLine2: form.address2.trim() || null,
+        countryCode: form.country.trim(),
+        city: form.city.trim(),
+        district: form.suburb.trim(),
+        postalCode: form.postCode.trim(),
+      });
+      await refreshProfile();
+      setSaved(true);
+    } catch (error) {
+      setSaveError(error.message || "Kayıt sırasında hata oluştu.");
+    }
   };
 
   return (
@@ -107,16 +161,6 @@ function AccountSettingsPage() {
         </div>
 
         <div className="account-form-group">
-          <label htmlFor="phone">Telefon Numaranız:</label>
-          <input id="phone" name="phone" type="tel" value={form.phone} onChange={handleChange} maxLength={12} />
-        </div>
-
-        <div className="account-form-group">
-          <label htmlFor="job">Mesleğiniz:</label>
-          <input id="job" name="job" type="text" value={form.job} onChange={handleChange} />
-        </div>
-
-        <div className="account-form-group">
           <label htmlFor="gender">Cinsiyet:</label>
           <select id="gender" name="gender" value={form.gender} onChange={handleChange}>
             {genderOptions.map((option) => (
@@ -127,32 +171,22 @@ function AccountSettingsPage() {
           </select>
         </div>
 
+
         <div className="account-form-group account-form-group-full">
-          <label htmlFor="customerType">Kullanıcı Tipi:</label>
-          <select id="customerType" name="customerType" value={form.customerType} onChange={handleChange}>
-            {customerTypeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <small className="account-form-note">Seçili tip: {currentTitle}</small>
+          <label htmlFor="identityNumber">T.C. Kimlik Numaranız:</label>
+          <input
+            id="identityNumber"
+            name="identityNumber"
+            type="text"
+            inputMode="numeric"
+            maxLength={11}
+            placeholder="11 hane"
+            value={form.identityNumber}
+            onChange={handleChange}
+          />
         </div>
 
-        {!isCorporate ? (
-          <div className="account-form-group account-form-group-full">
-            <label htmlFor="identityNumber">T.C. Kimlik Numaranız:</label>
-            <input
-              id="identityNumber"
-              name="identityNumber"
-              type="text"
-              minLength={11}
-              maxLength={11}
-              value={form.identityNumber}
-              onChange={handleChange}
-            />
-          </div>
-        ) : (
+        {isCorporate ? (
           <>
             <div className="account-form-group account-form-group-full">
               <label htmlFor="firm">Firma Ünvanı:</label>
@@ -177,10 +211,10 @@ function AccountSettingsPage() {
               />
             </div>
           </>
-        )}
+        ) : null}
 
         <div className="account-form-group">
-          <label htmlFor="address">Adres 1:</label>
+          <label htmlFor="address">Adres:</label>
           <textarea
             id="address"
             name="address"
@@ -190,19 +224,6 @@ function AccountSettingsPage() {
             value={form.address}
             onChange={handleChange}
             required
-          />
-        </div>
-
-        <div className="account-form-group">
-          <label htmlFor="address2">Adres 2:</label>
-          <textarea
-            id="address2"
-            name="address2"
-            rows="2"
-            placeholder="Adres devamı..."
-            maxLength={50}
-            value={form.address2}
-            onChange={handleChange}
           />
         </div>
 
@@ -243,6 +264,7 @@ function AccountSettingsPage() {
           <button type="submit" className="btn btn-gradient">
             Bilgilerimi Güncelle
           </button>
+          {saveError ? <span className="account-error-text">{saveError}</span> : null}
           {saved ? <span className="account-success-text">Bilgiler güncellendi.</span> : null}
         </div>
       </form>

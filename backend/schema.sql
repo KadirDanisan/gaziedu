@@ -57,6 +57,25 @@ CREATE TABLE IF NOT EXISTS normal_users (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS normal_user_details (
+  user_id UUID PRIMARY KEY REFERENCES normal_users(id) ON DELETE CASCADE,
+  national_id VARCHAR(11),
+  gender TEXT,
+  user_type TEXT,
+  address_line1 TEXT,
+  address_line2 TEXT,
+  country_code TEXT,
+  city TEXT,
+  district TEXT,
+  postal_code VARCHAR(32),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS normal_user_details_national_id_key
+  ON normal_user_details (national_id)
+  WHERE national_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS instructors (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   first_name TEXT NOT NULL,
@@ -80,6 +99,8 @@ CREATE TABLE IF NOT EXISTS educations (
   code TEXT,
   duration TEXT,
   content TEXT,
+  rating_average NUMERIC(4,2),
+  rating_count INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -92,6 +113,8 @@ CREATE TABLE IF NOT EXISTS education_calendar (
   content TEXT,
   instructor_info TEXT,
   calendar_date DATE NOT NULL,
+  rating_average NUMERIC(4,2),
+  rating_count INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -114,6 +137,81 @@ CREATE TABLE IF NOT EXISTS contact_forms (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS education_reviews (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES normal_users(id) ON DELETE CASCADE,
+  target_type TEXT NOT NULL CHECK (target_type IN ('education', 'calendar')),
+  education_id UUID REFERENCES educations(id) ON DELETE CASCADE,
+  calendar_id UUID REFERENCES education_calendar(id) ON DELETE CASCADE,
+  rating SMALLINT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (
+    (target_type = 'education' AND education_id IS NOT NULL AND calendar_id IS NULL)
+    OR (target_type = 'calendar' AND calendar_id IS NOT NULL AND education_id IS NULL)
+  )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS education_reviews_user_education_unique
+  ON education_reviews (user_id, education_id) WHERE target_type = 'education';
+
+CREATE UNIQUE INDEX IF NOT EXISTS education_reviews_user_calendar_unique
+  ON education_reviews (user_id, calendar_id) WHERE target_type = 'calendar';
+
+CREATE OR REPLACE FUNCTION refresh_education_rating_aggregate(
+  p_target TEXT,
+  p_education_id UUID,
+  p_calendar_id UUID
+)
+RETURNS VOID AS $$
+DECLARE
+  v_cnt INT;
+  v_avg NUMERIC(4,2);
+BEGIN
+  IF p_target = 'education' AND p_education_id IS NOT NULL THEN
+    SELECT COUNT(*)::INT,
+           CASE WHEN COUNT(*) > 0 THEN ROUND(AVG(rating)::NUMERIC, 2) ELSE NULL END
+    INTO v_cnt, v_avg
+    FROM education_reviews
+    WHERE target_type = 'education' AND education_id = p_education_id;
+    UPDATE educations SET rating_count = v_cnt, rating_average = v_avg WHERE id = p_education_id;
+  ELSIF p_target = 'calendar' AND p_calendar_id IS NOT NULL THEN
+    SELECT COUNT(*)::INT,
+           CASE WHEN COUNT(*) > 0 THEN ROUND(AVG(rating)::NUMERIC, 2) ELSE NULL END
+    INTO v_cnt, v_avg
+    FROM education_reviews
+    WHERE target_type = 'calendar' AND calendar_id = p_calendar_id;
+    UPDATE education_calendar SET rating_count = v_cnt, rating_average = v_avg WHERE id = p_calendar_id;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION education_reviews_aggregate_trigger()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    PERFORM refresh_education_rating_aggregate(OLD.target_type, OLD.education_id, OLD.calendar_id);
+  ELSIF TG_OP = 'UPDATE' THEN
+    IF OLD.target_type IS DISTINCT FROM NEW.target_type
+       OR OLD.education_id IS DISTINCT FROM NEW.education_id
+       OR OLD.calendar_id IS DISTINCT FROM NEW.calendar_id THEN
+      PERFORM refresh_education_rating_aggregate(OLD.target_type, OLD.education_id, OLD.calendar_id);
+      PERFORM refresh_education_rating_aggregate(NEW.target_type, NEW.education_id, NEW.calendar_id);
+    ELSE
+      PERFORM refresh_education_rating_aggregate(NEW.target_type, NEW.education_id, NEW.calendar_id);
+    END IF;
+  ELSE
+    PERFORM refresh_education_rating_aggregate(NEW.target_type, NEW.education_id, NEW.calendar_id);
+  END IF;
+  RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS education_reviews_refresh_aggregate_trg ON education_reviews;
+CREATE TRIGGER education_reviews_refresh_aggregate_trg
+AFTER INSERT OR UPDATE OR DELETE ON education_reviews
+FOR EACH ROW EXECUTE PROCEDURE education_reviews_aggregate_trigger();
 
 CREATE TABLE IF NOT EXISTS exam_questions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

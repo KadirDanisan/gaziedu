@@ -1,11 +1,50 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { featuredCourses } from "../data/homeData";
+import { Link } from "react-router-dom";
+import { makeSlug } from "../data/homeData";
+import { publicApi, resolvePublicImageUrl } from "../api/publicApi";
+import CourseCardThumb from "./CourseCardThumb";
 
 function Hero() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
+  const [heroCourses, setHeroCourses] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const dragStartX = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    publicApi
+      .getCourses()
+      .then((data) => {
+        if (!active) return;
+        const items = Array.isArray(data?.courses) ? data.courses : [];
+        if (!items.length) return;
+        setHeroCourses(
+          items.slice(0, 5).map((course, idx) => ({
+            ...course,
+            id: course.id || `${course.title}-${idx}`,
+            image: resolvePublicImageUrl(course.image),
+            attendees: "Sınırsız Kayıt",
+            mode: "Uzaktan Eğitim",
+          }))
+        );
+      })
+      .catch(() => {
+        if (!active) return;
+        setHeroCourses([]);
+      })
+      .finally(() => {
+        if (!active) return;
+        setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const courses = heroCourses;
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 900px)");
@@ -16,20 +55,23 @@ function Hero() {
   }, []);
 
   useEffect(() => {
+    if (!courses.length) return undefined;
     if (isDragging) return undefined;
     const timer = window.setInterval(() => {
-      setActiveIndex((prev) => (prev + 1) % featuredCourses.length);
+      setActiveIndex((prev) => (prev + 1) % courses.length);
     }, 2500);
 
     return () => window.clearInterval(timer);
-  }, [isDragging]);
+  }, [isDragging, courses.length]);
 
   const goNext = () => {
-    setActiveIndex((prev) => (prev + 1) % featuredCourses.length);
+    if (!courses.length) return;
+    setActiveIndex((prev) => (prev + 1) % courses.length);
   };
 
   const goPrev = () => {
-    setActiveIndex((prev) => (prev - 1 + featuredCourses.length) % featuredCourses.length);
+    if (!courses.length) return;
+    setActiveIndex((prev) => (prev - 1 + courses.length) % courses.length);
   };
 
   const handlePointerDown = (event) => {
@@ -60,7 +102,8 @@ function Hero() {
   };
 
   const stackedCourses = useMemo(() => {
-    const total = featuredCourses.length;
+    if (!courses.length) return [];
+    const total = courses.length;
     const getRelativePosition = (index) => {
       let relative = index - activeIndex;
       if (relative > total / 2) relative -= total;
@@ -68,7 +111,7 @@ function Hero() {
       return relative;
     };
 
-    return featuredCourses.map((course, index) => {
+    return courses.map((course, index) => {
       const relative = getRelativePosition(index);
       return {
         ...course,
@@ -76,7 +119,7 @@ function Hero() {
         relative,
       };
     });
-  }, [activeIndex]);
+  }, [activeIndex, courses]);
 
   return (
     <section className="hero">
@@ -96,6 +139,7 @@ function Hero() {
             onPointerCancel={handlePointerUp}
             onPointerLeave={handlePointerUp}
           >
+            {isLoading && <p>Yükleniyor...</p>}
             {stackedCourses.map((course) => (
               <article
                 key={`${course.title}-${course.index}`}
@@ -112,7 +156,7 @@ function Hero() {
                   opacity: Math.abs(course.relative) > (isMobileView ? 1 : 2) ? 0 : 1,
                 }}
               >
-                <img src={course.image} alt={course.title} />
+                <CourseCardThumb course={course} variant="hero" />
                 <div className="hero-course-body">
                   <div className="hero-course-meta">
                     <span>
@@ -131,7 +175,9 @@ function Hero() {
                     </span>
                   </div>
                   <h3>
-                    <a href="#">{course.title}</a>
+                    <Link to={`/egitim-detay/${makeSlug(course.title)}`} state={{ course }}>
+                      {course.title}
+                    </Link>
                   </h3>
                   <p className="hero-rating">
                     <i className="fa-solid fa-star" />
@@ -140,10 +186,13 @@ function Hero() {
                     <i className="fa-solid fa-star" />
                     <i className="fa-solid fa-star" /> ({course.rating})
                   </p>
-                  <a href="#">Eğitimi İncele</a>
+                  <Link to={`/egitim-detay/${makeSlug(course.title)}`} state={{ course }}>
+                    Eğitimi İncele
+                  </Link>
                 </div>
               </article>
             ))}
+            {!isLoading && !stackedCourses.length && <p>Eğitim bulunamadı.</p>}
           </div>
         </div>
       </div>

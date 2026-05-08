@@ -24,4 +24,19 @@ export const userApi = {
   register: (payload) => request("/users/register", { method: "POST", body: JSON.stringify(payload) }),
   login: (payload) => request("/users/login", { method: "POST", body: JSON.stringify(payload) }),
   me: () => request("/users/me"),
+  updateMe: (payload) => request("/users/me", { method: "PATCH", body: JSON.stringify(payload) }),
+  getFavorites: () => request("/users/favorites"),
+  addFavorite: (payload) => request("/users/favorites", { method: "POST", body: JSON.stringify(payload) }),
+  removeFavorite: ({ educationId, calendarId } = {}) => {
+    const params = new URLSearchParams();
+    if (educationId) params.set("educationId", educationId);
+    if (calendarId) params.set("calendarId", calendarId);
+    const query = params.toString();
+    if (!query) {
+      throw new Error("educationId veya calendarId gerekli.");
+    }
+    return request(`/users/favorites?${query}`, { method: "DELETE" });
+  },
+  submitEducationReview: (payload) =>
+    request("/users/education-reviews", { method: "POST", body: JSON.stringify(payload) }),
 };

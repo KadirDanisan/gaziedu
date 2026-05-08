@@ -1,8 +1,8 @@
 function AccountOrdersPage() {
   return (
     <div className="account-panel">
-      <h3>Siparişlerim</h3>
-      <p className="account-empty">Henüz eğitim siparişi vermediniz!</p>
+      <h3>Sertifikalarım</h3>
+      <p className="account-empty">Sertifika listesi yakında bu alanda gösterilecek.</p>
     </div>
   );
 }
