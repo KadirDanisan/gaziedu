@@ -228,6 +228,30 @@ CREATE TABLE IF NOT EXISTS exam_questions (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS exam_attempts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  education_id UUID REFERENCES educations(id) ON DELETE SET NULL,
+  exam_question_id UUID REFERENCES exam_questions(id) ON DELETE SET NULL,
+  education_code TEXT NOT NULL,
+  national_id VARCHAR(32) NOT NULL,
+  selected_questions JSONB NOT NULL,
+  answers JSONB,
+  correct_count INT NOT NULL DEFAULT 0,
+  wrong_count INT NOT NULL DEFAULT 0,
+  blank_count INT NOT NULL DEFAULT 0,
+  score NUMERIC(5,2) NOT NULL DEFAULT 0,
+  duration_seconds INT NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'started',
+  submit_reason TEXT,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  submitted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS exam_attempts_education_code_idx ON exam_attempts (education_code);
+CREATE INDEX IF NOT EXISTS exam_attempts_national_id_idx ON exam_attempts (national_id);
+
 CREATE TABLE IF NOT EXISTS activity_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_user_id UUID REFERENCES admin_users(id) ON DELETE SET NULL,

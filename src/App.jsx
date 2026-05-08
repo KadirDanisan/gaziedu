@@ -8,6 +8,7 @@ import AboutPage from "./pages/AboutPage";
 import CorporateTrainingPage from "./pages/CorporateTrainingPage";
 import ContactPage from "./pages/ContactPage";
 import TrainingDetailPage from "./pages/TrainingDetailPage";
+import ExamPortalPage from "./pages/ExamPortalPage";
 import AuthPage from "./pages/AuthPage";
 import AccountProfilePage from "./pages/AccountProfilePage";
 import AccountOrdersPage from "./pages/AccountOrdersPage";
@@ -56,6 +57,7 @@ function App() {
               </Route>
             </Route>
 
+            <Route path="/sinavportali/:educationCode/:nationalId" element={<ExamPortalPage />} />
             <Route path="/admin/giris" element={<AdminLoginPage />} />
             <Route element={<ProtectedAdminRoute />}>
               <Route element={<AdminLayout />}>

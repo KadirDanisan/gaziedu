@@ -281,6 +281,17 @@ export default function CrudListPage({ moduleKey }) {
     }
   }, []);
 
+  const openExamPortalForRow = (row) => {
+    const educationCode = String(educationsById?.[row.educationId]?.code || "").trim().toUpperCase();
+    if (!educationCode) {
+      setError("Bu sınav kaydı için eğitim kodu bulunamadı. Önce eğitim kaydında kod tanımlayın.");
+      return;
+    }
+    const testNationalId = "11111111111";
+    const portalUrl = `${window.location.origin}/sinavportali/${encodeURIComponent(educationCode)}/${testNationalId}`;
+    window.open(portalUrl, "_blank", "noopener,noreferrer");
+  };
+
   const openCreate = () => {
     setEditing("new");
     setLogoUploading(false);
@@ -482,6 +493,11 @@ export default function CrudListPage({ moduleKey }) {
                           disabled={row.isRead}
                         >
                           {row.isRead ? "Okundu" : "Okunmadı"}
+                        </button>
+                      )}
+                      {isExamQuestionsModule && (
+                        <button type="button" className="btn btn-outline" onClick={() => openExamPortalForRow(row)}>
+                          Sınav Portalını Test Et
                         </button>
                       )}
                       {hasPermission(moduleKey, "canDelete") && !isInstructorsModule && (

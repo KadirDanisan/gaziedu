@@ -31,6 +31,16 @@ export const publicApi = {
     });
     return request(`/public/educations?${params.toString()}`);
   },
+  startExamPortal: ({ educationCode, nationalId }) =>
+    request("/public/exam-portal/start", {
+      method: "POST",
+      body: JSON.stringify({ educationCode, nationalId }),
+    }),
+  submitExamPortal: ({ attemptId, answers, reason }) =>
+    request(`/public/exam-portal/${attemptId}/submit`, {
+      method: "POST",
+      body: JSON.stringify({ answers, reason }),
+    }),
   searchTrainings: (q, limit) => {
     const params = new URLSearchParams();
     params.set("q", String(q ?? "").trim());

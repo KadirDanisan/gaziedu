@@ -318,6 +318,33 @@ const migrateExamQuestionBatchColumns = async () => {
   await pool.query(`ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS generated_questions JSONB`);
 };
 
+const migrateExamAttemptsTable = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS exam_attempts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      education_id UUID REFERENCES educations(id) ON DELETE SET NULL,
+      exam_question_id UUID REFERENCES exam_questions(id) ON DELETE SET NULL,
+      education_code TEXT NOT NULL,
+      national_id VARCHAR(32) NOT NULL,
+      selected_questions JSONB NOT NULL,
+      answers JSONB,
+      correct_count INT NOT NULL DEFAULT 0,
+      wrong_count INT NOT NULL DEFAULT 0,
+      blank_count INT NOT NULL DEFAULT 0,
+      score NUMERIC(5,2) NOT NULL DEFAULT 0,
+      duration_seconds INT NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'started',
+      submit_reason TEXT,
+      started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      submitted_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS exam_attempts_education_code_idx ON exam_attempts (education_code)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS exam_attempts_national_id_idx ON exam_attempts (national_id)`);
+};
+
 const moduleConfig = {
   normalUsers: { table: "normal_users", actionKey: "normalUsers", searchable: ["first_name", "last_name", "email"] },
   adminUsers: { table: "admin_users", actionKey: "adminUsers", searchable: ["first_name", "last_name", "email", "phone"] },
@@ -678,6 +705,78 @@ const normalizeQuestions = (items = []) =>
     options: Array.isArray(item.options) && item.options.length ? item.options.slice(0, 4) : ["A", "B", "C", "D"],
     correctAnswer: item.correctAnswer || item.answer || "",
   }));
+
+const normalizeExamQuestionPool = (value) => {
+  const parsed = typeof value === "string" ? JSON.parse(value) : value || {};
+  return {
+    easy: normalizeQuestions(Array.isArray(parsed.easy) ? parsed.easy : []),
+    medium: normalizeQuestions(Array.isArray(parsed.medium) ? parsed.medium : []),
+    hard: normalizeQuestions(Array.isArray(parsed.hard) ? parsed.hard : []),
+  };
+};
+
+const shuffleArray = (items) => {
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
+
+const pickExamQuestions = (pool) => {
+  const pick = (difficulty, count) =>
+    shuffleArray((pool[difficulty] || []).map((question, index) => ({ ...question, difficulty, originalIndex: index })))
+      .slice(0, count);
+  return shuffleArray([
+    ...pick("easy", 10),
+    ...pick("medium", 5),
+    ...pick("hard", 5),
+  ]).map((question, index) => ({
+    id: `${question.difficulty}-${question.originalIndex}-${index}`,
+    difficulty: question.difficulty,
+    question: question.question,
+    options: question.options,
+    correctAnswer: question.correctAnswer,
+  }));
+};
+
+const publicExamQuestion = (question, index) => ({
+  id: question.id,
+  number: index + 1,
+  difficulty: question.difficulty,
+  question: question.question,
+  options: question.options,
+});
+
+const normalizeExamAnswer = (value, options = []) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const letter = raw.match(/^[A-D]$/i)?.[0]?.toUpperCase();
+  if (letter) return letter;
+  const byPrefix = raw.match(/^([A-D])[\).:-]\s*/i)?.[1]?.toUpperCase();
+  if (byPrefix) return byPrefix;
+  const idx = options.findIndex((option) => String(option ?? "").trim().toLowerCase() === raw.toLowerCase());
+  return idx >= 0 ? String.fromCharCode(65 + idx) : raw.toLowerCase();
+};
+
+const gradeExamAttempt = (questions = [], answers = {}) => {
+  let correctCount = 0;
+  let wrongCount = 0;
+  let blankCount = 0;
+  const normalizedAnswers = {};
+  for (const question of questions) {
+    const selected = normalizeExamAnswer(answers?.[question.id], question.options);
+    const correct = normalizeExamAnswer(question.correctAnswer, question.options);
+    normalizedAnswers[question.id] = selected;
+    if (!selected) blankCount += 1;
+    else if (selected === correct) correctCount += 1;
+    else wrongCount += 1;
+  }
+  const total = questions.length || 1;
+  const score = Math.round((correctCount / total) * 10000) / 100;
+  return { correctCount, wrongCount, blankCount, score, normalizedAnswers };
+};
 
 const parseQuestionsFromText = (text) => {
   const chunks = text
@@ -1650,6 +1749,158 @@ app.get("/api/public/search/trainings", async (req, res, next) => {
   }
 });
 
+app.post("/api/public/exam-portal/start", async (req, res, next) => {
+  try {
+    const educationCode = String(req.body?.educationCode || "").trim().toUpperCase();
+    const nationalId = String(req.body?.nationalId || "").trim();
+    if (!/^[A-Z]{3}\d{7}$/.test(educationCode)) {
+      return res.status(400).json({ message: "Geçerli eğitim kodu gerekli." });
+    }
+    if (!/^\d{11}$/.test(nationalId)) {
+      return res.status(400).json({ message: "T.C. kimlik no 11 haneli olmalıdır." });
+    }
+
+    const educationResult = await pool.query(
+      `SELECT id, name, code, duration
+       FROM educations
+       WHERE UPPER(code) = $1
+       ORDER BY updated_at DESC
+       LIMIT 1`,
+      [educationCode],
+    );
+    const education = educationResult.rows[0];
+    if (!education) {
+      return res.status(404).json({ message: "Bu eğitim kodu ile eğitim bulunamadı." });
+    }
+
+    const questionResult = await pool.query(
+      `SELECT eq.id, eq.generated_questions, eq.updated_at, e.id AS education_id, e.name AS education_name, e.code AS education_code, e.duration AS education_duration
+       FROM exam_questions eq
+       INNER JOIN educations e ON e.id = eq.education_id
+       WHERE UPPER(e.code) = $1
+         AND eq.generated_questions IS NOT NULL
+       ORDER BY eq.updated_at DESC, e.updated_at DESC
+       LIMIT 1`,
+      [educationCode],
+    );
+    const questionSet = questionResult.rows[0];
+    if (!questionSet?.generated_questions) {
+      return res.status(404).json({ message: "Bu eğitim için sınav soruları henüz hazırlanmamış." });
+    }
+    const effectiveEducation = {
+      id: questionSet.education_id || education.id,
+      name: questionSet.education_name || education.name,
+      code: questionSet.education_code || education.code,
+      duration: questionSet.education_duration || education.duration,
+    };
+
+    const poolQuestions = normalizeExamQuestionPool(questionSet.generated_questions);
+    if (poolQuestions.easy.length < 10 || poolQuestions.medium.length < 5 || poolQuestions.hard.length < 5) {
+      return res.status(400).json({ message: "Sınav için yeterli soru yok (10 kolay, 5 orta, 5 zor gerekli)." });
+    }
+
+    const selectedQuestions = pickExamQuestions(poolQuestions);
+    const attemptResult = await pool.query(
+      `INSERT INTO exam_attempts
+        (education_id, exam_question_id, education_code, national_id, selected_questions)
+       VALUES ($1, $2, $3, $4, $5::jsonb)
+       RETURNING id, started_at`,
+      [effectiveEducation.id, questionSet.id, educationCode, nationalId, JSON.stringify(selectedQuestions)],
+    );
+    const attempt = attemptResult.rows[0];
+
+    return res.status(201).json({
+      attemptId: attempt.id,
+      startedAt: attempt.started_at,
+      durationSeconds: 40 * 60,
+      education: {
+        id: effectiveEducation.id,
+        code: effectiveEducation.code,
+        title: effectiveEducation.name,
+        duration: effectiveEducation.duration || "",
+      },
+      questionCount: selectedQuestions.length,
+      questions: selectedQuestions.map(publicExamQuestion),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/public/exam-portal/:attemptId/submit", async (req, res, next) => {
+  try {
+    const attemptId = String(req.params.attemptId || "").trim();
+    const reason = String(req.body?.reason || "manual").trim().slice(0, 64) || "manual";
+    const answers = req.body?.answers && typeof req.body.answers === "object" ? req.body.answers : {};
+    const previousResult = await pool.query(
+      `SELECT id, selected_questions, started_at, status, correct_count, wrong_count, blank_count, score, duration_seconds
+       FROM exam_attempts
+       WHERE id = $1
+       LIMIT 1`,
+      [attemptId],
+    );
+    const previous = previousResult.rows[0];
+    if (!previous) return res.status(404).json({ message: "Sınav oturumu bulunamadı." });
+    if (previous.status === "completed") {
+      return res.json({
+        attemptId: previous.id,
+        status: previous.status,
+        correctCount: previous.correct_count,
+        wrongCount: previous.wrong_count,
+        blankCount: previous.blank_count,
+        score: Number(previous.score),
+        durationSeconds: previous.duration_seconds,
+      });
+    }
+
+    const selectedQuestions = typeof previous.selected_questions === "string"
+      ? JSON.parse(previous.selected_questions)
+      : previous.selected_questions;
+    const graded = gradeExamAttempt(Array.isArray(selectedQuestions) ? selectedQuestions : [], answers);
+    const startedAt = new Date(previous.started_at).getTime();
+    const elapsed = Number.isFinite(startedAt) ? Math.max(0, Math.round((Date.now() - startedAt) / 1000)) : 0;
+    const durationSeconds = Math.min(40 * 60, elapsed);
+    const result = await pool.query(
+      `UPDATE exam_attempts
+       SET answers = $2::jsonb,
+           correct_count = $3,
+           wrong_count = $4,
+           blank_count = $5,
+           score = $6,
+           duration_seconds = $7,
+           status = 'completed',
+           submit_reason = $8,
+           submitted_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, status, correct_count, wrong_count, blank_count, score, duration_seconds, submitted_at`,
+      [
+        attemptId,
+        JSON.stringify(graded.normalizedAnswers),
+        graded.correctCount,
+        graded.wrongCount,
+        graded.blankCount,
+        graded.score,
+        durationSeconds,
+        reason,
+      ],
+    );
+    const row = result.rows[0];
+    return res.json({
+      attemptId: row.id,
+      status: row.status,
+      correctCount: row.correct_count,
+      wrongCount: row.wrong_count,
+      blankCount: row.blank_count,
+      score: Number(row.score),
+      durationSeconds: row.duration_seconds,
+      submittedAt: row.submitted_at,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 /** Tüm Eğitimler sayfası: yalnızca `educations`, sayfalı; kategori, arama, sıralama sunucuda */
 app.get("/api/public/educations", async (req, res, next) => {
   try {
@@ -2377,6 +2628,7 @@ const startServer = async () => {
     await migrateNormalUserDetailsAddressColumns();
     await migrateNormalUserDetailsNationalIdUnique();
     await migrateExamQuestionBatchColumns();
+    await migrateExamAttemptsTable();
     await migrateContactFormTimestampsToIstanbul();
   } catch (error) {
     // eslint-disable-next-line no-console
