@@ -12,12 +12,14 @@ export function AdminDataProvider({ children }) {
   const [instructors, setInstructors] = useState([]);
   const [educationInstructors, setEducationInstructors] = useState([]);
   const [educations, setEducations] = useState([]);
+  const [approvedEducations, setApprovedEducations] = useState([]);
 
   const loadBootstrap = async () => {
     const result = await adminApi.getBootstrap();
     setRoles(result.roles || []);
     setInstitutions(result.institutions || []);
     setEducationCategories(result.educationCategories || []);
+    setApprovedEducations(result.approvedEducations || []);
     setInstructors(result.instructors || []);
     setEducationInstructors(result.educationInstructors || []);
     setEducations(result.educations || []);
@@ -49,6 +51,7 @@ export function AdminDataProvider({ children }) {
     instructors,
     educationInstructors,
     educations,
+    approvedEducations,
     loadBootstrap,
     getModuleData,
     createItem,

@@ -722,6 +722,11 @@ html {
   -webkit-backdrop-filter: blur(10px);
 }
 
+/* Excel içe aktarma ilerlemesi açıkken çakışma onayı üstte kalsın */
+.admin-modal-backdrop--excel-conflict {
+  z-index: 100110;
+}
+
 .admin-modal {
   position: relative;
   width: min(880px, 96vw);

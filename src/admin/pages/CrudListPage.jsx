@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAdminAuth } from "../context/AdminAuthContext";
 import { useAdminData } from "../context/AdminDataContext";
+import { normalizeLookupCode, parseApprovedEducationExcelBuffer } from "../utils/parseApprovedEducationExcel";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
@@ -36,17 +37,27 @@ const moduleConfig = {
       categoryName: "Eğitim Kategori Adı",
     },
   },
+  approvedEducations: {
+    title: "Onaylanmış Eğitim Listesi",
+    fields: ["code", "name", "categoryId", "institutionId"],
+    labels: {
+      code: "Eğitim Kodu",
+      name: "Eğitim Adı",
+      categoryId: "Eğitim Kategorisi",
+      institutionId: "Kurum",
+    },
+  },
   educations: {
     title: "Eğitim Listesi",
-    fields: ["name", "categoryId", "institutionId", "instructorId", "description", "imageUrl", "code", "duration", "contentDocPath"],
+    fields: ["code", "name", "categoryId", "institutionId", "instructorId", "description", "imageUrl", "duration", "contentDocPath"],
     labels: {
+      code: "Eğitim Kodu (onaylı listeden)",
       name: "Eğitim Adı",
       categoryId: "Eğitim Kategorisi",
       institutionId: "Kurum",
       instructorId: "Eğitmen",
       description: "Açıklama",
       imageUrl: "Görsel URL",
-      code: "Eğitim Kodu",
       duration: "Eğitim Saati",
       contentDocPath: "İçerik Dosyası",
     },
@@ -228,9 +239,14 @@ export default function CrudListPage({ moduleKey }) {
   const [educationImageUploading, setEducationImageUploading] = useState(false);
   const [educationDocUploading, setEducationDocUploading] = useState(false);
   const [examDocUploading, setExamDocUploading] = useState("");
+  const [excelImportProgress, setExcelImportProgress] = useState(null);
+  const [excelImportConflict, setExcelImportConflict] = useState(null);
+  const excelImportChoiceRef = useRef(null);
+  const approvedExcelInputRef = useRef(null);
   const isContactFormsModule = moduleKey === "contactForms";
   const isInstructorsModule = moduleKey === "instructors";
   const isEducationsModule = moduleKey === "educations";
+  const isApprovedEducationsModule = moduleKey === "approvedEducations";
   const isEducationCalendarModule = moduleKey === "educationCalendar";
   const isEducationLikeModule = isEducationsModule || isEducationCalendarModule;
   const isExamQuestionsModule = moduleKey === "examQuestions";
@@ -246,11 +262,16 @@ export default function CrudListPage({ moduleKey }) {
   const educationCategoriesById = Object.fromEntries((data.educationCategories || []).map((category) => [category.id, category]));
   const educationInstructorsById = Object.fromEntries((data.educationInstructors || []).map((instructor) => [instructor.id, instructor]));
   const educationsById = Object.fromEntries((data.educations || []).map((education) => [education.id, education]));
+  const lockEducationFromApproved = isEducationsModule && Boolean(String(form._approvedEducationId || "").trim());
   const formFields = isContactFormsModule
     ? config.fields.filter((field) => field !== "createdAt" && field !== "isRead")
-    : isInstructorsModule
-      ? ["title", "department", "about"]
-    : config.fields;
+    : isApprovedEducationsModule
+      ? config.fields
+      : isEducationsModule
+        ? config.fields
+        : isInstructorsModule
+          ? ["firstName", "lastName", "email", "password", "title", "department", "about"]
+          : config.fields;
 
   const loadRows = async () => {
     setLoading(true);
@@ -276,9 +297,7 @@ export default function CrudListPage({ moduleKey }) {
   }, [moduleKey, page, search, readStatusFilter]);
 
   useEffect(() => {
-    if (!data.roles.length || !data.institutions.length || !data.educationCategories.length || !data.instructors.length || !data.educationInstructors.length || !data.educations.length) {
-      data.loadBootstrap().catch(() => {});
-    }
+    data.loadBootstrap().catch(() => {});
   }, []);
 
   const openExamPortalForRow = (row) => {
@@ -302,6 +321,9 @@ export default function CrudListPage({ moduleKey }) {
     if (isContactFormsModule) {
       initialForm.isRead = false;
     }
+    if (isEducationsModule) {
+      initialForm._approvedEducationId = "";
+    }
     setForm(initialForm);
   };
 
@@ -313,6 +335,12 @@ export default function CrudListPage({ moduleKey }) {
     setExamDocUploading("");
     const initial = config.fields.reduce((acc, key) => ({ ...acc, [key]: row[key] ?? "" }), {});
     if (isUserPasswordModule) initial.password = "";
+    if (moduleKey === "educations") {
+      const match = (data.approvedEducations || []).find(
+        (a) => String(a.code || "").trim().toUpperCase() === String(row.code || "").trim().toUpperCase(),
+      );
+      initial._approvedEducationId = match?.id || "";
+    }
     setForm(initial);
   };
 
@@ -322,6 +350,7 @@ export default function CrudListPage({ moduleKey }) {
     if (isUserPasswordModule && editing !== "new" && !String(payload.password ?? "").trim()) {
       delete payload.password;
     }
+    delete payload._approvedEducationId;
     if (isContactFormsModule) {
       delete payload.createdAt;
       if (editing === "new") {
@@ -332,6 +361,9 @@ export default function CrudListPage({ moduleKey }) {
     else await data.updateItem(moduleKey, editing, payload);
     setEditing(null);
     await loadRows();
+    if (moduleKey === "approvedEducations" || moduleKey === "educations") {
+      await data.loadBootstrap().catch(() => {});
+    }
   };
 
   const markAsRead = async (rowId) => {
@@ -413,6 +445,128 @@ export default function CrudListPage({ moduleKey }) {
     }
   };
 
+  const waitMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const resolveExcelConflict = (decision) => {
+    const cb = excelImportChoiceRef.current;
+    excelImportChoiceRef.current = null;
+    setExcelImportConflict(null);
+    if (cb) cb(decision);
+  };
+
+  const runApprovedEducationExcelImport = async (file) => {
+    if (!file) return;
+    setError("");
+    setExcelImportProgress({ status: "parsing", current: 0, total: 0, fileName: file.name });
+    try {
+      const buf = await file.arrayBuffer();
+      const { rows, error: parseErr } = parseApprovedEducationExcelBuffer(buf);
+      if (parseErr) {
+        setError(parseErr);
+        setExcelImportProgress(null);
+        return;
+      }
+      if (!rows.length) {
+        setError("İçe aktarılacak veri satırı bulunamadı (başlık altı boş veya tüm satırlar boş).");
+        setExcelImportProgress(null);
+        return;
+      }
+
+      const institutions = data.institutions || [];
+      const categories = data.educationCategories || [];
+      let workingApproved = [...(data.approvedEducations || [])];
+
+      setExcelImportProgress({ status: "running", current: 0, total: rows.length, fileName: file.name });
+
+      for (let i = 0; i < rows.length; i += 1) {
+        const row = rows[i];
+        setExcelImportProgress({ status: "running", current: i + 1, total: rows.length, fileName: file.name, lastCode: row.code });
+
+        if (!row.code || !row.name || !row.institutionCode || !row.categoryCode) {
+          setError(
+            `Satır ${row.sheetRow}: Eğitim kodu, eğitim adı, kurum kodu ve eğitim kategori kodu dolu olmalıdır. İçe aktarma durduruldu.`,
+          );
+          setExcelImportProgress(null);
+          return;
+        }
+
+        const institution = institutions.find((it) => normalizeLookupCode(it.code) === normalizeLookupCode(row.institutionCode));
+        if (!institution) {
+          setError(
+            `Satır ${row.sheetRow}: Kurum kodu sistemde yok: "${row.institutionCode}". Kurum listesinde bu kodu tanımlayın. İçe aktarma durduruldu.`,
+          );
+          setExcelImportProgress(null);
+          return;
+        }
+
+        const category = categories.find((c) => normalizeLookupCode(c.categoryCode) === normalizeLookupCode(row.categoryCode));
+        if (!category) {
+          setError(
+            `Satır ${row.sheetRow}: Eğitim kategori kodu sistemde yok: "${row.categoryCode}". Kategori listesinde bu kodu tanımlayın. İçe aktarma durduruldu.`,
+          );
+          setExcelImportProgress(null);
+          return;
+        }
+
+        const existing = workingApproved.find((a) => normalizeLookupCode(a.code) === normalizeLookupCode(row.code));
+        if (existing) {
+          const decision = await new Promise((resolve) => {
+            excelImportChoiceRef.current = resolve;
+            setExcelImportConflict({
+              sheetRow: row.sheetRow,
+              code: row.code,
+              name: row.name,
+              institutionCode: row.institutionCode,
+              categoryCode: row.categoryCode,
+              existingId: existing.id,
+              existingName: existing.name,
+            });
+          });
+
+          if (decision === "cancel") {
+            setExcelImportProgress(null);
+            return;
+          }
+          if (decision === "skip") {
+            await waitMs(80);
+            continue;
+          }
+          if (decision === "replace") {
+            await data.deleteItem("approvedEducations", existing.id);
+            workingApproved = workingApproved.filter((a) => a.id !== existing.id);
+            await waitMs(120);
+          }
+        }
+
+        const created = await data.createItem("approvedEducations", {
+          code: String(row.code).trim(),
+          name: String(row.name).trim(),
+          categoryId: category.id,
+          institutionId: institution.id,
+        });
+        if (created?.id) {
+          workingApproved = [...workingApproved, created];
+        }
+        await waitMs(150);
+      }
+
+      await data.loadBootstrap().catch(() => {});
+      await loadRows();
+      setExcelImportProgress({ status: "done", current: rows.length, total: rows.length, fileName: file.name });
+      window.setTimeout(() => setExcelImportProgress(null), 2800);
+    } catch (err) {
+      setError(err?.message || "Excel içe aktarma hatası.");
+      setExcelImportProgress(null);
+    }
+  };
+
+  const handleApprovedExcelInputChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !isApprovedEducationsModule) return;
+    await runApprovedEducationExcelImport(file);
+  };
+
   return (
     <section className="admin-page">
       <div className="admin-page-head">
@@ -420,10 +574,28 @@ export default function CrudListPage({ moduleKey }) {
           <h2>{config.title}</h2>
           <p>Eğitim, Kurum, Eğitmen, Bülten, İletişim Formu, Sınav Soruları ve daha fazlasını yönetin.</p>
         </div>
-        {hasPermission(moduleKey, "canCreate") && !isInstructorsModule && (
-          <button type="button" className="btn" onClick={openCreate}>
-            Ekle
-          </button>
+        {hasPermission(moduleKey, "canCreate") && (
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <button type="button" className="btn" onClick={openCreate}>
+              Ekle
+            </button>
+            {isApprovedEducationsModule ? (
+              <>
+                <input
+                  ref={approvedExcelInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                  style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
+                  tabIndex={-1}
+                  aria-hidden
+                  onChange={handleApprovedExcelInputChange}
+                />
+                <button type="button" className="btn btn-outline" onClick={() => approvedExcelInputRef.current?.click()}>
+                  Excel ile toplu ekle
+                </button>
+              </>
+            ) : null}
+          </div>
         )}
       </div>
 
@@ -500,7 +672,7 @@ export default function CrudListPage({ moduleKey }) {
                           Sınav Portalını Test Et
                         </button>
                       )}
-                      {hasPermission(moduleKey, "canDelete") && !isInstructorsModule && (
+                      {hasPermission(moduleKey, "canDelete") && (
                         <button type="button" className="is-danger" onClick={() => setDeleting(row)}>
                           Sil
                         </button>
@@ -676,8 +848,13 @@ export default function CrudListPage({ moduleKey }) {
                           </option>
                         ))}
                       </select>
-                    ) : isEducationLikeModule && field === "categoryId" ? (
-                      <select value={form[field] ?? ""} onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))} required>
+                    ) : (isEducationLikeModule || isApprovedEducationsModule) && field === "categoryId" ? (
+                      <select
+                        value={form[field] ?? ""}
+                        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+                        required
+                        disabled={lockEducationFromApproved}
+                      >
                         <option value="" disabled>
                           Eğitim Kategorisi Seçin
                         </option>
@@ -687,8 +864,13 @@ export default function CrudListPage({ moduleKey }) {
                           </option>
                         ))}
                       </select>
-                    ) : isEducationLikeModule && field === "institutionId" ? (
-                      <select value={form[field] ?? ""} onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))} required>
+                    ) : (isEducationLikeModule || isApprovedEducationsModule) && field === "institutionId" ? (
+                      <select
+                        value={form[field] ?? ""}
+                        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+                        required
+                        disabled={lockEducationFromApproved}
+                      >
                         <option value="" disabled>
                           Kurum Seçin
                         </option>
@@ -724,6 +906,14 @@ export default function CrudListPage({ moduleKey }) {
                           required
                         />
                       </div>
+                    ) : isEducationsModule && field === "name" ? (
+                      <input
+                        type="text"
+                        value={form[field] ?? ""}
+                        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+                        readOnly={lockEducationFromApproved}
+                        required
+                      />
                     ) : isEducationLikeModule && field === "description" ? (
                       <textarea
                         rows={4}
@@ -731,7 +921,45 @@ export default function CrudListPage({ moduleKey }) {
                         onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
                         required
                       />
-                    ) : isEducationLikeModule && field === "code" ? (
+                    ) : isEducationsModule && field === "code" ? (
+                      <select
+                        value={String(form._approvedEducationId ?? "")}
+                        onChange={(event) => {
+                          const pickId = event.target.value;
+                          if (!pickId) {
+                            setForm((prev) => ({
+                              ...prev,
+                              _approvedEducationId: "",
+                              code: "",
+                              name: "",
+                              categoryId: "",
+                              institutionId: "",
+                            }));
+                            return;
+                          }
+                          const picked = (data.approvedEducations || []).find((item) => item.id === pickId);
+                          if (!picked) return;
+                          setForm((prev) => ({
+                            ...prev,
+                            _approvedEducationId: pickId,
+                            code: String(picked.code || "").trim(),
+                            name: String(picked.name || "").trim(),
+                            categoryId: picked.categoryId || "",
+                            institutionId: picked.institutionId || "",
+                          }));
+                        }}
+                        required
+                      >
+                        <option value="" disabled>
+                          {editing === "new" ? "Onaylanmış eğitim seçin" : "Onaylı listeden seçin veya aynı kaydı koruyun"}
+                        </option>
+                        {(data.approvedEducations || []).map((row) => (
+                          <option key={row.id} value={row.id}>
+                            {String(row.code || "").trim()} — {row.name || ""}
+                          </option>
+                        ))}
+                      </select>
+                    ) : isEducationCalendarModule && field === "code" ? (
                       <input
                         type="text"
                         value={form[field] ?? ""}
@@ -764,7 +992,8 @@ export default function CrudListPage({ moduleKey }) {
                         onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
                         required
                       />
-                    ) : isUserPasswordModule && field === "password" ? (
+                    ) : isUserPasswordModule || isInstructorsModule ? (
+                      field === "password" ? (
                       <input
                         type="password"
                         autoComplete="new-password"
@@ -777,6 +1006,9 @@ export default function CrudListPage({ moduleKey }) {
                         }
                         required={editing === "new"}
                       />
+                      ) : (
+                      <input value={form[field] ?? ""} onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))} required />
+                      )
                     ) : (
                       <input value={form[field] ?? ""} onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))} required />
                     )
@@ -902,7 +1134,15 @@ export default function CrudListPage({ moduleKey }) {
                   type="button"
                   className="btn btn--danger-fill"
                   onClick={() => {
-                    data.deleteItem(moduleKey, deleting.id).then(loadRows);
+                    data
+                      .deleteItem(moduleKey, deleting.id)
+                      .then(loadRows)
+                      .then(() => {
+                        if (moduleKey === "approvedEducations" || moduleKey === "educations") {
+                          return data.loadBootstrap().catch(() => {});
+                        }
+                        return undefined;
+                      });
                     setDeleting(null);
                   }}
                 >
@@ -913,6 +1153,73 @@ export default function CrudListPage({ moduleKey }) {
           </div>
         </div>
       )}
+
+      {excelImportProgress ? (
+        <div className="admin-modal-backdrop" role="presentation" style={{ pointerEvents: excelImportConflict ? "none" : "auto" }}>
+          <div className="admin-modal admin-modal--detail" style={{ maxWidth: 420 }} onMouseDown={(e) => e.stopPropagation()}>
+            <div className="admin-modal__body">
+              <h3 style={{ marginTop: 0 }}>Excel içe aktarma</h3>
+              <p style={{ marginBottom: 8, color: "#4b5565" }}>
+                {excelImportProgress.status === "parsing" ? "Dosya okunuyor…" : null}
+                {excelImportProgress.status === "running"
+                  ? `Satırlar sırayla işleniyor (${excelImportProgress.current} / ${excelImportProgress.total})`
+                  : null}
+                {excelImportProgress.status === "done" ? "Tüm satırlar tamamlandı." : null}
+              </p>
+              {excelImportProgress.fileName ? (
+                <p style={{ fontSize: "0.9rem", color: "#647086" }}>
+                  Dosya: <strong>{excelImportProgress.fileName}</strong>
+                  {excelImportProgress.lastCode ? (
+                    <>
+                      <br />
+                      Son işlenen kod: <strong>{excelImportProgress.lastCode}</strong>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
+              {excelImportProgress.status === "running" ? (
+                <p style={{ fontSize: "0.85rem", color: "#647086" }}>Kurum ve kategori kodları sistemdeki kayıtlarla eşleştirilir; her satır arasında kısa bekleme vardır.</p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {excelImportConflict && (
+        <div className="admin-modal-backdrop admin-modal-backdrop--excel-conflict" role="presentation">
+          <div className="admin-modal admin-modal--confirm" role="alertdialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
+            <header className="admin-modal__header admin-modal__header--confirm">
+              <div className="admin-modal__header-text">
+                <p className="admin-modal__eyebrow">Çakışan eğitim kodu</p>
+                <h3 className="admin-modal__title">Excel satır {excelImportConflict.sheetRow}</h3>
+                <p className="admin-modal__subtitle" style={{ lineHeight: 1.55 }}>
+                  <strong>{excelImportConflict.code}</strong> kodu listede zaten var
+                  {excelImportConflict.existingName ? ` (“${excelImportConflict.existingName}”)` : ""}. Yeni satırdaki veri:{" "}
+                  <strong>{excelImportConflict.name}</strong> — Kurum kodu: {excelImportConflict.institutionCode}, Kategori kodu:{" "}
+                  {excelImportConflict.categoryCode}.
+                  <br />
+                  <br />
+                  Yeni kaydı yüklemek için mevcut kayıt silinir. Eski kayıt kalsın derseniz bu satır atlanır ve sıradaki eğitim koduna geçilir.
+                </p>
+              </div>
+            </header>
+            <footer className="admin-modal__footer">
+              <div className="admin-modal-actions admin-modal-actions--stretch" style={{ flexWrap: "wrap", gap: 10 }}>
+                <button type="button" className="btn btn--danger-fill" onClick={() => resolveExcelConflict("replace")}>
+                  Değiştir (eskiyi sil, yeniyi yükle)
+                </button>
+                <button type="button" className="btn btn-outline" onClick={() => resolveExcelConflict("skip")}>
+                  Eski kalsın (bu satırı atla)
+                </button>
+                <button type="button" className="btn btn-outline btn--modal-secondary" onClick={() => resolveExcelConflict("cancel")}>
+                  Tüm içe aktarmayı iptal et
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      )}
+
     </section>
   );
 }

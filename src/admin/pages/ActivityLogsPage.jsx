@@ -5,6 +5,8 @@ const moduleLabelMap = {
   normalUsers: "Kayıt Listesi",
   adminUsers: "Yönetim Listesi",
   institutions: "Kurum Listesi",
+  educationCategories: "Eğitim Kategorisi",
+  approvedEducations: "Onaylanmış Eğitim Listesi",
   educations: "Eğitim Listesi",
   instructors: "Eğitmen Listesi",
   educationCalendar: "Eğitim Takvimi",

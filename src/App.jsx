@@ -77,6 +77,7 @@ function App() {
                 <Route path="/admin/yonetim-listesi" element={<ModulePermissionGuard moduleKey="adminUsers"><CrudListPage moduleKey="adminUsers" /></ModulePermissionGuard>} />
                 <Route path="/admin/kurum-listesi" element={<ModulePermissionGuard moduleKey="institutions"><CrudListPage moduleKey="institutions" /></ModulePermissionGuard>} />
                 <Route path="/admin/egitim-kategorisi-listesi" element={<ModulePermissionGuard moduleKey="educationCategories"><CrudListPage moduleKey="educationCategories" /></ModulePermissionGuard>} />
+                <Route path="/admin/onaylanmis-egitim-listesi" element={<ModulePermissionGuard moduleKey="approvedEducations"><CrudListPage moduleKey="approvedEducations" /></ModulePermissionGuard>} />
                 <Route path="/admin/egitim-listesi" element={<ModulePermissionGuard moduleKey="educations"><CrudListPage moduleKey="educations" /></ModulePermissionGuard>} />
                 <Route path="/admin/egitmen-listesi" element={<ModulePermissionGuard moduleKey="instructors"><CrudListPage moduleKey="instructors" /></ModulePermissionGuard>} />
                 <Route path="/admin/egitim-takvimi-listesi" element={<ModulePermissionGuard moduleKey="educationCalendar"><CrudListPage moduleKey="educationCalendar" /></ModulePermissionGuard>} />

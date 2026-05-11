@@ -4,6 +4,7 @@ export const ADMIN_MODULES = [
   { key: "adminUsers", label: "Yönetim Listesi", icon: "fa-solid fa-user-shield", route: "/admin/yonetim-listesi" },
   { key: "institutions", label: "Kurum Listesi", icon: "fa-solid fa-building", route: "/admin/kurum-listesi" },
   { key: "educationCategories", label: "Eğitim Kategorisi", icon: "fa-solid fa-layer-group", route: "/admin/egitim-kategorisi-listesi" },
+  { key: "approvedEducations", label: "Onaylanmış Eğitim Listesi", icon: "fa-solid fa-circle-check", route: "/admin/onaylanmis-egitim-listesi" },
   { key: "educations", label: "Eğitim Listesi", icon: "fa-solid fa-graduation-cap", route: "/admin/egitim-listesi" },
   { key: "instructors", label: "Eğitmen Listesi", icon: "fa-solid fa-chalkboard-user", route: "/admin/egitmen-listesi" },
   { key: "educationCalendar", label: "Eğitim Takvimi", icon: "fa-solid fa-calendar-days", route: "/admin/egitim-takvimi-listesi" },

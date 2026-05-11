@@ -124,6 +124,23 @@ const migrateEducationCategoryColumns = async () => {
   await pool.query(`ALTER TABLE education_calendar ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES education_categories(id) ON DELETE SET NULL`);
 };
 
+const migrateApprovedEducationsTable = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS approved_educations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      code TEXT NOT NULL,
+      name TEXT NOT NULL,
+      category_id UUID NOT NULL REFERENCES education_categories(id) ON DELETE RESTRICT,
+      institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE RESTRICT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT approved_educations_code_unique UNIQUE (code)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS approved_educations_category_id_idx ON approved_educations(category_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS approved_educations_institution_id_idx ON approved_educations(institution_id)`);
+};
+
 const migrateUserFavoritesTable = async () => {
   await pool.query(
     `CREATE TABLE IF NOT EXISTS user_favorites (
@@ -351,6 +368,11 @@ const moduleConfig = {
   institutions: { table: "institutions", actionKey: "institutions", searchable: ["name", "code", "authorized_person"] },
   educationCategories: { table: "education_categories", actionKey: "educationCategories", searchable: ["category_code", "category_name"] },
   educations: { table: "educations", actionKey: "educations", searchable: ["name", "code", "description"] },
+  approvedEducations: {
+    table: "approved_educations",
+    actionKey: "approvedEducations",
+    searchable: ["code", "name"],
+  },
   instructors: { table: "instructors", actionKey: "instructors", searchable: ["first_name", "last_name", "email"] },
   educationCalendar: { table: "education_calendar", actionKey: "educationCalendar", searchable: ["education_name", "code", "description", "instructor_info"] },
   newsletter: { table: "newsletter", actionKey: "newsletter", searchable: ["email"] },
@@ -365,6 +387,7 @@ const permissionModules = [
   "adminUsers",
   "institutions",
   "educationCategories",
+  "approvedEducations",
   "educations",
   "instructors",
   "educationCalendar",
@@ -2213,33 +2236,36 @@ app.post("/api/admin/uploads/exam-doc", auth, uploadDoc.single("file"), async (r
 app.get("/api/admin/bootstrap", auth, async (req, res, next) => {
   try {
     await ensurePermissionRows();
-    const [permissions, roles, institutions, educationCategories, instructors, educationInstructors, educations] = await Promise.all([
-      pool.query(`SELECT * FROM permissions`),
-      pool.query(`SELECT * FROM roles ORDER BY created_at DESC`),
-      pool.query(`SELECT * FROM institutions ORDER BY created_at DESC`),
-      pool.query(`SELECT * FROM education_categories ORDER BY created_at DESC`),
-      pool.query(
-        `SELECT a.id, a.first_name, a.last_name, a.email
+    const [permissions, roles, institutions, educationCategories, approvedEducations, instructors, educationInstructors, educations] =
+      await Promise.all([
+        pool.query(`SELECT * FROM permissions`),
+        pool.query(`SELECT * FROM roles ORDER BY created_at DESC`),
+        pool.query(`SELECT * FROM institutions ORDER BY created_at DESC`),
+        pool.query(`SELECT * FROM education_categories ORDER BY created_at DESC`),
+        pool.query(`SELECT * FROM approved_educations ORDER BY code ASC`),
+        pool.query(
+          `SELECT a.id, a.first_name, a.last_name, a.email
          FROM admin_users a
          INNER JOIN roles r ON r.id = a.role_id
          WHERE r.code = 'egitmen'
          ORDER BY a.first_name ASC, a.last_name ASC`,
-      ),
-      pool.query(
-        `SELECT i.id, i.admin_user_id, a.first_name, a.last_name, a.email
+        ),
+        pool.query(
+          `SELECT i.id, i.admin_user_id, a.first_name, a.last_name, a.email
          FROM instructors i
          INNER JOIN admin_users a ON a.id = i.admin_user_id
          INNER JOIN roles r ON r.id = a.role_id
          WHERE r.code = 'egitmen'
          ORDER BY a.first_name ASC, a.last_name ASC`,
-      ),
-      pool.query(`SELECT id, name, code FROM educations ORDER BY created_at DESC`),
-    ]);
+        ),
+        pool.query(`SELECT id, name, code FROM educations ORDER BY created_at DESC`),
+      ]);
     res.json({
       permissions: permissions.rows.map(toApiObject),
       roles: roles.rows.map(toApiObject),
       institutions: institutions.rows.map(toApiObject),
       educationCategories: educationCategories.rows.map(toApiObject),
+      approvedEducations: approvedEducations.rows.map(toApiObject),
       instructors: instructors.rows.map(toApiObject),
       educationInstructors: educationInstructors.rows.map(toApiObject),
       educations: educations.rows.map(toApiObject),
@@ -2440,7 +2466,58 @@ app.post("/api/admin/:moduleName", auth, async (req, res, next) => {
   const { moduleName } = req.params;
   const config = moduleConfig[moduleName];
   if (!config) return res.status(404).json({ message: "Modül bulunamadı." });
-  if (config.table === "instructors") return res.status(400).json({ message: "Eğitmen ekleme işlemi Yönetim Listesi üzerinden yapılır." });
+
+  if (moduleName === "instructors") {
+    try {
+      const p = await pool.query(`SELECT can_create FROM permissions WHERE role_id = $1 AND module_name = $2 LIMIT 1`, [
+        req.user.roleId,
+        moduleName,
+      ]);
+      if (!p.rows[0]?.can_create) return res.status(403).json({ message: "Yetkiniz yok." });
+      const body = req.body || {};
+      const firstName = String(body.firstName || "").trim();
+      const lastName = String(body.lastName || "").trim();
+      const email = String(body.email || "").trim().toLowerCase();
+      const password = String(body.password || "");
+      const title = String(body.title || "").trim();
+      const department = String(body.department || "").trim();
+      const about = String(body.about || "").trim();
+      if (!firstName || !lastName || !email || !password) {
+        return res.status(400).json({ message: "Ad, soyad, e-posta ve şifre zorunludur." });
+      }
+      const roleResult = await pool.query(`SELECT id FROM roles WHERE code = 'egitmen' LIMIT 1`);
+      if (!roleResult.rows[0]) return res.status(500).json({ message: "Eğitmen rolü bulunamadı." });
+      const roleId = roleResult.rows[0].id;
+      const password_hash = await bcrypt.hash(password, 10);
+      const insert = await pool.query(
+        `INSERT INTO admin_users (first_name, last_name, email, password_hash, role_id, is_active)
+         VALUES ($1,$2,$3,$4,$5, TRUE) RETURNING *`,
+        [firstName, lastName, email, password_hash, roleId],
+      );
+      const admin = insert.rows[0];
+      await upsertInstructorByAdminUser(admin);
+      if (title || department || about) {
+        await pool.query(
+          `UPDATE instructors SET title = $1, department = $2, about = $3, updated_at = NOW() WHERE admin_user_id = $4`,
+          [title, department, about, admin.id],
+        );
+      }
+      const instRow = await pool.query(`SELECT title, department, about FROM instructors WHERE admin_user_id = $1 LIMIT 1`, [admin.id]);
+      const i = instRow.rows[0] || {};
+      await writeActivityLog({ req, action: "create", moduleName, entityId: admin.id, newData: { ...admin, ...i } });
+      return res.status(201).json(
+        toApiObject({
+          ...admin,
+          title: i.title ?? "",
+          department: i.department ?? "",
+          about: i.about ?? "",
+        }),
+      );
+    } catch (error) {
+      return next(error);
+    }
+  }
+
   try {
     const p = await pool.query(`SELECT can_create FROM permissions WHERE role_id = $1 AND module_name = $2 LIMIT 1`, [req.user.roleId, moduleName]);
     if (!p.rows[0]?.can_create) return res.status(403).json({ message: "Yetkiniz yok." });
@@ -2489,8 +2566,19 @@ app.put("/api/admin/:moduleName/:id", auth, async (req, res, next) => {
     if (config.table === "instructors") {
       const allowed = ["title", "department", "about"];
       const payload = toDbObject(req.body);
-      const updateKeys = Object.keys(payload).filter((key) => allowed.includes(key));
-      if (!updateKeys.length) return res.status(400).json({ message: "Güncellenecek alan bulunamadı." });
+      const adminPayload = {};
+      if (payload.first_name !== undefined) adminPayload.first_name = String(payload.first_name || "").trim();
+      if (payload.last_name !== undefined) adminPayload.last_name = String(payload.last_name || "").trim();
+      if (payload.email !== undefined) adminPayload.email = String(payload.email || "").trim().toLowerCase();
+      if (payload.password) {
+        adminPayload.password_hash = await bcrypt.hash(String(payload.password), 10);
+      }
+      const adminKeys = Object.keys(adminPayload);
+      if (adminKeys.length) {
+        const adminVals = adminKeys.map((k) => adminPayload[k]);
+        const setA = adminKeys.map((k, i) => `${k} = $${i + 1}`).join(", ");
+        await pool.query(`UPDATE admin_users SET ${setA}, updated_at = NOW() WHERE id = $${adminKeys.length + 1}`, [...adminVals, id]);
+      }
       const adminUser = await pool.query(
         `SELECT a.id, a.first_name, a.last_name, a.email, a.password_hash
          FROM admin_users a
@@ -2500,16 +2588,29 @@ app.put("/api/admin/:moduleName/:id", auth, async (req, res, next) => {
         [id],
       );
       if (!adminUser.rows[0]) return res.status(404).json({ message: "Eğitmen kaydı bulunamadı." });
+      const previousInstructor = await pool.query(`SELECT * FROM instructors WHERE admin_user_id = $1 LIMIT 1`, [id]);
       await upsertInstructorByAdminUser(adminUser.rows[0]);
-      const previous = await pool.query(`SELECT * FROM instructors WHERE admin_user_id = $1 LIMIT 1`, [id]);
-      const values = updateKeys.map((key) => payload[key]);
-      const setSql = updateKeys.map((key, i) => `${key} = $${i + 1}`).join(", ");
-      const result = await pool.query(
-        `UPDATE instructors SET ${setSql}, updated_at = NOW() WHERE admin_user_id = $${updateKeys.length + 1} RETURNING *`,
-        [...values, id],
-      );
-      await writeActivityLog({ req, action: "update", moduleName, entityId: id, oldData: previous.rows[0], newData: result.rows[0] });
-      return res.json(toApiObject({ ...adminUser.rows[0], ...result.rows[0], id: adminUser.rows[0].id }));
+      const updateKeys = Object.keys(payload).filter((key) => allowed.includes(key));
+      if (updateKeys.length) {
+        const values = updateKeys.map((key) => payload[key]);
+        const setSql = updateKeys.map((key, i) => `${key} = $${i + 1}`).join(", ");
+        const result = await pool.query(
+          `UPDATE instructors SET ${setSql}, updated_at = NOW() WHERE admin_user_id = $${updateKeys.length + 1} RETURNING *`,
+          [...values, id],
+        );
+        await writeActivityLog({ req, action: "update", moduleName, entityId: id, oldData: previousInstructor.rows[0], newData: result.rows[0] });
+        return res.json(toApiObject({ ...adminUser.rows[0], ...result.rows[0], id: adminUser.rows[0].id }));
+      }
+      const instOnly = await pool.query(`SELECT * FROM instructors WHERE admin_user_id = $1 LIMIT 1`, [id]);
+      await writeActivityLog({
+        req,
+        action: "update",
+        moduleName,
+        entityId: id,
+        oldData: previousInstructor.rows[0],
+        newData: instOnly.rows[0],
+      });
+      return res.json(toApiObject({ ...adminUser.rows[0], ...instOnly.rows[0], id: adminUser.rows[0].id }));
     }
     const previous = await pool.query(`SELECT * FROM ${config.table} WHERE id = $1 LIMIT 1`, [id]);
     if (!previous.rows[0]) return res.status(404).json({ message: "Kayıt bulunamadı." });
@@ -2554,10 +2655,22 @@ app.delete("/api/admin/:moduleName/:id", auth, async (req, res, next) => {
   const { moduleName, id } = req.params;
   const config = moduleConfig[moduleName];
   if (!config) return res.status(404).json({ message: "Modül bulunamadı." });
-  if (config.table === "instructors") return res.status(400).json({ message: "Eğitmen silme işlemi Yönetim Listesi üzerinden yapılır." });
   try {
     const p = await pool.query(`SELECT can_delete FROM permissions WHERE role_id = $1 AND module_name = $2 LIMIT 1`, [req.user.roleId, moduleName]);
     if (!p.rows[0]?.can_delete) return res.status(403).json({ message: "Yetkiniz yok." });
+
+    if (moduleName === "instructors") {
+      const adminCheck = await pool.query(
+        `SELECT a.id FROM admin_users a INNER JOIN roles r ON r.id = a.role_id WHERE a.id = $1 AND r.code = 'egitmen' LIMIT 1`,
+        [id],
+      );
+      if (!adminCheck.rows[0]) return res.status(404).json({ message: "Eğitmen kaydı bulunamadı." });
+      const previous = await pool.query(`SELECT * FROM admin_users WHERE id = $1 LIMIT 1`, [id]);
+      await pool.query(`DELETE FROM admin_users WHERE id = $1`, [id]);
+      await writeActivityLog({ req, action: "delete", moduleName, entityId: id, oldData: previous.rows[0] });
+      return res.status(204).send();
+    }
+
     const previous = await pool.query(`SELECT * FROM ${config.table} WHERE id = $1 LIMIT 1`, [id]);
     if (!previous.rows[0]) return res.status(404).json({ message: "Kayıt bulunamadı." });
     if (config.table === "admin_users") {
@@ -2620,6 +2733,7 @@ const startServer = async () => {
     await migrateEducationDocColumns();
     await migrateEducationCalendarColumns();
     await migrateEducationCategoryColumns();
+    await migrateApprovedEducationsTable();
     await migrateUserFavoritesTable();
     await migrateUserFavoritesDualSupport();
     await migrateEducationReviewsTable();
