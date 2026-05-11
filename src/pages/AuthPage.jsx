@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { isValidTurkishNationalId, normalizeTurkishNationalId } from "../utils/turkishNationalId";
 import {
@@ -25,6 +25,8 @@ function AuthPage() {
   const [registerNationalId, setRegisterNationalId] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
   const [registerPasswordRepeat, setRegisterPasswordRepeat] = useState("");
+  const [registerAcceptKvkk, setRegisterAcceptKvkk] = useState(false);
+  const [registerAcceptTerms, setRegisterAcceptTerms] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [registerError, setRegisterError] = useState("");
   const [registerSuccess, setRegisterSuccess] = useState("");
@@ -92,6 +94,12 @@ function AuthPage() {
 
   const handleRegister = async (event) => {
     event.preventDefault();
+    if (!registerAcceptKvkk || !registerAcceptTerms) {
+      setRegisterError(
+        "Hesap oluşturmak için KVKK aydınlatma metni ile web sitesi kullanım ve gizlilik koşullarını okuyup onaylamanız gerekir.",
+      );
+      return;
+    }
     if (passwordMismatch || !registerTcValid) return;
     setLoadingRegister(true);
     setRegisterError("");
@@ -112,6 +120,8 @@ function AuthPage() {
       setRegisterNationalId("");
       setRegisterPassword("");
       setRegisterPasswordRepeat("");
+      setRegisterAcceptKvkk(false);
+      setRegisterAcceptTerms(false);
       setLoginEmail(savedEmail);
     } catch (error) {
       setRegisterError(error.message);
@@ -332,10 +342,45 @@ function AuthPage() {
               )}
             </div>
 
+            <div className="auth-consent" role="group" aria-label="Yasal onaylar">
+              <label className="auth-check auth-check--wrap">
+                <input
+                  type="checkbox"
+                  checked={registerAcceptKvkk}
+                  onChange={(event) => setRegisterAcceptKvkk(event.target.checked)}
+                />
+                <span>
+                  <Link to="/kvkk-aydinlatma-metni" target="_blank" rel="noopener noreferrer">
+                    Kişisel Verilerin Korunması Hakkında Aydınlatma Metni
+                  </Link>
+                  &apos;ni okudum ve kabul ediyorum.
+                </span>
+              </label>
+              <label className="auth-check auth-check--wrap">
+                <input
+                  type="checkbox"
+                  checked={registerAcceptTerms}
+                  onChange={(event) => setRegisterAcceptTerms(event.target.checked)}
+                />
+                <span>
+                  <Link to="/kullanim-kurallari-ve-gizlilik" target="_blank" rel="noopener noreferrer">
+                    Web Sitesi Kullanım Kuralları ve Gizlilik Sözleşmesi
+                  </Link>
+                  &apos;ni okudum ve kabul ediyorum.
+                </span>
+              </label>
+            </div>
+
             <button
               type="submit"
               className="btn auth-submit-btn"
-              disabled={passwordMismatch || !registerTcValid || loadingRegister}
+              disabled={
+                passwordMismatch ||
+                !registerTcValid ||
+                loadingRegister ||
+                !registerAcceptKvkk ||
+                !registerAcceptTerms
+              }
             >
               {loadingRegister ? "Kaydediliyor..." : "Üye Ol"} <i className="fa-solid fa-arrow-right" />
             </button>

@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 
 function ContactForm({ className = "contact-form-grid" }) {
   const recaptchaRef = useRef(null);
+  const [registerAcceptKvkk, setRegisterAcceptKvkk] = useState(false);
+const [registerAcceptTerms, setRegisterAcceptTerms] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
     email: "",
@@ -121,15 +125,34 @@ function ContactForm({ className = "contact-form-grid" }) {
         <textarea id="message" name="message" rows="5" value={form.message} onChange={handleChange} required />
       </div>
 
-      <label className="check-line">
-        <input type="checkbox" required />
-        <span>Gazi Üniversitesi gizlilik politikasını ve KVKK Aydınlatma Metnini okudum.</span>
-      </label>
-
-      <label className="check-line">
-        <input type="checkbox" required />
-        <span>Gazi Üniversitesi tarafından bilgilendirme e-postası almayı kabul ediyorum.</span>
-      </label>
+      <div className="auth-consent" role="group" aria-label="Yasal onaylar">
+              <label className="auth-check auth-check--wrap">
+                <input
+                  type="checkbox"
+                  checked={registerAcceptKvkk}
+                  onChange={(event) => setRegisterAcceptKvkk(event.target.checked)}
+                />
+                <span>
+                  <Link to="/kvkk-aydinlatma-metni" target="_blank" rel="noopener noreferrer">
+                    Kişisel Verilerin Korunması Hakkında Aydınlatma Metni
+                  </Link>
+                  &apos;ni okudum ve kabul ediyorum.
+                </span>
+              </label>
+              <label className="auth-check auth-check--wrap">
+                <input
+                  type="checkbox"
+                  checked={registerAcceptTerms}
+                  onChange={(event) => setRegisterAcceptTerms(event.target.checked)}
+                />
+                <span>
+                  <Link to="/kullanim-kurallari-ve-gizlilik" target="_blank" rel="noopener noreferrer">
+                    Web Sitesi Kullanım Kuralları ve Gizlilik Sözleşmesi
+                  </Link>
+                  &apos;ni okudum ve kabul ediyorum.
+                </span>
+              </label>
+      </div>
 
       <div ref={recaptchaRef} className="contact-recaptcha" />
 

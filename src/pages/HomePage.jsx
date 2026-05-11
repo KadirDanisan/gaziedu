@@ -11,7 +11,7 @@ function HomePage() {
       <section className="section about" id="hakkimizda">
         <div className="about-media about-media-enter">
           <img
-            src="/main1.png"
+            src="/rektorluk.jpg"
             alt="Hakkımızda"
           />
         </div>

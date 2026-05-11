@@ -18,7 +18,11 @@ function ContactPage() {
           <div>
             <h3>Telefon:</h3>
             <p>
-              <a href="tel:+902122832402">0 212 283 24 02</a>
+              <a href="tel:+903122022000">0(312) 202 20 00 </a>
+            </p>
+            <h3>Faks:</h3>
+            <p>
+              <a href="tel:+903122213202"> 0(312) 221 32 02</a>
             </p>
           </div>
         </article>
@@ -30,7 +34,11 @@ function ContactPage() {
           <div>
             <h3>E-Mail:</h3>
             <p>
-              <a href="mailto:info@gazi.edu.tr">info@gazi.edu.tr</a>
+              <a href="mailto:rimer@gazi.edu.tr"> rimer@gazi.edu.tr</a>
+            </p>
+           <h3>Kep Adresi:</h3>
+            <p>
+              <a href="mailto:gaziuniversitesi@hs01.kep.tr"> gaziuniversitesi@hs01.kep.tr</a>
             </p>
           </div>
         </article>
@@ -41,7 +49,7 @@ function ContactPage() {
           </div>
           <div>
             <h3>Adres:</h3>
-            <p>Büyükdere Cad. No:119 Nevtron Plaza Kat 4 Esentepe - Şişli - İstanbul</p>
+            <p>06560 Emniyet Mahallesi Bandırma Caddesi No:6/1 Yenimahalle - ANKARA</p>
           </div>
         </article>
       </section>
@@ -49,7 +57,7 @@ function ContactPage() {
       <section className="contact-main section">
         <div className="contact-map">
           <iframe
-            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3008.0610582056643!2d29.002056076524077!3d41.06765797134231!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x14cab6686125ac93%3A0x7d4e2f97e5dc5071!2zxLBzdGFuYnVsIMSwbnN0aXR1dGU!5e0!3m2!1str!2str!4v1689753339244!5m2!1str!2str"
+            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1529.5329329202095!2d32.819784523799804!3d39.93991634179287!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x14d34edae61efef5%3A0xe92587004616b9f3!2zR2F6aSDDnG5pdmVyc2l0ZXNpIEXEn2l0aW0gRmFrw7xsdGVzaSBEZWthbmzEscSfxLE!5e0!3m2!1str!2str!4v1778483202325!5m2!1str!2str"
             width="100%"
             height="605"
             style={{ border: 0 }}

@@ -83,10 +83,3 @@ export const faqItems = [
   },
 ];
 
-export const partnerLogos = [
-  "https://istanbulinstitute.com/files/yurtici-kargopng_12-09-2023_10-50-59.png",
-  "https://istanbulinstitute.com/files/defactojpg_12-09-2023_10-46-02.jpg",
-  "https://istanbulinstitute.com/files/bosch-logo-2jpg_12-09-2023_10-46-02.jpg",
-  "https://istanbulinstitute.com/files/acbadem-jpg_12-09-2023_10-46-02.jpg",
-  "https://istanbulinstitute.com/files/pirellijpg_12-09-2023_10-45-19.jpg",
-];

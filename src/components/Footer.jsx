@@ -42,47 +42,32 @@ function Footer() {
 
         <div className="footer-links">
           <h4>&nbsp;</h4>
-          <a href="#">Kişisel Verilerin Korunması Hakkında Aydınlatma Metni</a>
-          <a href="#">Web Sitesi Kullanım Kuralları ve Gizlilik Sözleşmesi</a>
-          <a href="#">İptal ve İade Koşulları</a>
-          <a href="#">Mesafeli Satış Sözleşmesi</a>
+          <Link to="/kvkk-aydinlatma-metni">Kişisel Verilerin Korunması <br />Hakkında Aydınlatma Metni</Link>
+          
+          <Link to="/kullanim-kurallari-ve-gizlilik">Web Sitesi Kullanım Kuralları <br />ve Gizlilik Sözleşmesi</Link>
         </div>
 
         <div className="footer-contact">
           <h4>İletişime Geç</h4>
           <p>
-            <strong>Telefon:</strong> 0 212 283 24 02
+            <strong>Telefon:</strong> 0(312) 202 20 00
           </p>
           <p>
-            <strong>E-Mail:</strong> info@gazi.edu.tr
+            <strong>E-Mail:</strong> rimer@gazi.edu.tr
           </p>
           <p>
-            <strong>Adres:</strong> Büyükdere Cad. No:119 Nevtron Plaza Kat 4 Esentepe - Şişli -
-            İstanbul
+            <strong>Adres:</strong> 06560 Emniyet Mahallesi Bandırma Caddesi No:6/1 Yenimahalle - ANKARA
           </p>
-          <a href="#">Sıkça Sorulan Sorular</a>
           <div className="footer-social">
-            <i className="fa-brands fa-facebook-f" />
-            <i className="fa-brands fa-linkedin-in" />
-            <i className="fa-brands fa-instagram" />
+            <a href="https://www.facebook.com/GaziUniversitesi.1926" target="_blank" className="fa-brands fa-facebook-f" />
+            <a href="https://www.linkedin.com/school/gazi-university/" target="_blank" className="fa-brands fa-linkedin-in" />
+            <a href="https://www.instagram.com/gazi_universitesi/?hl=tr" target="_blank" className="fa-brands fa-instagram" />  
           </div>
         </div>
       </div>
 
-      <div className="footer-payments">
-        {paymentLogos.map((logo) => (
-          <img key={logo} src={logo} alt="Ödeme" />
-        ))}
-      </div>
-
-      <div className="footer-security">
-        {securityLogos.map((logo) => (
-          <img key={logo} src={logo} alt="Güvenlik" />
-        ))}
-      </div>
-
       <div className="footer-bottom">
-        <span>Copyright © 2023 GAZI UNIVERSITESI. All Rights Reserved</span>
+        <span>Copyright © 2026 GAZI UNIVERSITESI. Tüm hakları saklıdır.</span>
       </div>
     </footer>
   );

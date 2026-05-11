@@ -142,17 +142,17 @@ function Header() {
     <>
       <div className="topbar">
         <div className="topbar-contact">
-          <a href="tel:+902122832402">
-            <i className="fa-solid fa-phone" /> 0 212 283 24 02
+          <a href="tel:03122022000">
+            <i className="fa-solid fa-phone" /> 0 (312) 202 20 00
           </a>
-          <a href="mailto:info@gazi.edu.tr">
-            <i className="fa-regular fa-envelope" /> info@gazi.edu.tr
+          <a href="mailto:rimer@gazi.edu.tr">
+            <i className="fa-regular fa-envelope" /> rimer@gazi.edu.tr
           </a>
         </div>
         <div className="socials">
-          <i className="fa-brands fa-facebook-f" />
-          <i className="fa-brands fa-linkedin-in" />
-          <i className="fa-brands fa-instagram" />
+        <a href="https://www.facebook.com/GaziUniversitesi.1926" target="_blank"><i className="fa-brands fa-facebook-f" /></a>
+        <a href="https://www.linkedin.com/school/gazi-university/" target="_blank"><i className="fa-brands fa-linkedin-in" /></a>
+        <a href="https://www.instagram.com/gazi_universitesi/?hl=tr" target="_blank"><i className="fa-brands fa-instagram" /></a>  
         </div>
       </div>
       <header className="site-header">
@@ -316,17 +316,17 @@ function Header() {
       </div>
       <div className={`mobile-menu ${isMobileMenuOpen ? "is-open" : ""}`}>
         <div className="mobile-menu-contact">
-          <a href="tel:+902122832402">
-            <i className="fa-solid fa-phone" /> 0 212 283 24 02
+        <a href="tel:03122022000">
+            <i className="fa-solid fa-phone" />  0(312) 202 20 00
           </a>
-          <a href="mailto:info@gazi.edu.tr">
-            <i className="fa-regular fa-envelope" /> info@gazi.edu.tr
+          <a href="mailto:rimer@gazi.edu.tr">
+            <i className="fa-regular fa-envelope" /> rimer@gazi.edu.tr
           </a>
         </div>
         <div className="mobile-menu-socials">
-          <i className="fa-brands fa-facebook-f" />
-          <i className="fa-brands fa-linkedin-in" />
-          <i className="fa-brands fa-instagram" />
+        <a href="https://www.facebook.com/GaziUniversitesi.1926" target="_blank"><i className="fa-brands fa-facebook-f" /></a>
+        <a href="https://www.linkedin.com/school/gazi-university/" target="_blank"><i className="fa-brands fa-linkedin-in" /></a>
+        <a href="https://www.instagram.com/gazi_universitesi/?hl=tr" target="_blank"><i className="fa-brands fa-instagram" /></a>  
         </div>
         <nav className="mobile-menu-nav">
           <div className={`mobile-dropdown ${isMobileCoursesOpen ? "is-open" : ""}`}>
