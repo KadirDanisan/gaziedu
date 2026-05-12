@@ -72,4 +72,9 @@ export const adminApi = {
     return request(`/admin/exam-results?${params.toString()}`);
   },
   deleteExamResult: (id) => request(`/admin/exam-results/${id}`, { method: "DELETE" }),
+  markExamResultPaymentReceived: (id) =>
+    request(`/admin/exam-results/${id}/payment-received`, {
+      method: "PATCH",
+      body: JSON.stringify({ paymentReceived: true }),
+    }),
 };

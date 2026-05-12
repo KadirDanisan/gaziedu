@@ -271,6 +271,7 @@ CREATE TABLE IF NOT EXISTS exam_portal_best_scores (
   best_recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_score NUMERIC(5,2) NOT NULL,
+  payment_received BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (education_code, national_id)

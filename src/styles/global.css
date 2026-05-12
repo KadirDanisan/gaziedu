@@ -681,6 +681,147 @@ html {
   background: #fff6f6;
 }
 
+/* Sınav sonuçları — ödeme alındı pill (kırmızı Hayır / yeşil Evet) */
+.exam-results-payment-pill {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.exam-results-payment-pill:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.exam-results-payment-pill--static {
+  cursor: default;
+}
+
+.exam-results-payment-pill__track {
+  position: relative;
+  width: 120px;
+  height: 32px;
+  border-radius: 999px;
+  box-sizing: border-box;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+/* Hayır seçili: sol taraf net kırmızı ton, sağ taraf renksiz nötr */
+.exam-results-payment-pill__track--hayir {
+  border-color: #f87171;
+  background: linear-gradient(90deg, #fca5a5 0%, #fecaca 50%, #e2e8f0 50%, #f1f5f9 100%);
+}
+
+/* Evet seçili: sol nötr, sağ net yeşil ton */
+.exam-results-payment-pill__track--evet {
+  border-color: #4ade80;
+  background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 50%, #86efac 50%, #bbf7d0 100%);
+}
+
+.exam-results-payment-pill__halo {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  z-index: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+
+.exam-results-payment-pill__halo span {
+  flex: 1;
+  text-align: center;
+}
+
+/* Aktif kelime thumb üzerinde; halo’da aynı taraftaki yazı çakışmasın */
+.exam-results-payment-pill__track--hayir .exam-results-payment-pill__halo span:first-child {
+  opacity: 0;
+}
+
+.exam-results-payment-pill__track--hayir .exam-results-payment-pill__halo span:last-child {
+  color: #cbd5e1;
+  opacity: 0.5;
+  font-weight: 600;
+}
+
+.exam-results-payment-pill__track--evet .exam-results-payment-pill__halo span:first-child {
+  color: #cbd5e1;
+  opacity: 0.5;
+  font-weight: 600;
+}
+
+.exam-results-payment-pill__track--evet .exam-results-payment-pill__halo span:last-child {
+  opacity: 0;
+}
+
+.exam-results-payment-pill__thumb {
+  position: absolute;
+  top: 3px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(50% - 4px);
+  height: calc(100% - 6px);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  transition:
+    left 0.24s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.14);
+}
+
+.exam-results-payment-pill__thumb--no {
+  left: 3px;
+  background: #dc2626;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.45);
+}
+
+.exam-results-payment-pill__thumb--yes {
+  left: calc(50% + 1px);
+  background: #16a34a;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exam-results-payment-pill__thumb {
+    transition: none;
+  }
+}
+
+.btn--success-fill {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-weight: 800;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, #15803d, #22c55e);
+  box-shadow: 0 10px 22px rgba(21, 128, 61, 0.28);
+}
+
+.btn--success-fill:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.btn--success-fill:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .admin-pagination {
   display: flex;
   justify-content: flex-end;
@@ -1263,12 +1404,14 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .admin-modal__close,
   .btn--modal-primary,
-  .btn--danger-fill {
+  .btn--danger-fill,
+  .btn--success-fill {
     transition: none;
   }
 
   .btn--modal-primary:hover:not(:disabled),
-  .btn--danger-fill:hover:not(:disabled) {
+  .btn--danger-fill:hover:not(:disabled),
+  .btn--success-fill:hover:not(:disabled) {
     filter: none;
   }
 }

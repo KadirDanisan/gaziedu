@@ -394,6 +394,7 @@ const migrateExamPortalBestScoresTable = async () => {
       UNIQUE (education_code, national_id)
     )
   `);
+  await pool.query(`ALTER TABLE exam_portal_best_scores ADD COLUMN IF NOT EXISTS payment_received BOOLEAN NOT NULL DEFAULT FALSE`);
   await pool.query(`CREATE INDEX IF NOT EXISTS exam_portal_best_scores_updated_idx ON exam_portal_best_scores (updated_at DESC)`);
 };
 
@@ -410,10 +411,18 @@ const migrateExamPortalAccessPermissions = async () => {
 const migrateExamResultsPermissions = async () => {
   await pool.query(`
     INSERT INTO permissions (role_id, module_name, can_view, can_create, can_update, can_delete)
-    SELECT r.id, 'examResults', p.can_view, FALSE, FALSE, p.can_delete
+    SELECT r.id, 'examResults', p.can_view, FALSE, p.can_update, p.can_delete
     FROM roles r
     INNER JOIN permissions p ON p.role_id = r.id AND p.module_name = 'examQuestions'
     ON CONFLICT (role_id, module_name) DO NOTHING
+  `);
+  await pool.query(`
+    UPDATE permissions e
+    SET can_update = q.can_update
+    FROM permissions q
+    WHERE e.module_name = 'examResults'
+      AND q.module_name = 'examQuestions'
+      AND e.role_id = q.role_id
   `);
 };
 
@@ -506,6 +515,7 @@ const dbToApiMap = {
   best_recorded_at: "bestRecordedAt",
   last_attempt_at: "lastAttemptAt",
   last_score: "lastScore",
+  payment_received: "paymentReceived",
 };
 
 const apiToDbMap = Object.fromEntries(Object.entries(dbToApiMap).map(([k, v]) => [v, k]));
@@ -2556,6 +2566,46 @@ app.delete("/api/admin/exam-portal/limit-exceeded", auth, checkPermission("examP
       oldData: { educationCode, nationalId, deletedAttempts: del.rowCount },
     });
     return res.json({ deletedAttempts: del.rowCount });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch("/api/admin/exam-results/:id/payment-received", auth, checkPermission("examResults", "can_update"), async (req, res, next) => {
+  try {
+    const id = String(req.params.id || "").trim();
+    const markPaid = req.body?.paymentReceived === true || req.body?.paymentReceived === "true";
+    if (!markPaid) {
+      return res.status(400).json({ message: "Yalnizca odeme alindi olarak isaretlenebilir (paymentReceived: true)." });
+    }
+    const previousResult = await pool.query(`SELECT * FROM exam_portal_best_scores WHERE id = $1 LIMIT 1`, [id]);
+    const previous = previousResult.rows[0];
+    if (!previous) return res.status(404).json({ message: "Kayıt bulunamadı." });
+    if (previous.payment_received === true) {
+      const api = toApiObject(previous);
+      return res.json({
+        ...api,
+        certificateEligible: Number(previous.best_score) >= 60,
+      });
+    }
+    const result = await pool.query(
+      `UPDATE exam_portal_best_scores SET payment_received = TRUE, updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [id],
+    );
+    const row = result.rows[0];
+    await writeActivityLog({
+      req,
+      action: "update",
+      moduleName: "examResults",
+      entityId: id,
+      oldData: previous,
+      newData: row,
+    });
+    const api = toApiObject(row);
+    return res.json({
+      ...api,
+      certificateEligible: Number(row.best_score) >= 60,
+    });
   } catch (error) {
     next(error);
   }
