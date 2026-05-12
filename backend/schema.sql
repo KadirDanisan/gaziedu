@@ -252,6 +252,32 @@ CREATE TABLE IF NOT EXISTS exam_attempts (
 CREATE INDEX IF NOT EXISTS exam_attempts_education_code_idx ON exam_attempts (education_code);
 CREATE INDEX IF NOT EXISTS exam_attempts_national_id_idx ON exam_attempts (national_id);
 
+CREATE TABLE IF NOT EXISTS exam_portal_visits (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  portal_url TEXT NOT NULL,
+  education_code TEXT NOT NULL,
+  national_id VARCHAR(11) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS exam_portal_visits_created_at_idx ON exam_portal_visits (created_at DESC);
+CREATE INDEX IF NOT EXISTS exam_portal_visits_code_tc_idx ON exam_portal_visits (education_code, national_id);
+
+CREATE TABLE IF NOT EXISTS exam_portal_best_scores (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  education_code TEXT NOT NULL,
+  national_id VARCHAR(11) NOT NULL,
+  best_score NUMERIC(5,2) NOT NULL,
+  best_recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_score NUMERIC(5,2) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (education_code, national_id)
+);
+
+CREATE INDEX IF NOT EXISTS exam_portal_best_scores_updated_idx ON exam_portal_best_scores (updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS activity_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_user_id UUID REFERENCES admin_users(id) ON DELETE SET NULL,

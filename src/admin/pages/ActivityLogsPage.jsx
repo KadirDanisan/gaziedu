@@ -13,6 +13,8 @@ const moduleLabelMap = {
   newsletter: "Bülten Kayıtları",
   contactForms: "İletişim Formları",
   examQuestions: "Sınav Soruları",
+  examPortalAccess: "Sınav Portalı Girişleri",
+  examResults: "Sınav Sonuçları",
   roles: "Rol ve Yetki",
 };
 

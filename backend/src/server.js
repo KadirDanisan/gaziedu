@@ -9,6 +9,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import mammoth from "mammoth";
+import { GoogleGenAI } from "@google/genai";
 
 const { Pool } = pkg;
 const app = express();
@@ -362,6 +363,60 @@ const migrateExamAttemptsTable = async () => {
   await pool.query(`CREATE INDEX IF NOT EXISTS exam_attempts_national_id_idx ON exam_attempts (national_id)`);
 };
 
+const EXAM_PORTAL_MAX_STARTS = 5;
+
+const migrateExamPortalVisitTable = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS exam_portal_visits (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      portal_url TEXT NOT NULL,
+      education_code TEXT NOT NULL,
+      national_id VARCHAR(11) NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS exam_portal_visits_created_at_idx ON exam_portal_visits (created_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS exam_portal_visits_code_tc_idx ON exam_portal_visits (education_code, national_id)`);
+};
+
+const migrateExamPortalBestScoresTable = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS exam_portal_best_scores (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      education_code TEXT NOT NULL,
+      national_id VARCHAR(11) NOT NULL,
+      best_score NUMERIC(5,2) NOT NULL,
+      best_recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_score NUMERIC(5,2) NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (education_code, national_id)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS exam_portal_best_scores_updated_idx ON exam_portal_best_scores (updated_at DESC)`);
+};
+
+const migrateExamPortalAccessPermissions = async () => {
+  await pool.query(`
+    INSERT INTO permissions (role_id, module_name, can_view, can_create, can_update, can_delete)
+    SELECT r.id, 'examPortalAccess', p.can_view, FALSE, FALSE, p.can_delete
+    FROM roles r
+    INNER JOIN permissions p ON p.role_id = r.id AND p.module_name = 'examQuestions'
+    ON CONFLICT (role_id, module_name) DO NOTHING
+  `);
+};
+
+const migrateExamResultsPermissions = async () => {
+  await pool.query(`
+    INSERT INTO permissions (role_id, module_name, can_view, can_create, can_update, can_delete)
+    SELECT r.id, 'examResults', p.can_view, FALSE, FALSE, p.can_delete
+    FROM roles r
+    INNER JOIN permissions p ON p.role_id = r.id AND p.module_name = 'examQuestions'
+    ON CONFLICT (role_id, module_name) DO NOTHING
+  `);
+};
+
 const moduleConfig = {
   normalUsers: { table: "normal_users", actionKey: "normalUsers", searchable: ["first_name", "last_name", "email"] },
   adminUsers: { table: "admin_users", actionKey: "adminUsers", searchable: ["first_name", "last_name", "email", "phone"] },
@@ -394,6 +449,8 @@ const permissionModules = [
   "newsletter",
   "contactForms",
   "examQuestions",
+  "examPortalAccess",
+  "examResults",
   "activityLogs",
   "roles",
 ];
@@ -442,6 +499,13 @@ const dbToApiMap = {
   admin_first_name: "adminFirstName",
   admin_last_name: "adminLastName",
   admin_email: "adminEmail",
+  portal_url: "portalUrl",
+  education_code: "educationCode",
+  national_id: "nationalId",
+  best_score: "bestScore",
+  best_recorded_at: "bestRecordedAt",
+  last_attempt_at: "lastAttemptAt",
+  last_score: "lastScore",
 };
 
 const apiToDbMap = Object.fromEntries(Object.entries(dbToApiMap).map(([k, v]) => [v, k]));
@@ -801,6 +865,27 @@ const gradeExamAttempt = (questions = [], answers = {}) => {
   return { correctCount, wrongCount, blankCount, score, normalizedAnswers };
 };
 
+const upsertExamPortalBestScore = async ({ educationCode, nationalId, attemptScore }) => {
+  const code = String(educationCode || "").trim().toUpperCase();
+  const tc = String(nationalId || "").trim();
+  const newScore = Number(attemptScore);
+  if (!/^[A-Z]{3}\d{7}$/.test(code) || !/^\d{11}$/.test(tc) || !Number.isFinite(newScore)) return;
+  await pool.query(
+    `INSERT INTO exam_portal_best_scores (education_code, national_id, best_score, best_recorded_at, last_attempt_at, last_score)
+     VALUES ($1, $2, $3, NOW(), NOW(), $3)
+     ON CONFLICT (education_code, national_id) DO UPDATE SET
+       best_score = GREATEST(exam_portal_best_scores.best_score, EXCLUDED.last_score),
+       best_recorded_at = CASE
+         WHEN EXCLUDED.last_score > exam_portal_best_scores.best_score THEN NOW()
+         ELSE exam_portal_best_scores.best_recorded_at
+       END,
+       last_attempt_at = NOW(),
+       last_score = EXCLUDED.last_score,
+       updated_at = NOW()`,
+    [code, tc, newScore],
+  );
+};
+
 const parseQuestionsFromText = (text) => {
   const chunks = text
     .split(/\n(?=\s*(?:\d+[\).:-]|Soru\s+\d+))/i)
@@ -885,67 +970,31 @@ const buildExamQuestionsWithGemini = async ({ text, mode }) => {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY bulunamadi. Backend .env dosyasini kontrol edip sunucuyu restart edin.");
   }
-  const discoverGeminiModels = async () => {
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(process.env.GEMINI_API_KEY)}`);
-      if (!response.ok) return [];
-      const data = await response.json();
-      return (data.models || [])
-        .filter((model) => (model.supportedGenerationMethods || []).includes("generateContent"))
-        .map((model) => model.name?.replace(/^models\//, ""))
-        .filter(Boolean);
-    } catch {
-      return [];
-    }
-  };
-  const discoveredModels = await discoverGeminiModels();
-  const models = [
-    process.env.GEMINI_MODEL,
-    ...discoveredModels,
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-flash-8b",
-    "gemini-1.5-pro-latest",
-  ].filter(Boolean);
-  const uniqueModels = [...new Set(models)];
-  const apiVersions = ["v1beta", "v1"];
-  let lastError = "";
-  for (const apiVersion of apiVersions) {
-    for (const model of uniqueModels) {
-      let response;
-      const supportsJsonMime = !model.includes("gemini-pro");
-      try {
-        response = await fetch(`https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${encodeURIComponent(process.env.GEMINI_API_KEY)}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            generationConfig: {
-              temperature: 0.4,
-              ...(supportsJsonMime ? { responseMimeType: "application/json" } : {}),
-            },
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: getExamAiPrompt({ text, mode }) }],
-              },
-            ],
-          }),
-        });
-      } catch (error) {
-        lastError = `Gemini ag baglantisi kurulamadi (${apiVersion}/${model}): ${error.message}`;
-        continue;
-      }
-      if (!response.ok) {
-        lastError = `${apiVersion}/${model}: ${response.status} ${await response.text()}`;
-        continue;
-      }
-      const data = await response.json();
-      const content = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
-      return parseAiQuestionJson(content, "Gemini");
-    }
+  const model = String(process.env.GEMINI_MODEL || "").trim();
+  if (!model) {
+    throw new Error("GEMINI_MODEL .env icinde tanimli olmali (ornek: GEMINI_MODEL=gemini-3-flash-preview).");
   }
-  throw new Error(`Gemini istegi basarisiz oldu: ${lastError}`);
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const prompt = getExamAiPrompt({ text, mode });
+  const supportsJsonMime = !model.includes("gemini-pro");
+  try {
+    const response = await ai.models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        temperature: 0.4,
+        maxOutputTokens: 12288,
+        ...(supportsJsonMime ? { responseMimeType: "application/json" } : {}),
+      },
+    });
+    const content = response.text ?? "";
+    if (!content) {
+      throw new Error(`${model}: bos yanit`);
+    }
+    return parseAiQuestionJson(content, "Gemini");
+  } catch (error) {
+    throw new Error(`Gemini istegi basarisiz oldu (${model}): ${error?.message || error}`);
+  }
 };
 
 const buildExamQuestionsWithAi = async ({ text, mode }) => {
@@ -1772,6 +1821,28 @@ app.get("/api/public/search/trainings", async (req, res, next) => {
   }
 });
 
+app.post("/api/public/exam-portal/visit", async (req, res, next) => {
+  try {
+    const portalUrl = String(req.body?.portalUrl || "").trim().slice(0, 2048);
+    const educationCode = String(req.body?.educationCode || "").trim().toUpperCase();
+    const nationalId = String(req.body?.nationalId || "").trim();
+    if (!/^[A-Z]{3}\d{7}$/.test(educationCode)) {
+      return res.status(400).json({ message: "Geçerli eğitim kodu gerekli." });
+    }
+    if (!/^\d{11}$/.test(nationalId)) {
+      return res.status(400).json({ message: "T.C. kimlik no 11 haneli olmalıdır." });
+    }
+    const safeUrl = portalUrl.length ? portalUrl : `/sinavportali/${educationCode}/${nationalId}`;
+    const insert = await pool.query(
+      `INSERT INTO exam_portal_visits (portal_url, education_code, national_id) VALUES ($1, $2, $3) RETURNING id, portal_url, education_code, national_id, created_at`,
+      [safeUrl, educationCode, nationalId],
+    );
+    return res.status(201).json(toApiObject(insert.rows[0]));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/public/exam-portal/start", async (req, res, next) => {
   try {
     const educationCode = String(req.body?.educationCode || "").trim().toUpperCase();
@@ -1781,6 +1852,16 @@ app.post("/api/public/exam-portal/start", async (req, res, next) => {
     }
     if (!/^\d{11}$/.test(nationalId)) {
       return res.status(400).json({ message: "T.C. kimlik no 11 haneli olmalıdır." });
+    }
+
+    const attemptsCheck = await pool.query(
+      `SELECT COUNT(*)::int AS c FROM exam_attempts WHERE UPPER(TRIM(education_code)) = $1 AND national_id = $2`,
+      [educationCode, nationalId],
+    );
+    if (Number(attemptsCheck.rows[0]?.c || 0) >= EXAM_PORTAL_MAX_STARTS) {
+      return res.status(403).json({
+        message: `Bu eğitim (${educationCode}) için sınav başlatma hakkınız doldu (en fazla ${EXAM_PORTAL_MAX_STARTS} oturum).`,
+      });
     }
 
     const educationResult = await pool.query(
@@ -1856,7 +1937,7 @@ app.post("/api/public/exam-portal/:attemptId/submit", async (req, res, next) => 
     const reason = String(req.body?.reason || "manual").trim().slice(0, 64) || "manual";
     const answers = req.body?.answers && typeof req.body.answers === "object" ? req.body.answers : {};
     const previousResult = await pool.query(
-      `SELECT id, selected_questions, started_at, status, correct_count, wrong_count, blank_count, score, duration_seconds
+      `SELECT id, education_code, national_id, selected_questions, started_at, status, correct_count, wrong_count, blank_count, score, duration_seconds
        FROM exam_attempts
        WHERE id = $1
        LIMIT 1`,
@@ -1909,6 +1990,11 @@ app.post("/api/public/exam-portal/:attemptId/submit", async (req, res, next) => 
       ],
     );
     const row = result.rows[0];
+    await upsertExamPortalBestScore({
+      educationCode: previous.education_code,
+      nationalId: previous.national_id,
+      attemptScore: graded.score,
+    });
     return res.json({
       attemptId: row.id,
       status: row.status,
@@ -2360,6 +2446,193 @@ app.get("/api/admin/activity-logs", auth, async (req, res, next) => {
   }
 });
 
+app.get("/api/admin/exam-portal/visits", auth, checkPermission("examPortalAccess", "can_view"), async (req, res, next) => {
+  try {
+    const page = Math.max(1, Number(req.query.page || 1));
+    const pageSize = 20;
+    const offset = (page - 1) * pageSize;
+    const search = String(req.query.search || "").trim().toLowerCase();
+    const searchParam = search ? `%${search}%` : "";
+    const countSql = `SELECT COUNT(*)::int AS total FROM exam_portal_visits
+      WHERE ($1::text = '' OR LOWER(CONCAT(COALESCE(portal_url,''), ' ', COALESCE(education_code,''), ' ', COALESCE(national_id,''))) LIKE $1)`;
+    const listSql = `SELECT * FROM exam_portal_visits
+      WHERE ($1::text = '' OR LOWER(CONCAT(COALESCE(portal_url,''), ' ', COALESCE(education_code,''), ' ', COALESCE(national_id,''))) LIKE $1)
+      ORDER BY created_at DESC LIMIT $2 OFFSET $3`;
+    const [countResult, listResult] = await Promise.all([
+      pool.query(countSql, [searchParam]),
+      pool.query(listSql, [searchParam, pageSize, offset]),
+    ]);
+    return res.json({
+      data: listResult.rows.map(toApiObject),
+      pagination: {
+        page,
+        pageSize,
+        total: countResult.rows[0].total,
+        totalPages: Math.max(1, Math.ceil(countResult.rows[0].total / pageSize)),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/admin/exam-portal/visits/:id", auth, checkPermission("examPortalAccess", "can_delete"), async (req, res, next) => {
+  try {
+    const id = String(req.params.id || "").trim();
+    const previous = await pool.query(`SELECT * FROM exam_portal_visits WHERE id = $1 LIMIT 1`, [id]);
+    if (!previous.rows[0]) return res.status(404).json({ message: "Kayıt bulunamadı." });
+    await pool.query(`DELETE FROM exam_portal_visits WHERE id = $1`, [id]);
+    await writeActivityLog({ req, action: "delete", moduleName: "examPortalAccess", entityId: id, oldData: previous.rows[0] });
+    return res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/admin/exam-portal/limit-exceeded", auth, checkPermission("examPortalAccess", "can_view"), async (req, res, next) => {
+  try {
+    const page = Math.max(1, Number(req.query.page || 1));
+    const pageSize = 20;
+    const offset = (page - 1) * pageSize;
+    const search = String(req.query.search || "").trim().toLowerCase();
+    const searchParam = search ? `%${search}%` : "";
+    const countSql = `SELECT COUNT(*)::int AS total FROM (
+        SELECT UPPER(TRIM(education_code)) AS education_code, national_id, COUNT(*)::int AS start_count
+        FROM exam_attempts
+        GROUP BY UPPER(TRIM(education_code)), national_id
+        HAVING COUNT(*)::int >= $1
+      ) t
+      WHERE ($2::text = '' OR LOWER(CONCAT(education_code, ' ', national_id, ' ', start_count::text)) LIKE $2)`;
+    const listSql = `SELECT education_code, national_id, start_count FROM (
+        SELECT UPPER(TRIM(education_code)) AS education_code, national_id, COUNT(*)::int AS start_count
+        FROM exam_attempts
+        GROUP BY UPPER(TRIM(education_code)), national_id
+        HAVING COUNT(*)::int >= $1
+      ) t
+      WHERE ($2::text = '' OR LOWER(CONCAT(education_code, ' ', national_id, ' ', start_count::text)) LIKE $2)
+      ORDER BY education_code ASC, national_id ASC
+      LIMIT $3 OFFSET $4`;
+    const [countResult, listResult] = await Promise.all([
+      pool.query(countSql, [EXAM_PORTAL_MAX_STARTS, searchParam]),
+      pool.query(listSql, [EXAM_PORTAL_MAX_STARTS, searchParam, pageSize, offset]),
+    ]);
+    return res.json({
+      data: listResult.rows.map((row) => ({
+        educationCode: row.education_code,
+        nationalId: row.national_id,
+        startCount: row.start_count,
+      })),
+      pagination: {
+        page,
+        pageSize,
+        total: countResult.rows[0].total,
+        totalPages: Math.max(1, Math.ceil(countResult.rows[0].total / pageSize)),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/admin/exam-portal/limit-exceeded", auth, checkPermission("examPortalAccess", "can_delete"), async (req, res, next) => {
+  try {
+    const educationCode = String(req.body?.educationCode || "").trim().toUpperCase();
+    const nationalId = String(req.body?.nationalId || "").trim();
+    if (!/^[A-Z]{3}\d{7}$/.test(educationCode)) {
+      return res.status(400).json({ message: "Geçerli eğitim kodu gerekli." });
+    }
+    if (!/^\d{11}$/.test(nationalId)) {
+      return res.status(400).json({ message: "T.C. kimlik no 11 haneli olmalıdır." });
+    }
+    const del = await pool.query(
+      `DELETE FROM exam_attempts WHERE UPPER(TRIM(education_code)) = $1 AND national_id = $2`,
+      [educationCode, nationalId],
+    );
+    await writeActivityLog({
+      req,
+      action: "delete",
+      moduleName: "examPortalAccess",
+      entityId: `${educationCode}-${nationalId}`,
+      oldData: { educationCode, nationalId, deletedAttempts: del.rowCount },
+    });
+    return res.json({ deletedAttempts: del.rowCount });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/admin/exam-results", auth, checkPermission("examResults", "can_view"), async (req, res, next) => {
+  try {
+    const page = Math.max(1, Number(req.query.page || 1));
+    const pageSize = 20;
+    const offset = (page - 1) * pageSize;
+    const searchRaw = String(req.query.search || "").trim();
+    const educationCodeRaw = String(req.query.educationCode || "").trim().toUpperCase();
+    const nationalIdRaw = String(req.query.nationalId || "").trim();
+    const certificateOnly = ["1", "true", "yes"].includes(String(req.query.certificateOnly || "").toLowerCase());
+
+    const params = [];
+    const conditions = [];
+
+    if (educationCodeRaw) {
+      params.push(`%${educationCodeRaw.toLowerCase()}%`);
+      conditions.push(`LOWER(education_code) LIKE $${params.length}`);
+    }
+    if (nationalIdRaw) {
+      const digits = nationalIdRaw.replace(/\D/g, "");
+      if (digits.length) {
+        params.push(`%${digits}%`);
+        conditions.push(`national_id LIKE $${params.length}`);
+      }
+    }
+    if (searchRaw) {
+      params.push(`%${searchRaw.toLowerCase()}%`);
+      conditions.push(`LOWER(CONCAT(COALESCE(education_code,''), ' ', COALESCE(national_id,''))) LIKE $${params.length}`);
+    }
+    if (certificateOnly) {
+      conditions.push(`best_score >= 60`);
+    }
+
+    const whereSql = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const countSql = `SELECT COUNT(*)::int AS total FROM exam_portal_best_scores ${whereSql}`;
+    const listSql = `SELECT * FROM exam_portal_best_scores ${whereSql} ORDER BY updated_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    const [countResult, listResult] = await Promise.all([
+      pool.query(countSql, params),
+      pool.query(listSql, [...params, pageSize, offset]),
+    ]);
+    return res.json({
+      data: listResult.rows.map((row) => {
+        const api = toApiObject(row);
+        return {
+          ...api,
+          certificateEligible: Number(row.best_score) >= 60,
+        };
+      }),
+      pagination: {
+        page,
+        pageSize,
+        total: countResult.rows[0].total,
+        totalPages: Math.max(1, Math.ceil(countResult.rows[0].total / pageSize)),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/admin/exam-results/:id", auth, checkPermission("examResults", "can_delete"), async (req, res, next) => {
+  try {
+    const id = String(req.params.id || "").trim();
+    const previous = await pool.query(`SELECT * FROM exam_portal_best_scores WHERE id = $1 LIMIT 1`, [id]);
+    if (!previous.rows[0]) return res.status(404).json({ message: "Kayıt bulunamadı." });
+    await pool.query(`DELETE FROM exam_portal_best_scores WHERE id = $1`, [id]);
+    await writeActivityLog({ req, action: "delete", moduleName: "examResults", entityId: id, oldData: previous.rows[0] });
+    return res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/admin/:moduleName", auth, async (req, res, next) => {
   const { moduleName } = req.params;
   const config = moduleConfig[moduleName];
@@ -2743,6 +3016,10 @@ const startServer = async () => {
     await migrateNormalUserDetailsNationalIdUnique();
     await migrateExamQuestionBatchColumns();
     await migrateExamAttemptsTable();
+    await migrateExamPortalVisitTable();
+    await migrateExamPortalBestScoresTable();
+    await migrateExamPortalAccessPermissions();
+    await migrateExamResultsPermissions();
     await migrateContactFormTimestampsToIstanbul();
   } catch (error) {
     // eslint-disable-next-line no-console

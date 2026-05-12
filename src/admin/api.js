@@ -55,4 +55,21 @@ export const adminApi = {
     formData.append("mode", mode);
     return request("/admin/uploads/exam-doc", { method: "POST", body: formData });
   },
+  getExamPortalVisits: (page = 1, search = "") =>
+    request(`/admin/exam-portal/visits?page=${page}&search=${encodeURIComponent(search)}`),
+  deleteExamPortalVisit: (id) => request(`/admin/exam-portal/visits/${id}`, { method: "DELETE" }),
+  getExamPortalLimitExceeded: (page = 1, search = "") =>
+    request(`/admin/exam-portal/limit-exceeded?page=${page}&search=${encodeURIComponent(search)}`),
+  deleteExamPortalLimitExceeded: (payload) =>
+    request("/admin/exam-portal/limit-exceeded", { method: "DELETE", body: JSON.stringify(payload) }),
+  getExamResults: ({ page = 1, search = "", educationCode = "", nationalId = "", certificateOnly = false } = {}) => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    if (search) params.set("search", search);
+    if (educationCode) params.set("educationCode", educationCode);
+    if (nationalId) params.set("nationalId", nationalId);
+    if (certificateOnly) params.set("certificateOnly", "1");
+    return request(`/admin/exam-results?${params.toString()}`);
+  },
+  deleteExamResult: (id) => request(`/admin/exam-results/${id}`, { method: "DELETE" }),
 };

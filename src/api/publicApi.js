@@ -31,6 +31,11 @@ export const publicApi = {
     });
     return request(`/public/educations?${params.toString()}`);
   },
+  recordExamPortalVisit: ({ portalUrl, educationCode, nationalId }) =>
+    request("/public/exam-portal/visit", {
+      method: "POST",
+      body: JSON.stringify({ portalUrl, educationCode, nationalId }),
+    }),
   startExamPortal: ({ educationCode, nationalId }) =>
     request("/public/exam-portal/start", {
       method: "POST",

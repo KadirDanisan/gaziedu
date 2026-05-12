@@ -153,10 +153,16 @@ export default function ExamPortalPage() {
       setLoadError("Sorular yüklenemedi. Lütfen sayfayı yenileyin.");
       return;
     }
+    const code = String(examRef.current?.education?.code || educationCode || "").trim().toUpperCase();
+    const tc = String(nationalId || "").trim();
+    if (/^[A-Z]{3}\d{7}$/.test(code) && /^\d{11}$/.test(tc)) {
+      const portalUrl = `${window.location.origin}/sinavportali/${encodeURIComponent(code)}/${tc}`;
+      publicApi.recordExamPortalVisit({ portalUrl, educationCode: code, nationalId: tc }).catch(() => {});
+    }
     setLoadError("");
     setCurrentIndex(0);
     setStarted(true);
-  }, [questions.length]);
+  }, [questions.length, educationCode, nationalId]);
 
   if (!flowStarted) {
     return (
