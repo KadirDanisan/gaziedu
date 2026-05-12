@@ -77,4 +77,16 @@ export const adminApi = {
       method: "PATCH",
       body: JSON.stringify({ paymentReceived: true }),
     }),
+  getMessagingAdmins: () => request("/admin/messaging/admins"),
+  getMessagingAnnouncements: (page = 1) => request(`/admin/messaging/announcements?page=${page}`),
+  postMessagingAnnouncement: (payload) => request("/admin/messaging/announcements", { method: "POST", body: JSON.stringify(payload) }),
+  getMessagingDmThreads: () => request("/admin/messaging/dm/threads"),
+  getMessagingDmMessages: (peerId) => request(`/admin/messaging/dm/peers/${peerId}/messages`),
+  postMessagingDmMessage: (peerId, body) =>
+    request(`/admin/messaging/dm/peers/${peerId}/messages`, { method: "POST", body: JSON.stringify({ body }) }),
+  getMessagingGroups: () => request("/admin/messaging/groups"),
+  postMessagingGroup: (payload) => request("/admin/messaging/groups", { method: "POST", body: JSON.stringify(payload) }),
+  getMessagingGroupMessages: (groupId) => request(`/admin/messaging/groups/${groupId}/messages`),
+  postMessagingGroupMessage: (groupId, body) =>
+    request(`/admin/messaging/groups/${groupId}/messages`, { method: "POST", body: JSON.stringify({ body }) }),
 };

@@ -302,3 +302,62 @@ CREATE TABLE IF NOT EXISTS error_logs (
   payload JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS admin_announcements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT,
+  body TEXT NOT NULL CHECK (char_length(body) <= 16000),
+  author_id UUID REFERENCES admin_users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS admin_announcements_created_idx ON admin_announcements (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS admin_dm_threads (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_low_id UUID NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  user_high_id UUID NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  last_message_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_low_id, user_high_id),
+  CHECK (user_low_id < user_high_id)
+);
+
+CREATE INDEX IF NOT EXISTS admin_dm_threads_participant_idx ON admin_dm_threads (user_low_id, user_high_id);
+CREATE INDEX IF NOT EXISTS admin_dm_threads_last_idx ON admin_dm_threads (last_message_at DESC);
+
+CREATE TABLE IF NOT EXISTS admin_dm_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  thread_id UUID NOT NULL REFERENCES admin_dm_threads(id) ON DELETE CASCADE,
+  sender_id UUID NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL CHECK (char_length(body) <= 8000),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS admin_dm_messages_thread_time_idx ON admin_dm_messages (thread_id, created_at ASC);
+
+CREATE TABLE IF NOT EXISTS admin_chat_groups (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL CHECK (char_length(trim(name)) > 0 AND char_length(name) <= 120),
+  created_by_id UUID REFERENCES admin_users(id) ON DELETE SET NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS admin_chat_group_members (
+  group_id UUID NOT NULL REFERENCES admin_chat_groups(id) ON DELETE CASCADE,
+  admin_user_id UUID NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (group_id, admin_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS admin_chat_group_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  group_id UUID NOT NULL REFERENCES admin_chat_groups(id) ON DELETE CASCADE,
+  sender_id UUID NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL CHECK (char_length(body) <= 8000),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS admin_chat_group_messages_group_time_idx ON admin_chat_group_messages (group_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS admin_chat_groups_updated_idx ON admin_chat_groups (updated_at DESC);
