@@ -231,10 +231,9 @@ export default function AdminMessagingPage() {
     <section className="admin-page admin-messaging-page">
       <div className="admin-page-head">
         <div>
-          <h2>Yönetici sohbeti</h2>
+          <h2>Yönetim Paneli Sohbeti</h2>
           <p>
-            Tüm yöneticiler duyuruları görür. Özel mesajlar yalnızca ilgili kişiler arasındadır. Gruplarda üyeler birlikte yazışır.
-            Duyuru ve grup oluşturma <strong>Süper Admin</strong> ve <strong>Admin</strong> rollerine aittir.
+            Duyurular ve mesajları yönetin.
           </p>
         </div>
       </div>

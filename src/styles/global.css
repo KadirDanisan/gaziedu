@@ -490,6 +490,13 @@ html {
   gap: 12px;
 }
 
+.admin-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .admin-profile small {
   display: block;
   color: #60708d;
@@ -1610,6 +1617,11 @@ html {
 
 .admin-form-error {
   color: #c13030;
+}
+
+.admin-settings-hint {
+  font-weight: 500;
+  color: #64708d;
 }
 
 .admin-no-access {

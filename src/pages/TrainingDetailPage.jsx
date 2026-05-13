@@ -164,99 +164,97 @@ function TrainingReviewsSection({ course, onRatingUpdated }) {
         </p>
       )}
 
-      {canSync && (
-        <>
-          <div className="training-review-compose">
-            <div className="training-review-compose-head">
-              <span className="training-review-compose-title">Değerlendirme</span>
-            </div>
+      {canSync ? (
+        <div className="training-review-compose">
+          <div className="training-review-compose-head">
+            <span className="training-review-compose-title">Değerlendirme</span>
+          </div>
 
-            {isLoggedIn ? (
-              <form className="training-review-form" onSubmit={handleSubmitReview}>
-                <div className="training-review-stars-row">
-                  <span className="training-review-label">Puanınız</span>
-                  <div
-                    className="training-review-stars-input"
-                    role="group"
-                    aria-label="Yıldız puanı"
-                    onMouseLeave={() => setHoverStar(0)}
-                  >
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        className={`training-review-star-btn${n <= displayStars ? " is-on" : ""}`}
-                        onMouseEnter={() => setHoverStar(n)}
-                        onClick={() => setRating(n)}
-                        aria-label={`${n} yıldız`}
-                      >
-                        <i className="fa-solid fa-star" aria-hidden />
-                      </button>
-                    ))}
-                  </div>
+          {isLoggedIn ? (
+            <form className="training-review-form" onSubmit={handleSubmitReview}>
+              <div className="training-review-stars-row">
+                <span className="training-review-label">Puanınız</span>
+                <div
+                  className="training-review-stars-input"
+                  role="group"
+                  aria-label="Yıldız puanı"
+                  onMouseLeave={() => setHoverStar(0)}
+                >
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      className={`training-review-star-btn${n <= displayStars ? " is-on" : ""}`}
+                      onMouseEnter={() => setHoverStar(n)}
+                      onClick={() => setRating(n)}
+                      aria-label={`${n} yıldız`}
+                    >
+                      <i className="fa-solid fa-star" aria-hidden />
+                    </button>
+                  ))}
                 </div>
+              </div>
 
-                <label className="training-review-field">
-                  <span className="training-review-label">Yorumunuz (isteğe bağlı)</span>
-                  <textarea
-                    rows={4}
-                    maxLength={4000}
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    placeholder="Deneyiminizi paylaşın..."
-                    className="training-review-textarea"
-                  />
-                </label>
+              <label className="training-review-field">
+                <span className="training-review-label">Yorumunuz (isteğe bağlı)</span>
+                <textarea
+                  rows={4}
+                  maxLength={4000}
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Deneyiminizi paylaşın..."
+                  className="training-review-textarea"
+                />
+              </label>
 
-                {formError ? <p className="training-review-msg is-error">{formError}</p> : null}
-                {formOk ? <p className="training-review-msg is-ok">{formOk}</p> : null}
+              {formError ? <p className="training-review-msg is-error">{formError}</p> : null}
+              {formOk ? <p className="training-review-msg is-ok">{formOk}</p> : null}
 
-                <button type="submit" className="btn training-review-submit" disabled={submitting}>
-                  {submitting ? "Gönderiliyor..." : "Gönder"}
-                </button>
-              </form>
-            ) : (
-              <p className="training-review-login-prompt">
-                Değerlendirme yapmak için{" "}
-                <Link to="/kullanici-islemleri" className="training-review-login-link">
-                  giriş yapın
-                </Link>
-                .
-              </p>
-            )}
-          </div>
+              <button type="submit" className="btn training-review-submit" disabled={submitting}>
+                {submitting ? "Gönderiliyor..." : "Gönder"}
+              </button>
+            </form>
+          ) : (
+            <p className="training-review-login-prompt">
+              Değerlendirme yapmak için{" "}
+              <Link to="/kullanici-islemleri" className="training-review-login-link">
+                giriş yapın
+              </Link>
+              .
+            </p>
+          )}
+        </div>
+      ) : null}
 
-          <div className="training-detail-reviews">
-            {loadingReviews && <p className="training-review-loading">Yorumlar yükleniyor...</p>}
-            {!loadingReviews && !reviews.length && (
-              <p className="training-review-empty">Henüz yorum yok. İlk değerlendirmeyi siz paylaşabilirsiniz.</p>
-            )}
-            {!loadingReviews &&
-              reviews.map((review) => (
-                <article key={review.id} className="training-detail-review">
-                  <div className="training-review-card-head">
-                    <strong>{review.authorLabel}</strong>
-                    <div className="training-review-stars-readonly" aria-hidden>
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <i
-                          key={n}
-                          className={n <= review.rating ? "fa-solid fa-star" : "fa-regular fa-star"}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  {!!review.comment?.trim() && <p className="training-review-body">{review.comment.trim()}</p>}
-                  {!review.comment?.trim() && (
-                    <p className="training-review-body is-muted">Yorumsuz</p>
-                  )}
-                  <time className="training-review-date" dateTime={review.createdAt}>
-                    {formatReviewDate(review.createdAt)}
-                  </time>
-                </article>
-              ))}
-          </div>
-        </>
-      )}
+      <div className="training-detail-reviews">
+        {loadingReviews && <p className="training-review-loading">Yorumlar yükleniyor...</p>}
+        {!loadingReviews && !reviews.length && (
+          <p className="training-review-empty">Henüz yorum yok. İlk değerlendirmeyi siz paylaşabilirsiniz.</p>
+        )}
+        {!loadingReviews &&
+          reviews.map((review) => (
+            <article key={review.id} className="training-detail-review">
+              <div className="training-review-card-head">
+                <strong>{review.authorLabel}</strong>
+                <div className="training-review-stars-readonly" aria-hidden>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <i
+                      key={n}
+                      className={n <= review.rating ? "fa-solid fa-star" : "fa-regular fa-star"}
+                    />
+                  ))}
+                </div>
+              </div>
+              {!!review.comment?.trim() && <p className="training-review-body">{review.comment.trim()}</p>}
+              {!review.comment?.trim() && (
+                <p className="training-review-body is-muted">Yorumsuz</p>
+              )}
+              <time className="training-review-date" dateTime={review.createdAt}>
+                {formatReviewDate(review.createdAt)}
+              </time>
+            </article>
+          ))}
+      </div>
     </>
   );
 }

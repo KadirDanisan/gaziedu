@@ -25,6 +25,7 @@ async function request(path, options = {}) {
 
 export const adminApi = {
   login: (email, password) => request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  patchAdminProfile: (payload) => request("/auth/admin/me", { method: "PATCH", body: JSON.stringify(payload) }),
   getBootstrap: () => request("/admin/bootstrap"),
   getDashboard: () => request("/admin/dashboard"),
   getActivityLogs: (page = 1, pageSize = 100) => request(`/admin/activity-logs?page=${page}&pageSize=${pageSize}`),

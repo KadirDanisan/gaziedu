@@ -54,6 +54,12 @@ export function AdminAuthProvider({ children }) {
     setPermissions([]);
   };
 
+  const updateAdminSession = ({ token, user }) => {
+    localStorage.setItem("adminToken", token);
+    localStorage.setItem("adminSession", JSON.stringify({ userType: "admin", user }));
+    setSession({ userType: "admin", user });
+  };
+
   const roleId = session?.user?.roleId;
   const permissionMap = useMemo(() => getPermissionMap(permissions, roleId), [permissions, roleId]);
 
@@ -68,7 +74,20 @@ export function AdminAuthProvider({ children }) {
   }, []);
 
   return (
-    <AdminAuthContext.Provider value={{ session, loginAdmin, logout, hasPermission, permissionMap, permissions, setPermissions, hydrateSession, isReady }}>
+    <AdminAuthContext.Provider
+      value={{
+        session,
+        loginAdmin,
+        logout,
+        updateAdminSession,
+        hasPermission,
+        permissionMap,
+        permissions,
+        setPermissions,
+        hydrateSession,
+        isReady,
+      }}
+    >
       {children}
     </AdminAuthContext.Provider>
   );
