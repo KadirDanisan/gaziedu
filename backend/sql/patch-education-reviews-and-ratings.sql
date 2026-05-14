@@ -1,5 +1,6 @@
 -- ---------------------------------------------------------------------------
 -- Eğitim değerlendirmesi: yorumlar tablosu, ortalama puan kolonları, tetikleyici
+-- Önerilen sıra: education-categories.sql → (isteğe) approved-educations.sql → bu dosya
 -- Mevcut veritabanına uygulamak için SQL editörde çalıştırın.
 -- Tekrar çalıştırılabilir (ADD COLUMN IF NOT EXISTS, CREATE IF NOT EXISTS, vb.)
 -- PostgreSQL 12+ önerilir. Tetikleyicide EXECUTE PROCEDURE kullanıldı (PG 11+).

@@ -1793,7 +1793,7 @@ app.get("/api/users/favorites", userAuth, async (req, res, next) => {
       `SELECT f.created_at AS sort_date, e.id, e.name, e.description, e.image_url, e.code, e.duration, e.content_doc_path, e.category_id, c.category_name, NULL::timestamptz AS calendar_date, f.target_type AS source_type, e.rating_average, e.rating_count, e.institution_id, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url
        FROM user_favorites f
        INNER JOIN educations e ON f.target_type = 'education' AND e.id = f.education_id
-       LEFT JOIN education_categories c ON c.id = e.category_id
+       LEFT JOIN  c ON c.id = e.category_id
        LEFT JOIN institutions i ON i.id = e.institution_id
        WHERE f.user_id = $1
        UNION ALL

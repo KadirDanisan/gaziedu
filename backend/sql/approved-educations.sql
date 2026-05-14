@@ -1,4 +1,5 @@
 -- Onaylanmış eğitim listesi (PostgreSQL)
+-- Önce: education-categories.sql (education_categories + category_id kolonları)
 -- Eğitim listesi formunda kod seçimi ve kurumsal referans için kullanılır.
 
 CREATE TABLE IF NOT EXISTS approved_educations (
