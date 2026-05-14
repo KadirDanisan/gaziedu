@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS instructors (
   about TEXT,
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
+  admin_user_id UUID UNIQUE REFERENCES admin_users(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
