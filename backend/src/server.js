@@ -426,6 +426,12 @@ const migrateExamResultsPermissions = async () => {
   `);
 };
 
+const migrateExamQuestionSettingsColumns = async () => {
+  await pool.query(`ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS exam_target_difficulty TEXT NOT NULL DEFAULT 'medium'`);
+  await pool.query(`ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS exam_question_count INT NOT NULL DEFAULT 20`);
+  await pool.query(`ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS pool_question_count INT NOT NULL DEFAULT 60`);
+};
+
 const migrateAdminMessagingTables = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_announcements (
@@ -583,6 +589,9 @@ const dbToApiMap = {
   questions_doc_path: "questionsDocPath",
   questions_doc_name: "questionsDocName",
   generated_questions: "generatedQuestions",
+  exam_target_difficulty: "examTargetDifficulty",
+  exam_question_count: "examQuestionCount",
+  pool_question_count: "poolQuestionCount",
   admin_first_name: "adminFirstName",
   admin_last_name: "adminLastName",
   admin_email: "adminEmail",
@@ -882,19 +891,42 @@ const extractDocxText = async (docPath) => {
   return result.value || "";
 };
 
-const normalizeQuestions = (items = []) =>
-  items.slice(0, 20).map((item, index) => ({
-    question: item.question || item.text || `Soru ${index + 1}`,
-    options: Array.isArray(item.options) && item.options.length ? item.options.slice(0, 4) : ["A", "B", "C", "D"],
-    correctAnswer: item.correctAnswer || item.answer || "",
-  }));
+const EXAM_MCQ_OPTIONS = 5;
+const EXAM_SECONDS_PER_QUESTION = 90;
+
+const normalizeCorrectLetter = (value) => {
+  const raw = String(value ?? "").trim().toUpperCase();
+  const one = raw.match(/^[A-E]$/);
+  if (one) return one[0];
+  const pref = raw.match(/^([A-E])[\).:-]/i);
+  return pref ? pref[1].toUpperCase() : "";
+};
+
+const normalizeQuestions = (items = [], maxCount = 300) =>
+  items.slice(0, Math.max(0, maxCount)).map((item, index) => {
+    let options = [];
+    if (Array.isArray(item.options) && item.options.length) {
+      options = item.options.map((o) => String(o ?? "").trim()).filter(Boolean).slice(0, EXAM_MCQ_OPTIONS);
+    }
+    while (options.length < EXAM_MCQ_OPTIONS) {
+      options.push(`Seçenek ${String.fromCharCode(65 + options.length)}`);
+    }
+    let correct = normalizeCorrectLetter(item.correctAnswer || item.answer || "");
+    const maxLetter = String.fromCharCode(65 + options.length - 1);
+    if (!correct || correct > maxLetter) correct = "A";
+    return {
+      question: item.question || item.text || `Soru ${index + 1}`,
+      options,
+      correctAnswer: correct,
+    };
+  });
 
 const normalizeExamQuestionPool = (value) => {
   const parsed = typeof value === "string" ? JSON.parse(value) : value || {};
   return {
-    easy: normalizeQuestions(Array.isArray(parsed.easy) ? parsed.easy : []),
-    medium: normalizeQuestions(Array.isArray(parsed.medium) ? parsed.medium : []),
-    hard: normalizeQuestions(Array.isArray(parsed.hard) ? parsed.hard : []),
+    easy: normalizeQuestions(Array.isArray(parsed.easy) ? parsed.easy : [], 500),
+    medium: normalizeQuestions(Array.isArray(parsed.medium) ? parsed.medium : [], 500),
+    hard: normalizeQuestions(Array.isArray(parsed.hard) ? parsed.hard : [], 500),
   };
 };
 
@@ -907,21 +939,20 @@ const shuffleArray = (items) => {
   return arr;
 };
 
-const pickExamQuestions = (pool) => {
-  const pick = (difficulty, count) =>
-    shuffleArray((pool[difficulty] || []).map((question, index) => ({ ...question, difficulty, originalIndex: index })))
-      .slice(0, count);
-  return shuffleArray([
-    ...pick("easy", 10),
-    ...pick("medium", 5),
-    ...pick("hard", 5),
-  ]).map((question, index) => ({
-    id: `${question.difficulty}-${question.originalIndex}-${index}`,
-    difficulty: question.difficulty,
-    question: question.question,
-    options: question.options,
-    correctAnswer: question.correctAnswer,
-  }));
+const pickExamQuestions = (pool, targetDifficulty = "medium", examQuestionCount = 20) => {
+  const key = ["easy", "medium", "hard"].includes(targetDifficulty) ? targetDifficulty : "medium";
+  const list = pool[key] || [];
+  const want = Math.max(1, Math.min(200, Number(examQuestionCount) || 20));
+  const n = Math.min(want, list.length);
+  return shuffleArray(list.map((question, index) => ({ ...question, difficulty: key, originalIndex: index })))
+    .slice(0, n)
+    .map((question, index) => ({
+      id: `${key}-${question.originalIndex}-${index}`,
+      difficulty: key,
+      question: question.question,
+      options: question.options,
+      correctAnswer: question.correctAnswer,
+    }));
 };
 
 const publicExamQuestion = (question, index) => ({
@@ -935,9 +966,9 @@ const publicExamQuestion = (question, index) => ({
 const normalizeExamAnswer = (value, options = []) => {
   const raw = String(value ?? "").trim();
   if (!raw) return "";
-  const letter = raw.match(/^[A-D]$/i)?.[0]?.toUpperCase();
+  const letter = raw.match(/^[A-E]$/i)?.[0]?.toUpperCase();
   if (letter) return letter;
-  const byPrefix = raw.match(/^([A-D])[\).:-]\s*/i)?.[1]?.toUpperCase();
+  const byPrefix = raw.match(/^([A-E])[\).:-]\s*/i)?.[1]?.toUpperCase();
   if (byPrefix) return byPrefix;
   const idx = options.findIndex((option) => String(option ?? "").trim().toLowerCase() === raw.toLowerCase());
   return idx >= 0 ? String.fromCharCode(65 + idx) : raw.toLowerCase();
@@ -992,55 +1023,70 @@ const parseQuestionsFromText = (text) => {
     const questionLine = lines[0]?.replace(/^(?:Soru\s*)?\d+[\).:-]?\s*/i, "") || `Soru ${index + 1}`;
     const options = lines
       .slice(1)
-      .filter((line) => /^[A-D][\).:-]\s*/i.test(line))
-      .map((line) => line.replace(/^[A-D][\).:-]\s*/i, ""));
+      .filter((line) => /^[A-E][\).:-]\s*/i.test(line))
+      .map((line) => line.replace(/^[A-E][\).:-]\s*/i, ""));
     const answerLine = lines.find((line) => /^(?:cevap|doğru cevap|dogru cevap|yanıt|yanit)\s*[:.-]/i.test(line));
     const correctAnswer = answerLine?.replace(/^(?:cevap|doğru cevap|dogru cevap|yanıt|yanit)\s*[:.-]\s*/i, "") || "";
+    const defaults = Array.from({ length: EXAM_MCQ_OPTIONS }, (_, i) => `Seçenek ${String.fromCharCode(65 + i)}`);
     return {
       question: questionLine,
-      options: options.length ? options : ["A secenegi", "B secenegi", "C secenegi", "D secenegi"],
+      options: options.length ? options : defaults,
       correctAnswer,
     };
   });
 };
 
-const fallbackQuestionsFromText = (text, mode) => {
+const fallbackQuestionsFromText = (text, mode, targetDifficulty = "medium", poolQuestionCount = 60) => {
+  const N = Math.min(300, Math.max(5, Number(poolQuestionCount) || 60));
+  const t = ["easy", "medium", "hard"].includes(targetDifficulty) ? targetDifficulty : "medium";
+  const emptyPool = () => ({ easy: [], medium: [], hard: [] });
   if (mode === "classify") {
     const parsedQuestions = parseQuestionsFromText(text);
-    const normalized = parsedQuestions.length >= 3 ? parsedQuestions : text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => ({
-      question: line,
-      options: ["A secenegi", "B secenegi", "C secenegi", "D secenegi"],
-      correctAnswer: "",
-    }));
-    return {
-      easy: normalizeQuestions(normalized.slice(0, 20)),
-      medium: normalizeQuestions(normalized.slice(20, 40)),
-      hard: normalizeQuestions(normalized.slice(40, 60)),
-    };
+    const src =
+      parsedQuestions.length >= 3
+        ? parsedQuestions
+        : text
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .map((line) => ({
+              question: line,
+              options: [],
+              correctAnswer: "",
+            }));
+    const out = emptyPool();
+    out[t] = normalizeQuestions(src.slice(0, N), N);
+    return out;
   }
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const seed = lines.length ? lines : ["Genel konu"];
-  const make = (difficulty) =>
-    Array.from({ length: 20 }, (_, index) => {
-      const topic = seed[index % seed.length];
-      return {
-        question: mode === "classify" ? topic : `${topic} konusu icin ${difficulty} seviyesinde soru ${index + 1}`,
-        options: ["A secenegi", "B secenegi", "C secenegi", "D secenegi"],
-        correctAnswer: "A",
-      };
-    });
-  return { easy: make("kolay"), medium: make("orta"), hard: make("zor") };
+  const label = t === "easy" ? "kolay" : t === "hard" ? "zor" : "orta";
+  const items = Array.from({ length: N }, (_, index) => {
+    const topic = seed[index % seed.length];
+    return {
+      question: `${topic} konusu icin ${label} seviyesinde soru ${index + 1}`,
+      options: Array.from({ length: EXAM_MCQ_OPTIONS }, (_, i) => `Secenek ${String.fromCharCode(65 + i)}`),
+      correctAnswer: "A",
+    };
+  });
+  const out = emptyPool();
+  out[t] = normalizeQuestions(items, N);
+  return out;
 };
 
-const getExamAiPrompt = ({ text, mode }) => {
-  const instruction = mode === "generate"
-    ? "Verilen konu basliklarindan toplam 60 coktan secmeli soru uret: 20 easy, 20 medium, 20 hard. Her soruda question, 4 adet options ve correctAnswer zorunlu olsun."
-    : "Verilen 60 soruyu zorluk seviyesine gore ayir: 20 easy, 20 medium, 20 hard. Sorulari, secenekleri ve dogru cevaplari mumkun oldugunca aynen koru. Eksik secenek varsa 4 secenek tamamla.";
+const getExamAiPrompt = ({ text, mode, targetDifficulty = "medium", poolQuestionCount = 60 }) => {
+  const N = Math.min(300, Math.max(5, Number(poolQuestionCount) || 60));
+  const t = ["easy", "medium", "hard"].includes(targetDifficulty) ? targetDifficulty : "medium";
+  const labelMap = { easy: "kolay (easy)", medium: "orta (medium)", hard: "zor (hard)" };
+  const instruction =
+    mode === "generate"
+      ? `Verilen konu basliklarindan tam ${N} adet coktan secmeli soru uret. Tum sorular "${labelMap[t]}" zorlugunda olmali; yalnizca JSON anahtari "${t}" icinde listele, diger iki anahtar bos dizi [] olsun. Her soruda: question, tam ${EXAM_MCQ_OPTIONS} adet options (A..E), correctAnswer tek harf A-E.`
+      : `Verilen icerikteki sorulari oku; tam ${N} soruyu "${labelMap[t]}" zorluguna gore siniflandir ve yalnizca "${t}" anahtarina diz; diger iki anahtar bos []. Her soruda ${EXAM_MCQ_OPTIONS} secenek ve dogru cevap A-E; eksik secenek varsa anlamli metinle tamamla.`;
   return [
     "Sadece gecerli JSON don.",
-    "Sema: {\"easy\":[{\"question\":\"\",\"options\":[\"\",\"\",\"\",\"\"],\"correctAnswer\":\"\"}],\"medium\":[],\"hard\":[]}.",
-    "Her grupta tam 20 soru olmali.",
-    "Secenekler gercek cevap secenekleri olmali, placeholder kullanma.",
+    `Sema: {"easy":[],"medium":[],"hard":[]} — "${t}" listesinde tam ${N} soru; diger iki liste bos [].`,
+    `Her soru: {"question":"...","options":["","","","",""],"correctAnswer":"A"} — options tam ${EXAM_MCQ_OPTIONS} eleman.`,
+    "Secenekler gercek metin olmali.",
     instruction,
     "",
     "Icerik:",
@@ -1048,21 +1094,22 @@ const getExamAiPrompt = ({ text, mode }) => {
   ].join("\n");
 };
 
-const parseAiQuestionJson = (content, providerName) => {
+const parseAiQuestionJson = (content, providerName, poolQuestionCount = 60) => {
+  const N = Math.min(300, Math.max(5, Number(poolQuestionCount) || 60));
   try {
     const cleaned = String(content || "").replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
     const parsed = JSON.parse(cleaned);
     return {
-      easy: normalizeQuestions(parsed.easy),
-      medium: normalizeQuestions(parsed.medium),
-      hard: normalizeQuestions(parsed.hard),
+      easy: normalizeQuestions(Array.isArray(parsed.easy) ? parsed.easy : [], N),
+      medium: normalizeQuestions(Array.isArray(parsed.medium) ? parsed.medium : [], N),
+      hard: normalizeQuestions(Array.isArray(parsed.hard) ? parsed.hard : [], N),
     };
   } catch {
     throw new Error(`${providerName} yaniti JSON olarak okunamadi.`);
   }
 };
 
-const buildExamQuestionsWithGemini = async ({ text, mode }) => {
+const buildExamQuestionsWithGemini = async ({ text, mode, targetDifficulty, poolQuestionCount }) => {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY bulunamadi. Backend .env dosyasini kontrol edip sunucuyu restart edin.");
   }
@@ -1071,7 +1118,7 @@ const buildExamQuestionsWithGemini = async ({ text, mode }) => {
     throw new Error("GEMINI_MODEL .env icinde tanimli olmali (ornek: GEMINI_MODEL=gemini-3-flash-preview).");
   }
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  const prompt = getExamAiPrompt({ text, mode });
+  const prompt = getExamAiPrompt({ text, mode, targetDifficulty, poolQuestionCount });
   const supportsJsonMime = !model.includes("gemini-pro");
   try {
     const response = await ai.models.generateContent({
@@ -1087,20 +1134,26 @@ const buildExamQuestionsWithGemini = async ({ text, mode }) => {
     if (!content) {
       throw new Error(`${model}: bos yanit`);
     }
-    return parseAiQuestionJson(content, "Gemini");
+    return parseAiQuestionJson(content, "Gemini", poolQuestionCount);
   } catch (error) {
     throw new Error(`Gemini istegi basarisiz oldu (${model}): ${error?.message || error}`);
   }
 };
 
-const buildExamQuestionsWithAi = async ({ text, mode }) => {
+const buildExamQuestionsWithAi = async ({ text, mode, targetDifficulty, poolQuestionCount }) => {
   const provider = (process.env.AI_PROVIDER || (process.env.GEMINI_API_KEY ? "gemini" : "openai")).toLowerCase();
   if (provider === "gemini") {
-    return buildExamQuestionsWithGemini({ text, mode });
+    return buildExamQuestionsWithGemini({ text, mode, targetDifficulty, poolQuestionCount });
   }
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY bulunamadi. Backend .env dosyasini kontrol edip sunucuyu restart edin.");
   }
+  const N = Math.min(300, Math.max(5, Number(poolQuestionCount) || 60));
+  const systemJson =
+    "Sadece gecerli JSON don. Semalar: {\"easy\":[],\"medium\":[],\"hard\":[]}. " +
+    "Kullanici istegine gore yalnizca bir zorluk listesi dolu olacak; o listede tam " +
+    N +
+    " soru olmali. Her soru: {\"question\":\"\",\"options\":[\"\",\"\",\"\",\"\",\"\"],\"correctAnswer\":\"A\"} — options tam 5 eleman, dogru cevap A-E. Secenekler gercek metin olmali.";
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -1115,9 +1168,9 @@ const buildExamQuestionsWithAi = async ({ text, mode }) => {
       messages: [
         {
           role: "system",
-          content: "Sadece gecerli JSON don. Semalar: {\"easy\":[{\"question\":\"\",\"options\":[\"\",\"\",\"\",\"\"],\"correctAnswer\":\"\"}],\"medium\":[],\"hard\":[]}. Her grupta tam 20 soru olmali. Secenekler gercek cevap secenekleri olmali, placeholder kullanma.",
+          content: systemJson,
         },
-        { role: "user", content: getExamAiPrompt({ text, mode }) },
+        { role: "user", content: getExamAiPrompt({ text, mode, targetDifficulty, poolQuestionCount }) },
       ],
     }),
   });
@@ -1126,7 +1179,7 @@ const buildExamQuestionsWithAi = async ({ text, mode }) => {
     throw new Error(`OpenAI istegi basarisiz oldu: ${response.status} ${detail}`);
   }
   const data = await response.json();
-  return parseAiQuestionJson(data.choices?.[0]?.message?.content || "{}", "OpenAI");
+  return parseAiQuestionJson(data.choices?.[0]?.message?.content || "{}", "OpenAI", poolQuestionCount);
 };
 
 const normalizeUploadPath = (value) => {
@@ -1157,6 +1210,18 @@ const prepareExamQuestionPayload = (payload) => {
   if (typeof payload.questions_doc_path === "string") payload.questions_doc_path = normalizeUploadPath(payload.questions_doc_path);
   if (payload.generated_questions && typeof payload.generated_questions === "object") {
     payload.generated_questions = JSON.stringify(payload.generated_questions);
+  }
+  if (payload.exam_target_difficulty !== undefined) {
+    const d = String(payload.exam_target_difficulty || "medium").toLowerCase();
+    payload.exam_target_difficulty = ["easy", "medium", "hard"].includes(d) ? d : "medium";
+  }
+  if (payload.exam_question_count !== undefined) {
+    const n = parseInt(payload.exam_question_count, 10);
+    payload.exam_question_count = Math.min(200, Math.max(1, Number.isFinite(n) ? n : 20));
+  }
+  if (payload.pool_question_count !== undefined) {
+    const n = parseInt(payload.pool_question_count, 10);
+    payload.pool_question_count = Math.min(300, Math.max(5, Number.isFinite(n) ? n : 60));
   }
   delete payload.question_text;
   delete payload.difficulty;
@@ -2067,7 +2132,8 @@ app.post("/api/public/exam-portal/start", async (req, res, next) => {
     }
 
     const questionResult = await pool.query(
-      `SELECT eq.id, eq.generated_questions, eq.updated_at, e.id AS education_id, e.name AS education_name, e.code AS education_code, e.duration AS education_duration
+      `SELECT eq.id, eq.generated_questions, eq.exam_target_difficulty, eq.exam_question_count, eq.pool_question_count,
+              eq.updated_at, e.id AS education_id, e.name AS education_name, e.code AS education_code, e.duration AS education_duration
        FROM exam_questions eq
        INNER JOIN educations e ON e.id = eq.education_id
        WHERE UPPER(e.code) = $1
@@ -2088,11 +2154,18 @@ app.post("/api/public/exam-portal/start", async (req, res, next) => {
     };
 
     const poolQuestions = normalizeExamQuestionPool(questionSet.generated_questions);
-    if (poolQuestions.easy.length < 10 || poolQuestions.medium.length < 5 || poolQuestions.hard.length < 5) {
-      return res.status(400).json({ message: "Sınav için yeterli soru yok (10 kolay, 5 orta, 5 zor gerekli)." });
+    const targetDifficulty = String(questionSet.exam_target_difficulty || "medium").toLowerCase();
+    const difficultyKey = ["easy", "medium", "hard"].includes(targetDifficulty) ? targetDifficulty : "medium";
+    const examQuestionCount = Math.min(200, Math.max(1, parseInt(questionSet.exam_question_count, 10) || 20));
+    const bucket = poolQuestions[difficultyKey] || [];
+    if (bucket.length < examQuestionCount) {
+      return res.status(400).json({
+        message: `Bu zorluk seviyesi (${difficultyKey}) için havuzda yeterli soru yok (${bucket.length}/${examQuestionCount}).`,
+      });
     }
 
-    const selectedQuestions = pickExamQuestions(poolQuestions);
+    const selectedQuestions = pickExamQuestions(poolQuestions, difficultyKey, examQuestionCount);
+    const durationSeconds = selectedQuestions.length * EXAM_SECONDS_PER_QUESTION;
     const attemptResult = await pool.query(
       `INSERT INTO exam_attempts
         (education_id, exam_question_id, education_code, national_id, selected_questions)
@@ -2105,7 +2178,7 @@ app.post("/api/public/exam-portal/start", async (req, res, next) => {
     return res.status(201).json({
       attemptId: attempt.id,
       startedAt: attempt.started_at,
-      durationSeconds: 40 * 60,
+      durationSeconds,
       education: {
         id: effectiveEducation.id,
         code: effectiveEducation.code,
@@ -2152,7 +2225,9 @@ app.post("/api/public/exam-portal/:attemptId/submit", async (req, res, next) => 
     const graded = gradeExamAttempt(Array.isArray(selectedQuestions) ? selectedQuestions : [], answers);
     const startedAt = new Date(previous.started_at).getTime();
     const elapsed = Number.isFinite(startedAt) ? Math.max(0, Math.round((Date.now() - startedAt) / 1000)) : 0;
-    const durationSeconds = Math.min(40 * 60, elapsed);
+    const qCount = Array.isArray(selectedQuestions) ? selectedQuestions.length : 0;
+    const maxAllowedSeconds = Math.max(EXAM_SECONDS_PER_QUESTION, qCount * EXAM_SECONDS_PER_QUESTION);
+    const durationSeconds = Math.min(maxAllowedSeconds, elapsed);
     const result = await pool.query(
       `UPDATE exam_attempts
        SET answers = $2::jsonb,
@@ -2494,9 +2569,14 @@ app.post("/api/admin/uploads/exam-doc", auth, uploadDoc.single("file"), async (r
     const extension = path.extname(req.file.originalname || "").toLowerCase();
     if (extension !== ".docx") return res.status(400).json({ message: "Sadece .docx dosyası yüklenebilir." });
     if (mode !== "generate" && mode !== "classify") return res.status(400).json({ message: "Geçersiz işlem tipi." });
+    const targetDifficulty = String(req.body?.targetDifficulty || "medium").toLowerCase();
+    if (!["easy", "medium", "hard"].includes(targetDifficulty)) {
+      return res.status(400).json({ message: "Zorluk kolay, orta veya zor olmalıdır." });
+    }
+    const poolQuestionCount = Math.min(300, Math.max(5, parseInt(req.body?.poolQuestionCount ?? "60", 10) || 60));
     const docPath = `/uploads/${req.file.filename}`;
     const text = await extractDocxText(docPath);
-    const questions = await buildExamQuestionsWithAi({ text, mode });
+    const questions = await buildExamQuestionsWithAi({ text, mode, targetDifficulty, poolQuestionCount });
     return res.status(201).json({
       fileName: req.file.originalname,
       path: docPath,
@@ -3604,6 +3684,7 @@ const startServer = async () => {
     await migrateExamPortalBestScoresTable();
     await migrateExamPortalAccessPermissions();
     await migrateExamResultsPermissions();
+    await migrateExamQuestionSettingsColumns();
     await migrateAdminMessagingTables();
     await migrateAdminMessagingPermissions();
     await migrateContactFormTimestampsToIstanbul();

@@ -95,13 +95,25 @@ const moduleConfig = {
   },
   examQuestions: {
     title: "Sınav Soruları",
-    fields: ["educationId", "instructorId", "topicDocPath", "questionsDocPath", "generatedQuestions"],
+    fields: [
+      "educationId",
+      "instructorId",
+      "examTargetDifficulty",
+      "examQuestionCount",
+      "poolQuestionCount",
+      "topicDocPath",
+      "questionsDocPath",
+      "generatedQuestions",
+    ],
     labels: {
       educationId: "Eğitim",
       instructorId: "Eğitmen",
-      topicDocPath: "Konu Başlıklı Word Dosyası",
-      questionsDocPath: "60 Soruluk Word Dosyası",
-      generatedQuestions: "Hazırlanan Sorular",
+      examTargetDifficulty: "Sınav zorluğu (havuz)",
+      examQuestionCount: "Sınavdaki soru sayısı",
+      poolQuestionCount: "Havuza alınacak soru sayısı (Word / AI)",
+      topicDocPath: "Konu başlıklı Word (.docx)",
+      questionsDocPath: "Hazır sorular Word (.docx)",
+      generatedQuestions: "Hazırlanan sorular (5 şık: A–E)",
     },
   },
 };
@@ -162,10 +174,21 @@ const renderTableCellValue = (field, value, maps = {}) => {
     return instructor.fullName || `${instructor.firstName || ""} ${instructor.lastName || ""}`.trim() || value || "-";
   }
   if (field === "educationId") return maps.educationsById?.[value]?.name || value || "-";
+  if (field === "examTargetDifficulty") {
+    const map = { easy: "Kolay", medium: "Orta", hard: "Zor" };
+    return map[value] || value || "-";
+  }
+  if (field === "examQuestionCount" || field === "poolQuestionCount") {
+    return value != null && value !== "" ? String(value) : "-";
+  }
   if (field === "generatedQuestions") {
     const groups = value || {};
-    const total = (groups.easy?.length || 0) + (groups.medium?.length || 0) + (groups.hard?.length || 0);
-    return total ? `${total} soru` : "-";
+    const e = groups.easy?.length || 0;
+    const m = groups.medium?.length || 0;
+    const h = groups.hard?.length || 0;
+    const total = e + m + h;
+    if (!total) return "-";
+    return `${total} soru (K:${e} O:${m} Z:${h})`;
   }
   return renderFieldValue(field, value);
 };
@@ -195,6 +218,21 @@ const examQuestionGroups = [
   { key: "medium", label: "Orta" },
   { key: "hard", label: "Zor" },
 ];
+
+const examDifficultySelectOptions = [
+  { value: "easy", label: "Kolay" },
+  { value: "medium", label: "Orta" },
+  { value: "hard", label: "Zor" },
+];
+
+function formatExamPoolDurationHint(examQuestionCount) {
+  const n = Math.min(200, Math.max(1, Number(examQuestionCount) || 20));
+  const sec = n * 90;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  const part = s ? `${m} dk ${s} sn` : `${m} dakika`;
+  return `${part} (her soru 1 dk 30 sn)`;
+}
 
 const renderExamQuestionPreview = (questions = {}, limit = 20) => (
   <div className="exam-question-preview">
@@ -324,6 +362,11 @@ export default function CrudListPage({ moduleKey }) {
     if (isEducationsModule) {
       initialForm._approvedEducationId = "";
     }
+    if (isExamQuestionsModule) {
+      initialForm.examTargetDifficulty = "medium";
+      initialForm.examQuestionCount = 20;
+      initialForm.poolQuestionCount = 60;
+    }
     setForm(initialForm);
   };
 
@@ -356,6 +399,14 @@ export default function CrudListPage({ moduleKey }) {
       if (editing === "new") {
         payload.isRead = false;
       }
+    }
+    if (isExamQuestionsModule) {
+      const eq = Math.min(200, Math.max(1, parseInt(String(payload.examQuestionCount ?? "20"), 10) || 20));
+      const pq = Math.min(300, Math.max(5, parseInt(String(payload.poolQuestionCount ?? "60"), 10) || 60));
+      const d = String(payload.examTargetDifficulty || "medium").toLowerCase();
+      payload.examQuestionCount = eq;
+      payload.poolQuestionCount = pq;
+      payload.examTargetDifficulty = ["easy", "medium", "hard"].includes(d) ? d : "medium";
     }
     if (editing === "new") await data.createItem(moduleKey, payload);
     else await data.updateItem(moduleKey, editing, payload);
@@ -430,7 +481,10 @@ export default function CrudListPage({ moduleKey }) {
     setExamDocUploading(mode);
     setError("");
     try {
-      const result = await data.uploadExamDoc(file, mode);
+      const result = await data.uploadExamDoc(file, mode, {
+        targetDifficulty: String(form.examTargetDifficulty || "medium").toLowerCase(),
+        poolQuestionCount: Math.min(300, Math.max(5, parseInt(String(form.poolQuestionCount ?? "60"), 10) || 60)),
+      });
       setForm((prev) => ({
         ...prev,
         ...(mode === "generate"
@@ -761,6 +815,44 @@ export default function CrudListPage({ moduleKey }) {
                         </option>
                       ))}
                     </select>
+                  ) : isExamQuestionsModule && field === "examTargetDifficulty" ? (
+                    <select
+                      value={form[field] ?? "medium"}
+                      onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+                    >
+                      {examDifficultySelectOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : isExamQuestionsModule && field === "examQuestionCount" ? (
+                    <div className="admin-field-stack">
+                      <input
+                        type="number"
+                        min={1}
+                        max={200}
+                        value={form[field] ?? ""}
+                        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+                      />
+                      <small style={{ opacity: 0.85 }}>
+                        Öğrenci sınavında gösterilecek soru sayısı. Tahmini süre: {formatExamPoolDurationHint(form.examQuestionCount)}
+                      </small>
+                    </div>
+                  ) : isExamQuestionsModule && field === "poolQuestionCount" ? (
+                    <div className="admin-field-stack">
+                      <input
+                        type="number"
+                        min={5}
+                        max={300}
+                        value={form[field] ?? ""}
+                        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+                      />
+                      <small style={{ opacity: 0.85 }}>
+                        Word dosyasından AI ile üretilecek veya sınıflandırılacak toplam havuz soru sayısı. Konu veya hazır soru
+                        dosyasını yüklemeden önce bu değeri ayarlayın.
+                      </small>
+                    </div>
                   ) : isExamQuestionsModule && field === "topicDocPath" ? (
                     <div className="admin-field-stack">
                       <input
@@ -769,7 +861,7 @@ export default function CrudListPage({ moduleKey }) {
                         onChange={(event) => handleExamDocUpload(event.target.files?.[0], "generate")}
                         disabled={Boolean(examDocUploading)}
                       />
-                      <input value={form[field] ?? ""} readOnly placeholder="Konu başlıkları dosya yolu" />
+                      <input value={form[field] ?? ""} readOnly placeholder="Konu dosyası yolu (.docx)" />
                     </div>
                   ) : isExamQuestionsModule && field === "questionsDocPath" ? (
                     <div className="admin-field-stack">
@@ -779,7 +871,7 @@ export default function CrudListPage({ moduleKey }) {
                         onChange={(event) => handleExamDocUpload(event.target.files?.[0], "classify")}
                         disabled={Boolean(examDocUploading)}
                       />
-                      <input value={form[field] ?? ""} readOnly placeholder="60 soruluk dosya yolu" />
+                      <input value={form[field] ?? ""} readOnly placeholder="Hazır sorular dosya yolu (.docx)" />
                     </div>
                   ) : isExamQuestionsModule && field === "generatedQuestions" ? (
                     <>

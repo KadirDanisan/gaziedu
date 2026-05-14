@@ -35,7 +35,7 @@ export function AdminDataProvider({ children }) {
   const uploadInstitutionLogo = async (file) => adminApi.uploadInstitutionLogo(file);
   const uploadEducationImage = async (file) => adminApi.uploadEducationImage(file);
   const uploadEducationContentDoc = async (file) => adminApi.uploadEducationContentDoc(file);
-  const uploadExamDoc = async (file, mode) => adminApi.uploadExamDoc(file, mode);
+  const uploadExamDoc = async (file, mode, options) => adminApi.uploadExamDoc(file, mode, options);
   const updatePermission = async (id, payload) => {
     const updated = await adminApi.updatePermission(id, payload);
     await loadBootstrap();

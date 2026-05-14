@@ -7,8 +7,8 @@ VALUES
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO institutions (name, logo_url, website_url, description, authorized_person)
-VALUES ('Gazi Üniversitesi', '/Gazi_Üniversitesi_logo.png', 'https://gazi.edu.tr', 'Ana kurum kaydı', 'Sistem Yöneticisi')
-ON CONFLICT DO NOTHING;
+SELECT 'Gazi Üniversitesi', '/Gazi_Üniversitesi_logo.png', 'https://gazi.edu.tr', 'Ana kurum kaydı', 'Sistem Yöneticisi'
+WHERE NOT EXISTS (SELECT 1 FROM institutions WHERE name = 'Gazi Üniversitesi' LIMIT 1);
 
 WITH role_data AS (
   SELECT id, code FROM roles

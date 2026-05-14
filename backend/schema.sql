@@ -215,7 +215,7 @@ FOR EACH ROW EXECUTE PROCEDURE education_reviews_aggregate_trigger();
 
 CREATE TABLE IF NOT EXISTS exam_questions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  question_text TEXT NOT NULL,
+  question_text TEXT,
   difficulty TEXT,
   option_a TEXT,
   option_b TEXT,
@@ -224,6 +224,14 @@ CREATE TABLE IF NOT EXISTS exam_questions (
   correct_answer TEXT,
   education_id UUID REFERENCES educations(id) ON DELETE SET NULL,
   instructor_id UUID REFERENCES instructors(id) ON DELETE SET NULL,
+  topic_doc_path TEXT,
+  topic_doc_name TEXT,
+  questions_doc_path TEXT,
+  questions_doc_name TEXT,
+  generated_questions JSONB,
+  exam_target_difficulty TEXT NOT NULL DEFAULT 'medium',
+  exam_question_count INT NOT NULL DEFAULT 20,
+  pool_question_count INT NOT NULL DEFAULT 60,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

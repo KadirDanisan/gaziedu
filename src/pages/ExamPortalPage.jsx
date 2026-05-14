@@ -3,9 +3,18 @@ import { Link, useParams } from "react-router-dom";
 import { publicApi } from "../api/publicApi";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
-const EXAM_SECONDS = 40 * 60;
+const EXAM_FALLBACK_DURATION_SECONDS = 30 * 60;
 const examStartCache = new Map();
 const EXAM_PORTAL_TITLE = "Gazi Üniversitesi Sertifika Sınavı";
+
+function formatDurationHumanTr(seconds) {
+  const s = Math.max(0, Number(seconds) || 0);
+  if (s <= 0) return "—";
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  if (r === 0) return `${m} dakika`;
+  return `${m} dakika ${r} saniye`;
+}
 
 function formatTimer(seconds) {
   const s = Math.max(0, Number(seconds) || 0);
@@ -24,7 +33,7 @@ export default function ExamPortalPage() {
   const [loadError, setLoadError] = useState("");
   const [exam, setExam] = useState(null);
   const [answers, setAnswers] = useState({});
-  const [remaining, setRemaining] = useState(EXAM_SECONDS);
+  const [remaining, setRemaining] = useState(0);
   const [started, setStarted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -61,7 +70,7 @@ export default function ExamPortalPage() {
       .then((data) => {
         if (!active) return;
         setExam(data);
-        setRemaining(data.durationSeconds || EXAM_SECONDS);
+        setRemaining(data.durationSeconds ?? EXAM_FALLBACK_DURATION_SECONDS);
       })
       .catch((err) => {
         if (!active) return;
@@ -185,12 +194,8 @@ export default function ExamPortalPage() {
               <strong>{nationalId}</strong>
             </div>
             <div>
-              <span>Süre</span>
-              <strong>40 dakika</strong>
-            </div>
-            <div>
-              <span>Soru Sayısı</span>
-              <strong>20 soru</strong>
+              <span>Süre ve soru sayısı</span>
+              <strong>Sınavı başlattığınızda eğitim ayarlarından yüklenir</strong>
             </div>
           </div>
           <div className="exam-ready-warning">
@@ -214,7 +219,7 @@ export default function ExamPortalPage() {
         <section className="exam-portal-card exam-portal-card--center">
           <div className="exam-portal-loader" />
           <h1>Sınav hazırlanıyor...</h1>
-          <p>Soru havuzu kontrol ediliyor ve size özel 20 soru seçiliyor.</p>
+          <p>Soru havuzu kontrol ediliyor ve size özel sorular hazırlanıyor.</p>
         </section>
       </main>
     );
@@ -283,8 +288,12 @@ export default function ExamPortalPage() {
               <strong>{nationalId}</strong>
             </div>
             <div>
+              <span>Soru sayısı</span>
+              <strong>{exam.questionCount ?? questions.length} soru</strong>
+            </div>
+            <div>
               <span>Süre</span>
-              <strong>40 dakika</strong>
+              <strong>{formatDurationHumanTr(exam.durationSeconds ?? 0)}</strong>
             </div>
           </div>
           <div className="exam-ready-warning">
