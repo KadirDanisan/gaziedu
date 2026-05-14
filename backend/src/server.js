@@ -27,6 +27,26 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL || "postgres://postgres:1234@localhost:5432/guzem",
 });
 
+/** reCAPTCHA v2 (checkbox): RECAPTCHA_SECRET_KEY tanımlıysa siteverify zorunlu. */
+async function verifyRecaptchaV2IfConfigured(token) {
+  const secret = (process.env.RECAPTCHA_SECRET_KEY || "").trim();
+  if (!secret) return { ok: true };
+  if (!token || typeof token !== "string" || !token.trim()) {
+    return { ok: false, message: "reCAPTCHA doğrulaması zorunludur." };
+  }
+  const body = new URLSearchParams({ secret, response: token.trim() });
+  const res = await fetch("https://www.google.com/recaptcha/api/siteverify", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!data.success) {
+    return { ok: false, message: "reCAPTCHA doğrulanamadı. Lütfen tekrar deneyin." };
+  }
+  return { ok: true };
+}
+
 app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(uploadsDir));
@@ -1949,9 +1969,14 @@ app.post("/api/users/education-reviews", userAuth, async (req, res, next) => {
 
 app.post("/api/contact-forms", async (req, res, next) => {
   try {
-    const { fullName, email, phone, subject, message } = req.body || {};
+    const { fullName, email, phone, subject, message, recaptchaToken } = req.body || {};
     if (!fullName || !email || !message) {
       return res.status(400).json({ message: "Ad soyad, e-posta ve mesaj alanları zorunludur." });
+    }
+
+    const captcha = await verifyRecaptchaV2IfConfigured(recaptchaToken);
+    if (!captcha.ok) {
+      return res.status(400).json({ message: captcha.message });
     }
 
     const result = await pool.query(

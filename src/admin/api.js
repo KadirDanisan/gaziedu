@@ -2,6 +2,24 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000
 
 const getToken = () => localStorage.getItem("adminToken");
 
+/** 502/503/504 veya yanlış URL: gövde HTML olur; response.json() SyntaxError verir. */
+async function readJsonBody(response) {
+  if (response.status === 204) return null;
+  const raw = await response.text();
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const gateway = response.status === 502 || response.status === 503 || response.status === 504;
+    if (gateway || !response.ok) {
+      throw new Error(
+        "API geçici olarak yanıt veremedi (çoğunlukla 502: Node süreci kapalı, çöküyor veya Nginx upstream zaman aşımı). Sunucuda gaziedu-backend ve proxy loglarına bakın.",
+      );
+    }
+    throw new Error("Sunucu JSON yerine beklenmeyen içerik döndürdü; VITE_API_BASE_URL ve /api proxy yolunu kontrol edin.");
+  }
+}
+
 async function request(path, options = {}) {
   const token = getToken();
   const isFormData = options.body instanceof FormData;
@@ -14,11 +32,9 @@ async function request(path, options = {}) {
     ...options,
   });
 
-  if (response.status === 204) return null;
-
-  const data = await response.json();
+  const data = await readJsonBody(response);
   if (!response.ok) {
-    throw new Error(data.message || "Bir hata oluştu.");
+    throw new Error(data?.message || "Bir hata oluştu.");
   }
   return data;
 }

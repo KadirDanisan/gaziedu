@@ -1,13 +1,35 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
-
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+const RECAPTCHA_SITE_KEY = (import.meta.env.VITE_RECAPTCHA_SITE_KEY || "").trim();
+
+function loadRecaptchaScriptOnce() {
+  if (typeof window === "undefined") return Promise.reject(new Error("no window"));
+  if (window.grecaptcha) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector("script[data-app-recaptcha='1']");
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("reCAPTCHA script")), { once: true });
+      return;
+    }
+    const s = document.createElement("script");
+    s.src = "https://www.google.com/recaptcha/api.js?render=explicit";
+    s.async = true;
+    s.defer = true;
+    s.dataset.appRecaptcha = "1";
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("reCAPTCHA script"));
+    document.head.appendChild(s);
+  });
+}
 
 function ContactForm({ className = "contact-form-grid" }) {
-  const recaptchaRef = useRef(null);
+  const recaptchaContainerRef = useRef(null);
+  const recaptchaWidgetIdRef = useRef(null);
   const [registerAcceptKvkk, setRegisterAcceptKvkk] = useState(false);
-const [registerAcceptTerms, setRegisterAcceptTerms] = useState(false);
+  const [registerAcceptTerms, setRegisterAcceptTerms] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
     email: "",
@@ -19,45 +41,48 @@ const [registerAcceptTerms, setRegisterAcceptTerms] = useState(false);
   const [status, setStatus] = useState({ type: "", message: "" });
 
   useEffect(() => {
-    let intervalId;
+    if (!RECAPTCHA_SITE_KEY) return undefined;
 
-    const renderRecaptcha = () => {
-      if (!recaptchaRef.current) {
-        return false;
-      }
+    let cancelled = false;
 
-      if (recaptchaRef.current.dataset.widgetId) {
-        return true;
-      }
-
-      const renderFn = window.grecaptcha && typeof window.grecaptcha.render === "function" ? window.grecaptcha.render : null;
-      if (!renderFn) {
-        return false;
-      }
-
+    const mountWidget = async () => {
       try {
-        const widgetId = renderFn(recaptchaRef.current, {
-          sitekey: "6LclPlcnAAAAADqKZsm_wPO6Sum1dKe9mZFCjYeO",
+        await loadRecaptchaScriptOnce();
+        if (cancelled || !recaptchaContainerRef.current || recaptchaWidgetIdRef.current != null) return;
+        await new Promise((r) => {
+          if (window.grecaptcha?.ready) window.grecaptcha.ready(r);
+          else r();
         });
-        recaptchaRef.current.dataset.widgetId = String(widgetId);
-        return true;
+        if (cancelled || !recaptchaContainerRef.current || recaptchaWidgetIdRef.current != null) return;
+        const renderFn = window.grecaptcha?.render;
+        if (typeof renderFn !== "function") return;
+        recaptchaWidgetIdRef.current = renderFn(recaptchaContainerRef.current, {
+          sitekey: RECAPTCHA_SITE_KEY,
+          theme: "light",
+        });
       } catch {
-        return false;
+        // script veya render hatası — form yine de gönderilebilir; backend secret yoksa geçer
       }
     };
 
-    if (!renderRecaptcha()) {
-      intervalId = window.setInterval(() => {
-        if (renderRecaptcha()) {
-          window.clearInterval(intervalId);
-        }
-      }, 250);
-    }
+    const tryMount = () => {
+      if (recaptchaContainerRef.current && !recaptchaWidgetIdRef.current) {
+        mountWidget();
+      }
+    };
+
+    tryMount();
+    const intervalId = window.setInterval(() => {
+      if (recaptchaWidgetIdRef.current) {
+        window.clearInterval(intervalId);
+        return;
+      }
+      tryMount();
+    }, 250);
 
     return () => {
-      if (intervalId) {
-        window.clearInterval(intervalId);
-      }
+      cancelled = true;
+      window.clearInterval(intervalId);
     };
   }, []);
 
@@ -72,14 +97,39 @@ const [registerAcceptTerms, setRegisterAcceptTerms] = useState(false);
     setStatus({ type: "", message: "" });
 
     try {
+      let recaptchaToken = "";
+      if (RECAPTCHA_SITE_KEY) {
+        const wid = recaptchaWidgetIdRef.current;
+        recaptchaToken =
+          wid != null && window.grecaptcha && typeof window.grecaptcha.getResponse === "function"
+            ? window.grecaptcha.getResponse(wid) || ""
+            : "";
+        if (!recaptchaToken) {
+          setStatus({
+            type: "error",
+            message: 'Lütfen "Ben robot değilim" doğrulamasını tamamlayın.',
+          });
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       const response = await fetch(`${API_BASE_URL}/contact-forms`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, recaptchaToken: recaptchaToken || undefined }),
       });
-      const result = await response.json();
+      const raw = await response.text();
+      let result = null;
+      if (raw) {
+        try {
+          result = JSON.parse(raw);
+        } catch {
+          throw new Error("Sunucu yanıtı okunamadı.");
+        }
+      }
       if (!response.ok) {
-        throw new Error(result.message || "Gönderim sırasında hata oluştu.");
+        throw new Error(result?.message || "Gönderim sırasında hata oluştu.");
       }
 
       setForm({
@@ -89,6 +139,9 @@ const [registerAcceptTerms, setRegisterAcceptTerms] = useState(false);
         subject: "",
         message: "",
       });
+      if (RECAPTCHA_SITE_KEY && recaptchaWidgetIdRef.current != null && window.grecaptcha?.reset) {
+        window.grecaptcha.reset(recaptchaWidgetIdRef.current);
+      }
       setStatus({ type: "success", message: "Mesajınız başarıyla gönderildi." });
     } catch (error) {
       setStatus({ type: "error", message: error.message || "Bir hata oluştu." });
@@ -126,35 +179,35 @@ const [registerAcceptTerms, setRegisterAcceptTerms] = useState(false);
       </div>
 
       <div className="auth-consent" role="group" aria-label="Yasal onaylar">
-              <label className="auth-check auth-check--wrap">
-                <input
-                  type="checkbox"
-                  checked={registerAcceptKvkk}
-                  onChange={(event) => setRegisterAcceptKvkk(event.target.checked)}
-                />
-                <span>
-                  <Link to="/kvkk-aydinlatma-metni" target="_blank" rel="noopener noreferrer">
-                    Kişisel Verilerin Korunması Hakkında Aydınlatma Metni
-                  </Link>
-                  &apos;ni okudum ve kabul ediyorum.
-                </span>
-              </label>
-              <label className="auth-check auth-check--wrap">
-                <input
-                  type="checkbox"
-                  checked={registerAcceptTerms}
-                  onChange={(event) => setRegisterAcceptTerms(event.target.checked)}
-                />
-                <span>
-                  <Link to="/kullanim-kurallari-ve-gizlilik" target="_blank" rel="noopener noreferrer">
-                    Web Sitesi Kullanım Kuralları ve Gizlilik Sözleşmesi
-                  </Link>
-                  &apos;ni okudum ve kabul ediyorum.
-                </span>
-              </label>
+        <label className="auth-check auth-check--wrap">
+          <input
+            type="checkbox"
+            checked={registerAcceptKvkk}
+            onChange={(event) => setRegisterAcceptKvkk(event.target.checked)}
+          />
+          <span>
+            <Link to="/kvkk-aydinlatma-metni" target="_blank" rel="noopener noreferrer">
+              Kişisel Verilerin Korunması Hakkında Aydınlatma Metni
+            </Link>
+            &apos;ni okudum ve kabul ediyorum.
+          </span>
+        </label>
+        <label className="auth-check auth-check--wrap">
+          <input
+            type="checkbox"
+            checked={registerAcceptTerms}
+            onChange={(event) => setRegisterAcceptTerms(event.target.checked)}
+          />
+          <span>
+            <Link to="/kullanim-kurallari-ve-gizlilik" target="_blank" rel="noopener noreferrer">
+              Web Sitesi Kullanım Kuralları ve Gizlilik Sözleşmesi
+            </Link>
+            &apos;ni okudum ve kabul ediyorum.
+          </span>
+        </label>
       </div>
 
-      <div ref={recaptchaRef} className="contact-recaptcha" />
+      {RECAPTCHA_SITE_KEY ? <div ref={recaptchaContainerRef} className="contact-recaptcha" /> : null}
 
       <button className="btn contact-submit" type="submit" disabled={isSubmitting}>
         Gönder

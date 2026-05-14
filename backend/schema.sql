@@ -159,6 +159,21 @@ CREATE TABLE IF NOT EXISTS contact_forms (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS user_favorites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES normal_users(id) ON DELETE CASCADE,
+  target_type TEXT NOT NULL DEFAULT 'education',
+  education_id UUID,
+  calendar_id UUID REFERENCES education_calendar(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_favorites_user_education_unique
+  ON user_favorites (user_id, education_id) WHERE target_type = 'education' AND education_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_favorites_user_calendar_unique
+  ON user_favorites (user_id, calendar_id) WHERE target_type = 'calendar' AND calendar_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS education_reviews (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES normal_users(id) ON DELETE CASCADE,
