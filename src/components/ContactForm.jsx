@@ -4,6 +4,11 @@ import { Link } from "react-router-dom";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 const RECAPTCHA_SITE_KEY = (import.meta.env.VITE_RECAPTCHA_SITE_KEY || "").trim();
 
+/** grecaptcha.render ilk widget için 0 dönebilir; !ref ile kontrol etmek hataya yol açar. */
+function hasRecaptchaWidget(widgetIdRef) {
+  return typeof widgetIdRef.current === "number";
+}
+
 function loadRecaptchaScriptOnce() {
   if (typeof window === "undefined") return Promise.reject(new Error("no window"));
   if (window.grecaptcha) return Promise.resolve();
@@ -27,7 +32,7 @@ function loadRecaptchaScriptOnce() {
 
 function ContactForm({ className = "contact-form-grid" }) {
   const recaptchaContainerRef = useRef(null);
-  const recaptchaWidgetIdRef = useRef(null);
+  const recaptchaWidgetIdRef = useRef(undefined);
   const [registerAcceptKvkk, setRegisterAcceptKvkk] = useState(false);
   const [registerAcceptTerms, setRegisterAcceptTerms] = useState(false);
   const [form, setForm] = useState({
@@ -48,12 +53,12 @@ function ContactForm({ className = "contact-form-grid" }) {
     const mountWidget = async () => {
       try {
         await loadRecaptchaScriptOnce();
-        if (cancelled || !recaptchaContainerRef.current || recaptchaWidgetIdRef.current != null) return;
+        if (cancelled || !recaptchaContainerRef.current || hasRecaptchaWidget(recaptchaWidgetIdRef)) return;
         await new Promise((r) => {
           if (window.grecaptcha?.ready) window.grecaptcha.ready(r);
           else r();
         });
-        if (cancelled || !recaptchaContainerRef.current || recaptchaWidgetIdRef.current != null) return;
+        if (cancelled || !recaptchaContainerRef.current || hasRecaptchaWidget(recaptchaWidgetIdRef)) return;
         const renderFn = window.grecaptcha?.render;
         if (typeof renderFn !== "function") return;
         recaptchaWidgetIdRef.current = renderFn(recaptchaContainerRef.current, {
@@ -66,14 +71,14 @@ function ContactForm({ className = "contact-form-grid" }) {
     };
 
     const tryMount = () => {
-      if (recaptchaContainerRef.current && !recaptchaWidgetIdRef.current) {
+      if (recaptchaContainerRef.current && !hasRecaptchaWidget(recaptchaWidgetIdRef)) {
         mountWidget();
       }
     };
 
     tryMount();
     const intervalId = window.setInterval(() => {
-      if (recaptchaWidgetIdRef.current) {
+      if (hasRecaptchaWidget(recaptchaWidgetIdRef)) {
         window.clearInterval(intervalId);
         return;
       }
@@ -101,7 +106,7 @@ function ContactForm({ className = "contact-form-grid" }) {
       if (RECAPTCHA_SITE_KEY) {
         const wid = recaptchaWidgetIdRef.current;
         recaptchaToken =
-          wid != null && window.grecaptcha && typeof window.grecaptcha.getResponse === "function"
+          typeof wid === "number" && window.grecaptcha && typeof window.grecaptcha.getResponse === "function"
             ? window.grecaptcha.getResponse(wid) || ""
             : "";
         if (!recaptchaToken) {
@@ -139,7 +144,7 @@ function ContactForm({ className = "contact-form-grid" }) {
         subject: "",
         message: "",
       });
-      if (RECAPTCHA_SITE_KEY && recaptchaWidgetIdRef.current != null && window.grecaptcha?.reset) {
+      if (RECAPTCHA_SITE_KEY && typeof recaptchaWidgetIdRef.current === "number" && window.grecaptcha?.reset) {
         window.grecaptcha.reset(recaptchaWidgetIdRef.current);
       }
       setStatus({ type: "success", message: "Mesajınız başarıyla gönderildi." });
@@ -207,7 +212,15 @@ function ContactForm({ className = "contact-form-grid" }) {
         </label>
       </div>
 
-      {RECAPTCHA_SITE_KEY ? <div ref={recaptchaContainerRef} className="contact-recaptcha" /> : null}
+      {!RECAPTCHA_SITE_KEY ? (
+        <p className="admin-form-error" style={{ fontSize: "0.9rem", maxWidth: "42rem" }}>
+          reCAPTCHA bu sitede yapılandırılmamış. Sunucuda <code>RECAPTCHA_SECRET_KEY</code> varsa, site anahtarını
+          proje <strong>kökündeki</strong> <code>.env</code> dosyasına <code>VITE_RECAPTCHA_SITE_KEY=...</code> olarak
+          yazıp <code>npm run build</code> ile yeniden derleyin (yalnızca backend <code>.env</code> yeterli değildir).
+        </p>
+      ) : (
+        <div ref={recaptchaContainerRef} className="contact-recaptcha" />
+      )}
 
       <button className="btn contact-submit" type="submit" disabled={isSubmitting}>
         Gönder

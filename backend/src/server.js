@@ -32,7 +32,11 @@ async function verifyRecaptchaV2IfConfigured(token) {
   const secret = (process.env.RECAPTCHA_SECRET_KEY || "").trim();
   if (!secret) return { ok: true };
   if (!token || typeof token !== "string" || !token.trim()) {
-    return { ok: false, message: "reCAPTCHA doğrulaması zorunludur." };
+    return {
+      ok: false,
+      message:
+        "reCAPTCHA yanıtı gelmedi. Gizli anahtar açıkken site anahtarı da gerekir: proje kökünde VITE_RECAPTCHA_SITE_KEY ile frontend yeniden build edilmelidir.",
+    };
   }
   const body = new URLSearchParams({ secret, response: token.trim() });
   const res = await fetch("https://www.google.com/recaptcha/api/siteverify", {
