@@ -3709,33 +3709,38 @@ process.on("uncaughtException", (err) => {
 });
 
 const startServer = async () => {
-  try {
-    await migrateInstitutionCodeColumn();
-    await migrateInstructorAdminLinkColumn();
-    await migrateEducationDocColumns();
-    await migrateEducationCalendarColumns();
-    await migrateEducationCategoryColumns();
-    await migrateApprovedEducationsTable();
-    await migrateUserFavoritesTable();
-    await migrateUserFavoritesDualSupport();
-    await migrateEducationReviewsTable();
-    await migrateEducationRatingAggregates();
-    await migrateNormalUserDetails();
-    await migrateNormalUserDetailsAddressColumns();
-    await migrateNormalUserDetailsNationalIdUnique();
-    await migrateExamQuestionBatchColumns();
-    await migrateExamAttemptsTable();
-    await migrateExamPortalVisitTable();
-    await migrateExamPortalBestScoresTable();
-    await migrateExamPortalAccessPermissions();
-    await migrateExamResultsPermissions();
-    await migrateExamQuestionSettingsColumns();
-    await migrateAdminMessagingTables();
-    await migrateAdminMessagingPermissions();
-    await migrateContactFormTimestampsToIstanbul();
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error("Timestamp migration skipped:", error.message);
+  const migrations = [
+    migrateInstitutionCodeColumn,
+    migrateInstructorAdminLinkColumn,
+    migrateEducationDocColumns,
+    migrateEducationCalendarColumns,
+    migrateEducationCategoryColumns,
+    migrateApprovedEducationsTable,
+    migrateUserFavoritesTable,
+    migrateUserFavoritesDualSupport,
+    migrateEducationReviewsTable,
+    migrateEducationRatingAggregates,
+    migrateNormalUserDetails,
+    migrateNormalUserDetailsAddressColumns,
+    migrateNormalUserDetailsNationalIdUnique,
+    migrateExamQuestionBatchColumns,
+    migrateExamAttemptsTable,
+    migrateExamPortalVisitTable,
+    migrateExamPortalBestScoresTable,
+    migrateExamPortalAccessPermissions,
+    migrateExamResultsPermissions,
+    migrateExamQuestionSettingsColumns,
+    migrateAdminMessagingTables,
+    migrateAdminMessagingPermissions,
+    migrateContactFormTimestampsToIstanbul,
+  ];
+  for (const run of migrations) {
+    try {
+      await run();
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(`Migration ${run.name} skipped:`, error.message);
+    }
   }
 
   app.listen(port, () => {
