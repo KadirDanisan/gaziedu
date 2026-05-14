@@ -2,7 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
-const RECAPTCHA_SITE_KEY = (import.meta.env.VITE_RECAPTCHA_SITE_KEY || "").trim();
+
+/** .env tırnak / görünmez boşluk / yanlış kopyala-yapıştır sitekey hatalarını azaltır. */
+function normalizeRecaptchaSiteKey(raw) {
+  if (raw == null) return "";
+  let s = String(raw).trim().replace(/\u200b/g, "");
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.slice(1, -1).trim();
+  }
+  return s.replace(/\s+/g, "");
+}
+
+const RECAPTCHA_SITE_KEY = normalizeRecaptchaSiteKey(import.meta.env.VITE_RECAPTCHA_SITE_KEY);
 
 /** grecaptcha.render ilk widget için 0 dönebilir; !ref ile kontrol etmek hataya yol açar. */
 function hasRecaptchaWidget(widgetIdRef) {
@@ -64,6 +75,7 @@ function ContactForm({ className = "contact-form-grid" }) {
         recaptchaWidgetIdRef.current = renderFn(recaptchaContainerRef.current, {
           sitekey: RECAPTCHA_SITE_KEY,
           theme: "light",
+          hl: "tr",
         });
       } catch {
         // script veya render hatası — form yine de gönderilebilir; backend secret yoksa geçer
@@ -219,7 +231,17 @@ function ContactForm({ className = "contact-form-grid" }) {
           yazıp <code>npm run build</code> ile yeniden derleyin (yalnızca backend <code>.env</code> yeterli değildir).
         </p>
       ) : (
-        <div ref={recaptchaContainerRef} className="contact-recaptcha" />
+        <>
+          <div ref={recaptchaContainerRef} className="contact-recaptcha" />
+          {import.meta.env.DEV ? (
+            <p className="contact-recaptcha-hint" style={{ fontSize: "0.85rem", opacity: 0.85, maxWidth: "42rem" }}>
+              Google &quot;Geçersiz site anahtarı&quot; veriyorsa: konsolda <strong>reCAPTCHA v2 — Checkbox</strong> kaydı
+              açın; <strong>Site Key</strong> → kök <code>.env</code> <code>VITE_RECAPTCHA_SITE_KEY</code>,{" "}
+              <strong>Secret Key</strong> → <code>backend/.env</code> <code>RECAPTCHA_SECRET_KEY</code> (yer
+              değiştirmeyin). v3 anahtarı bu formda çalışmaz.
+            </p>
+          ) : null}
+        </>
       )}
 
       <button className="btn contact-submit" type="submit" disabled={isSubmitting}>
