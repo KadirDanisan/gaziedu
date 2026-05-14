@@ -55,6 +55,12 @@ app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(uploadsDir));
 
+/** Nginx / izleme: sadece Node ayakta mı (DB sorgusu yok — takılmaz). 502 teşhisinde curl ile deneyin. */
+app.get("/api/health", (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.status(200).json({ ok: true, uptimeSec: Math.round(process.uptime()) });
+});
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadsDir),
   filename: (_req, file, cb) => {
@@ -3690,6 +3696,16 @@ app.use(async (error, req, res, next) => {
   }
   res.status(500).json({ message: "Sunucu hatası.", detail: error.message });
   next();
+});
+
+process.on("unhandledRejection", (reason) => {
+  // eslint-disable-next-line no-console
+  console.error("unhandledRejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+  // eslint-disable-next-line no-console
+  console.error("uncaughtException:", err);
+  process.exit(1);
 });
 
 const startServer = async () => {
