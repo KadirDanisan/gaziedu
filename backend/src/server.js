@@ -1218,6 +1218,27 @@ const normalizeUploadPath = (value) => {
   return `/uploads/${value.split("/uploads/").pop()}`;
 };
 
+const EDUCATION_CODE_RE = /^[A-Z]{3}-\d+-\d+-\d+$/;
+
+const normalizeEducationCodeValue = (value) => {
+  const code = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  if (!EDUCATION_CODE_RE.test(code)) {
+    throw new Error("Eğitim kodu GZM-1-32-03 formatında olmalıdır (Önek-Kurum-Kategori-Sıra).");
+  }
+  return code;
+};
+
+const isValidEducationCode = (value) => {
+  const code = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  return EDUCATION_CODE_RE.test(code);
+};
+
 const prepareEducationPayload = (payload) => {
   if (typeof payload.content_doc_path === "string") {
     payload.content_doc_path = normalizeUploadPath(payload.content_doc_path);
@@ -1227,11 +1248,7 @@ const prepareEducationPayload = (payload) => {
   delete payload.content_html;
 
   if (Object.hasOwn(payload, "code")) {
-    const normalizedCode = String(payload.code || "").trim().toUpperCase();
-    if (!/^[A-Z]{3}\d{7}$/.test(normalizedCode)) {
-      throw new Error("Eğitim kodu GZM2631031 formatında olmalıdır (3 harf + 7 rakam).");
-    }
-    payload.code = normalizedCode;
+    payload.code = normalizeEducationCodeValue(payload.code);
   }
 };
 
@@ -2113,10 +2130,13 @@ app.get("/api/public/search/trainings", async (req, res, next) => {
 app.post("/api/public/exam-portal/visit", async (req, res, next) => {
   try {
     const portalUrl = String(req.body?.portalUrl || "").trim().slice(0, 2048);
-    const educationCode = String(req.body?.educationCode || "").trim().toUpperCase();
+    const educationCode = String(req.body?.educationCode || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "");
     const nationalId = String(req.body?.nationalId || "").trim();
-    if (!/^[A-Z]{3}\d{7}$/.test(educationCode)) {
-      return res.status(400).json({ message: "Geçerli eğitim kodu gerekli." });
+    if (!isValidEducationCode(educationCode)) {
+      return res.status(400).json({ message: "Geçerli eğitim kodu gerekli (ör. GZM-1-32-03)." });
     }
     if (!/^\d{11}$/.test(nationalId)) {
       return res.status(400).json({ message: "T.C. kimlik no 11 haneli olmalıdır." });
@@ -2134,10 +2154,13 @@ app.post("/api/public/exam-portal/visit", async (req, res, next) => {
 
 app.post("/api/public/exam-portal/start", async (req, res, next) => {
   try {
-    const educationCode = String(req.body?.educationCode || "").trim().toUpperCase();
+    const educationCode = String(req.body?.educationCode || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "");
     const nationalId = String(req.body?.nationalId || "").trim();
-    if (!/^[A-Z]{3}\d{7}$/.test(educationCode)) {
-      return res.status(400).json({ message: "Geçerli eğitim kodu gerekli." });
+    if (!isValidEducationCode(educationCode)) {
+      return res.status(400).json({ message: "Geçerli eğitim kodu gerekli (ör. GZM-1-32-03)." });
     }
     if (!/^\d{11}$/.test(nationalId)) {
       return res.status(400).json({ message: "T.C. kimlik no 11 haneli olmalıdır." });
@@ -2840,10 +2863,13 @@ app.get("/api/admin/exam-portal/limit-exceeded", auth, checkPermission("examPort
 
 app.delete("/api/admin/exam-portal/limit-exceeded", auth, checkPermission("examPortalAccess", "can_delete"), async (req, res, next) => {
   try {
-    const educationCode = String(req.body?.educationCode || "").trim().toUpperCase();
+    const educationCode = String(req.body?.educationCode || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "");
     const nationalId = String(req.body?.nationalId || "").trim();
-    if (!/^[A-Z]{3}\d{7}$/.test(educationCode)) {
-      return res.status(400).json({ message: "Geçerli eğitim kodu gerekli." });
+    if (!isValidEducationCode(educationCode)) {
+      return res.status(400).json({ message: "Geçerli eğitim kodu gerekli (ör. GZM-1-32-03)." });
     }
     if (!/^\d{11}$/.test(nationalId)) {
       return res.status(400).json({ message: "T.C. kimlik no 11 haneli olmalıdır." });
@@ -3494,7 +3520,7 @@ app.post("/api/admin/:moduleName", auth, async (req, res, next) => {
     const p = await pool.query(`SELECT can_create FROM permissions WHERE role_id = $1 AND module_name = $2 LIMIT 1`, [req.user.roleId, moduleName]);
     if (!p.rows[0]?.can_create) return res.status(403).json({ message: "Yetkiniz yok." });
     const payload = toDbObject(req.body);
-    if (config.table === "educations" || config.table === "education_calendar") {
+    if (config.table === "educations" || config.table === "education_calendar" || config.table === "approved_educations") {
       try {
         prepareEducationPayload(payload);
       } catch (error) {
@@ -3588,7 +3614,7 @@ app.put("/api/admin/:moduleName/:id", auth, async (req, res, next) => {
     if (!previous.rows[0]) return res.status(404).json({ message: "Kayıt bulunamadı." });
 
     const payload = toDbObject(req.body);
-    if (config.table === "educations" || config.table === "education_calendar") {
+    if (config.table === "educations" || config.table === "education_calendar" || config.table === "approved_educations") {
       try {
         prepareEducationPayload(payload);
       } catch (error) {

@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { codesMatch, parseEducationCode } from "./educationCode";
 
 /** Başlık hücresini karşılaştırma için sadeleştirir (Türkçe karakter → ASCII benzeri). */
 export function normalizeExcelHeader(value) {
@@ -30,7 +31,9 @@ function findColumnIndex(headers, matcher) {
 }
 
 /**
- * Excel ilk sayfasını okur; SIRA, KURUM KODU, KOD, EĞİTİM KATEGORİ KODU, EĞİTİM ADI sütunlarını bulur.
+ * Excel ilk sayfasını okur.
+ * Zorunlu: KOD (GZM-1-32-03), EĞİTİM ADI
+ * İsteğe bağlı: SIRA, KURUM KODU, EĞİTİM KATEGORİ KODU (KOD ile uyumlu olmalı)
  * @returns {{ rows: Array<{ sheetRow: number, sortKey: number, institutionCode: string, categoryCode: string, code: string, name: string }>, error: string|null }}
  */
 export function parseApprovedEducationExcelBuffer(arrayBuffer) {
@@ -60,14 +63,12 @@ export function parseApprovedEducationExcelBuffer(arrayBuffer) {
     );
 
     const missing = [];
-    if (idxKurumKodu < 0) missing.push("KURUM KODU");
     if (idxKod < 0) missing.push("KOD");
-    if (idxKategoriKodu < 0) missing.push("EĞİTİM KATEGORİ KODU");
     if (idxEgitimAdi < 0) missing.push("EĞİTİM ADI");
     if (missing.length) {
       return {
         rows: [],
-        error: `Zorunlu sütun başlıkları bulunamadı: ${missing.join(", ")}. İlk satırda tam olarak beklenen başlıklar olmalıdır.`,
+        error: `Zorunlu sütun başlıkları bulunamadı: ${missing.join(", ")}. İlk satırda KOD (ör. GZM-1-32-03) ve EĞİTİM ADI olmalıdır.`,
       };
     }
 
@@ -75,22 +76,51 @@ export function parseApprovedEducationExcelBuffer(arrayBuffer) {
     for (let r = 1; r < matrix.length; r += 1) {
       const line = matrix[r];
       if (!Array.isArray(line) || !line.length) continue;
-      const institutionCode = String(line[idxKurumKodu] ?? "").trim();
-      const categoryCode = String(line[idxKategoriKodu] ?? "").trim();
-      const code = String(line[idxKod] ?? "").trim();
+      const codeRaw = String(line[idxKod] ?? "").trim();
       const name = String(line[idxEgitimAdi] ?? "").trim();
+      const institutionFromSheet = idxKurumKodu >= 0 ? String(line[idxKurumKodu] ?? "").trim() : "";
+      const categoryFromSheet = idxKategoriKodu >= 0 ? String(line[idxKategoriKodu] ?? "").trim() : "";
       const siraRaw = idxSira >= 0 ? String(line[idxSira] ?? "").trim() : "";
       const sortKey = siraRaw ? Number.parseInt(siraRaw, 10) : r;
       const sortKeySafe = Number.isFinite(sortKey) ? sortKey : r;
 
-      if (!institutionCode && !categoryCode && !code && !name) continue;
+      if (!codeRaw && !name && !institutionFromSheet && !categoryFromSheet) continue;
+
+      const parsed = parseEducationCode(codeRaw);
+      if (!parsed.ok) {
+        return {
+          rows: [],
+          error: `Satır ${r + 1}: ${parsed.error} Bulunan kod: "${codeRaw || "(boş)"}".`,
+        };
+      }
+
+      if (institutionFromSheet && !codesMatch(institutionFromSheet, parsed.institutionCode)) {
+        return {
+          rows: [],
+          error: `Satır ${r + 1}: KOD içindeki kurum (${parsed.institutionCode}) ile KURUM KODU sütunu (${institutionFromSheet}) uyuşmuyor.`,
+        };
+      }
+
+      if (categoryFromSheet && !codesMatch(categoryFromSheet, parsed.categoryCode)) {
+        return {
+          rows: [],
+          error: `Satır ${r + 1}: KOD içindeki kategori (${parsed.categoryCode}) ile kategori kodu sütunu (${categoryFromSheet}) uyuşmuyor.`,
+        };
+      }
+
+      if (!name) {
+        return {
+          rows: [],
+          error: `Satır ${r + 1}: EĞİTİM ADI boş olamaz.`,
+        };
+      }
 
       rows.push({
         sheetRow: r + 1,
         sortKey: sortKeySafe,
-        institutionCode,
-        categoryCode,
-        code,
+        institutionCode: institutionFromSheet || parsed.institutionCode,
+        categoryCode: categoryFromSheet || parsed.categoryCode,
+        code: parsed.code,
         name,
       });
     }
@@ -111,4 +141,9 @@ export function normalizeLookupCode(value) {
     .trim()
     .replace(/\s+/g, "")
     .toUpperCase();
+}
+
+/** Kurum / kategori listesinde kod eşleşmesi (sayısal kodlarda baş sıfır toleransı). */
+export function lookupCodeMatches(storedCode, targetCode) {
+  return codesMatch(storedCode, targetCode);
 }

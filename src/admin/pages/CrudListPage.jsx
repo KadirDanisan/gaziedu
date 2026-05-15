@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useAdminAuth } from "../context/AdminAuthContext";
 import { useAdminData } from "../context/AdminDataContext";
-import { normalizeLookupCode, parseApprovedEducationExcelBuffer } from "../utils/parseApprovedEducationExcel";
+import { normalizeEducationCode, parseEducationCode } from "../utils/educationCode";
+import { lookupCodeMatches, normalizeLookupCode, parseApprovedEducationExcelBuffer } from "../utils/parseApprovedEducationExcel";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
@@ -536,15 +537,20 @@ export default function CrudListPage({ moduleKey }) {
         const row = rows[i];
         setExcelImportProgress({ status: "running", current: i + 1, total: rows.length, fileName: file.name, lastCode: row.code });
 
-        if (!row.code || !row.name || !row.institutionCode || !row.categoryCode) {
-          setError(
-            `Satır ${row.sheetRow}: Eğitim kodu, eğitim adı, kurum kodu ve eğitim kategori kodu dolu olmalıdır. İçe aktarma durduruldu.`,
-          );
+        if (!row.code || !row.name) {
+          setError(`Satır ${row.sheetRow}: KOD (GZM-1-32-03) ve EĞİTİM ADI dolu olmalıdır. İçe aktarma durduruldu.`);
           setExcelImportProgress(null);
           return;
         }
 
-        const institution = institutions.find((it) => normalizeLookupCode(it.code) === normalizeLookupCode(row.institutionCode));
+        const parsedCode = parseEducationCode(row.code);
+        if (!parsedCode.ok) {
+          setError(`Satır ${row.sheetRow}: ${parsedCode.error} İçe aktarma durduruldu.`);
+          setExcelImportProgress(null);
+          return;
+        }
+
+        const institution = institutions.find((it) => lookupCodeMatches(it.code, row.institutionCode));
         if (!institution) {
           setError(
             `Satır ${row.sheetRow}: Kurum kodu sistemde yok: "${row.institutionCode}". Kurum listesinde bu kodu tanımlayın. İçe aktarma durduruldu.`,
@@ -553,7 +559,7 @@ export default function CrudListPage({ moduleKey }) {
           return;
         }
 
-        const category = categories.find((c) => normalizeLookupCode(c.categoryCode) === normalizeLookupCode(row.categoryCode));
+        const category = categories.find((c) => lookupCodeMatches(c.categoryCode, row.categoryCode));
         if (!category) {
           setError(
             `Satır ${row.sheetRow}: Eğitim kategori kodu sistemde yok: "${row.categoryCode}". Kategori listesinde bu kodu tanımlayın. İçe aktarma durduruldu.`,
@@ -593,7 +599,7 @@ export default function CrudListPage({ moduleKey }) {
         }
 
         const created = await data.createItem("approvedEducations", {
-          code: String(row.code).trim(),
+          code: parsedCode.code,
           name: String(row.name).trim(),
           categoryId: category.id,
           institutionId: institution.id,
@@ -644,7 +650,12 @@ export default function CrudListPage({ moduleKey }) {
                   aria-hidden
                   onChange={handleApprovedExcelInputChange}
                 />
-                <button type="button" className="btn btn-outline" onClick={() => approvedExcelInputRef.current?.click()}>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  title="Zorunlu sütunlar: KOD (ör. GZM-1-32-03) ve EĞİTİM ADI. Kurum ve kategori kodu KOD içinden okunur."
+                  onClick={() => approvedExcelInputRef.current?.click()}
+                >
                   Excel ile toplu ekle
                 </button>
               </>
@@ -1051,19 +1062,25 @@ export default function CrudListPage({ moduleKey }) {
                           </option>
                         ))}
                       </select>
-                    ) : isEducationCalendarModule && field === "code" ? (
+                    ) : (isApprovedEducationsModule || isEducationCalendarModule) && field === "code" ? (
                       <input
                         type="text"
                         value={form[field] ?? ""}
                         onChange={(event) =>
                           setForm((prev) => ({
                             ...prev,
-                            [field]: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10),
+                            [field]: event.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ""),
                           }))
                         }
-                        placeholder="Ornek: GZM2631031"
-                        pattern="[A-Z]{3}[0-9]{7}"
-                        title="3 harf ve 7 rakam girin (Ornek: GZM2631031)"
+                        onBlur={(event) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            [field]: normalizeEducationCode(event.target.value),
+                          }))
+                        }
+                        placeholder="Örnek: GZM-1-32-03"
+                        pattern="[A-Z]{3}-[0-9]+-[0-9]+-[0-9]+"
+                        title="Önek-Kurum-Kategori-Sıra (Örnek: GZM-1-32-03)"
                         required
                       />
                     ) : isEducationLikeModule && field === "duration" ? (
@@ -1287,8 +1304,11 @@ export default function CrudListPage({ moduleKey }) {
                 <p className="admin-modal__subtitle" style={{ lineHeight: 1.55 }}>
                   <strong>{excelImportConflict.code}</strong> kodu listede zaten var
                   {excelImportConflict.existingName ? ` (“${excelImportConflict.existingName}”)` : ""}. Yeni satırdaki veri:{" "}
-                  <strong>{excelImportConflict.name}</strong> — Kurum kodu: {excelImportConflict.institutionCode}, Kategori kodu:{" "}
-                  {excelImportConflict.categoryCode}.
+                  <strong>{excelImportConflict.name}</strong>
+                  {excelImportConflict.institutionCode || excelImportConflict.categoryCode
+                    ? ` — Kurum: ${excelImportConflict.institutionCode}, Kategori: ${excelImportConflict.categoryCode}`
+                    : null}
+                  .
                   <br />
                   <br />
                   Yeni kaydı yüklemek için mevcut kayıt silinir. Eski kayıt kalsın derseniz bu satır atlanır ve sıradaki eğitim koduna geçilir.
