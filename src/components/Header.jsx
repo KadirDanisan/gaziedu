@@ -4,6 +4,10 @@ import { useAuth } from "../context/AuthContext";
 import { publicApi, resolvePublicImageUrl } from "../api/publicApi";
 import { makeSlug } from "../data/homeData";
 
+function categoryLinkTo(item) {
+  return item === "Tüm Eğitimler" ? "/tum-egitimler" : `/tum-egitimler?kategori=${encodeURIComponent(item)}`;
+}
+
 function Header() {
   const navigate = useNavigate();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -169,11 +173,13 @@ function Header() {
             <button className="dropdown-trigger" type="button">
               Eğitimler <i className="fa-solid fa-chevron-down" />
             </button>
-            <div className="dropdown-menu">
+            <div className="dropdown-menu categories-mega-menu" role="menu" aria-label="Eğitim kategorileri">
               {categoryItems.map((item) => (
                 <Link
                   key={item}
-                  to={item === "Tüm Eğitimler" ? "/tum-egitimler" : `/tum-egitimler?kategori=${encodeURIComponent(item)}`}
+                  to={categoryLinkTo(item)}
+                  role="menuitem"
+                  className={item === "Tüm Eğitimler" ? "categories-mega-all" : undefined}
                 >
                   {item}
                 </Link>
@@ -338,11 +344,13 @@ function Header() {
             >
               Eğitimler <i className="fa-solid fa-chevron-down" />
             </button>
-            <div className="mobile-dropdown-menu">
+            <div className="mobile-dropdown-menu categories-scroll-menu" role="menu" aria-label="Eğitim kategorileri">
               {categoryItems.map((item) => (
                 <Link
                   key={item}
-                  to={item === "Tüm Eğitimler" ? "/tum-egitimler" : `/tum-egitimler?kategori=${encodeURIComponent(item)}`}
+                  to={categoryLinkTo(item)}
+                  role="menuitem"
+                  className={item === "Tüm Eğitimler" ? "categories-mobile-all" : undefined}
                   onClick={closeMobileMenu}
                 >
                   {item}
