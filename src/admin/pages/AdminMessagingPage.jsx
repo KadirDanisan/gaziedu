@@ -306,7 +306,7 @@ export default function AdminMessagingPage() {
               announcements.map((a) => (
                 <article key={a.id} className="admin-messaging-announce-card">
                   <div className="admin-messaging-announce-card__logo" aria-hidden="true">
-                    <img src="/Gazi_Üniversitesi_logo.png" alt="" />
+                    <img src="/Guzem_logo.png" alt="" />
                   </div>
                   <div className="admin-messaging-announce-card__strip" aria-hidden="true" />
                   <div className="admin-messaging-announce-card__inner">

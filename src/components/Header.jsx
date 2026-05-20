@@ -164,7 +164,7 @@ function Header() {
         <Link to="/" className="site-brand">
           <img
             className="site-logo"
-            src="/Gazi_Üniversitesi_logo.png"
+            src="/Guzem_logo.png"
             alt="Gazi Üniversitesi"
           />
           <img
