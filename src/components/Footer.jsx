@@ -26,8 +26,17 @@ function Footer() {
     <footer className="footer">
       <div className="footer-top">
         <div className="footer-brand">
-          <Link to="/">
-            <img src="/Gazi_Üniversitesi_logo.png" alt="Gazi Üniversitesi" />
+          <Link to="/" className="footer-brand-link">
+            <img
+              className="footer-logo"
+              src="/Gazi_Üniversitesi_logo.png"
+              alt="Gazi Üniversitesi"
+            />
+            <img
+              className="footer-logo-slogan"
+              src="/GUZEM_SLOGAN.png"
+              alt="GAZİ'nin Dijital Yüzü"
+            />
           </Link>
         </div>
 

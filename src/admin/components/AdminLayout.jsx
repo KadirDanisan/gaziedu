@@ -94,8 +94,16 @@ export default function AdminLayout() {
     <div className="admin-shell">
       <aside className="admin-sidebar">
         <div className="admin-brand">
-          <img src="/Gazi_Üniversitesi_logo.png" alt="Gazi Üniversitesi" style={{ width: 72, height: 72, objectFit: "contain" }} />
-          <img src="/yokak_logo.svg" alt="Gazi Üniversitesi" style={{ width: 72, height: 72, objectFit: "contain", marginLeft: 25 }} />
+          <img
+            className="admin-brand-logo"
+            src="/Gazi_Üniversitesi_logo.png"
+            alt="Gazi Üniversitesi"
+          />
+          <img
+            className="admin-brand-logo admin-brand-logo--partner"
+            src="/yokak_logo.svg"
+            alt="YÖKAK"
+          />
         </div>
         <nav className="admin-side-nav">
           {ADMIN_MODULES.filter((module) => module.key === "activityLogs" || hasPermission(module.key, "canView")).map((module) => (

@@ -143,7 +143,7 @@ function Header() {
   };
 
   return (
-    <>
+    <div className="site-header-sticky">
       <div className="topbar">
         <div className="topbar-contact">
           <a href="tel:03122028200">
@@ -161,11 +161,16 @@ function Header() {
       </div>
       <header className="site-header">
       <div className="nav">
-        <Link to="/">
+        <Link to="/" className="site-brand">
           <img
             className="site-logo"
             src="/Gazi_Üniversitesi_logo.png"
             alt="Gazi Üniversitesi"
+          />
+          <img
+            className="site-logo-slogan"
+            src="/GUZEM_SLOGAN.png"
+            alt="GAZİ'nin Dijital Yüzü"
           />
         </Link>
         <nav>
@@ -457,7 +462,7 @@ function Header() {
         </div>
       ) : null}
       </header>
-    </>
+    </div>
   );
 }
 

@@ -26,7 +26,7 @@ export default function AdminLoginPage() {
       <div className="admin-auth-shell">
         <aside className="admin-auth-hero">
           <img src="/Gazi_Üniversitesi_logo.png" alt="Gazi Üniversitesi" className="admin-auth-logo" />
-          <h1>Gazi CRM Yönetim Paneli</h1>
+          <h1>GAZİ'nin Dijital Yüzü CRM Yönetim Paneli</h1>
           <p>Kurumsal yönetim, içerik planlama ve kullanıcı operasyonlarını tek ekrandan yönetin.</p>
           <ul>
             <li>Rol bazlı güvenli erişim</li>

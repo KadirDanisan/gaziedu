@@ -2,13 +2,20 @@
   font-family: Inter, system-ui, Arial, sans-serif;
   color: #1f1f25;
   background: #fff;
-  /** Sabit üst menü + hash (#) ile kaydırmada bölüm başlığının görünür kalması (px, JS ile de okunur) */
-  --site-header-scroll-offset: 132px;
+  /** Sabit üst menü yüksekliği (px, JS ile de okunur) */
+  --site-header-height: 84px;
+  --site-header-scroll-offset: var(--site-header-height);
+}
+
+@media (min-width: 769px) and (max-width: 900px) {
+  :root {
+    --site-header-height: 92px;
+  }
 }
 
 @media (min-width: 901px) {
   :root {
-    --site-header-scroll-offset: 172px;
+    --site-header-height: 148px;
   }
 }
 
@@ -425,8 +432,23 @@ html {
 }
 
 .admin-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
   padding: 10px 12px;
   margin-bottom: 16px;
+}
+
+.admin-brand-logo {
+  display: block;
+  height: 60px;
+  width: auto;
+  object-fit: contain;
+}
+
+.admin-brand-logo--partner {
+  height: 68px;
 }
 
 .admin-brand strong {
@@ -1546,8 +1568,9 @@ html {
 }
 
 .admin-auth-logo {
-  width: 110px;
-  height: 110px;
+  height: 100px;
+  width: auto;
+  max-width: 100%;
   object-fit: contain;
   filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.28));
 }
@@ -1690,6 +1713,18 @@ html {
     height: auto;
   }
 
+  .admin-brand-logo {
+    height: 60px;
+  }
+
+  .admin-brand-logo--partner {
+    height: 60px;
+  }
+
+  .admin-auth-logo {
+    height: 112px;
+  }
+
   .admin-side-nav {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1804,8 +1839,26 @@ a {
   gap: 16px;
 }
 
+.site-brand {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .site-logo {
-  height: 92px;
+  display: block;
+  height: 64px;
+  width: auto;
+}
+
+.site-logo-slogan {
+  display: block;
+  height: 30px;
+  width: auto;
+  max-width: min(220px, 34vw);
+  object-fit: contain;
 }
 
 .nav nav {
@@ -2461,17 +2514,22 @@ a {
 }
 
 .hero {
-  min-height: 560px;
+  --hero-min-height: 560px;
+  position: relative;
+  z-index: 0;
+  min-height: max(var(--hero-min-height), calc(100svh - var(--site-header-height)));
+  background-color: #0a2f7a;
   background-image: url("/banner.png");
+  background-repeat: no-repeat;
   background-size: cover;
-  background-position: center;
+  background-position: center top;
 }
 
 .hero-overlay {
-  min-height: 560px;
+  min-height: 100%;
   background: rgba(10, 10, 10, 0.45);
   color: #fff;
-  padding: 8vh 4vw;
+  padding: clamp(32px, 8vh, 72px) 4vw;
 }
 
 .hero-content {
@@ -3249,9 +3307,25 @@ textarea {
   align-items: start;
 }
 
-.footer-brand img {
-  width: 140px;
-  height: auto;
+.footer-brand-link {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.footer-logo {
+  display: block;
+  height: 76px;
+  width: auto;
+}
+
+.footer-logo-slogan {
+  display: block;
+  height: 34px;
+  width: auto;
+  max-width: 240px;
+  object-fit: contain;
 }
 
 .footer-links,
@@ -5599,7 +5673,12 @@ textarea {
   }
 
   .site-logo {
-    height: 82px;
+    height: 58px;
+  }
+
+  .site-logo-slogan {
+    height: 28px;
+    max-width: min(200px, 32vw);
   }
 
   .hero-content {
@@ -5639,12 +5718,12 @@ textarea {
   }
 
   .hero {
-    min-height: 500px;
+    --hero-min-height: 500px;
+    background-position: 58% top;
   }
 
   .hero-overlay {
-    min-height: 500px;
-    padding: 6vh 3.5vw;
+    padding: clamp(28px, 6vh, 56px) 3.5vw;
   }
 
   .grid {
@@ -5851,6 +5930,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .hero {
+    background-position: 60% top;
+  }
+
   .hero-card-stack {
     margin-top: 24px;
     max-width: 100%;
@@ -5870,6 +5953,15 @@ textarea {
   .partner-grid,
   .footer-top {
     grid-template-columns: 1fr;
+  }
+
+  .footer-logo {
+    height: 68px;
+  }
+
+  .footer-logo-slogan {
+    height: 30px;
+    max-width: 210px;
   }
 
   .calendar-hero-inner {
@@ -6050,8 +6142,17 @@ textarea {
     display: none;
   }
 
+  .site-brand {
+    gap: 3px;
+  }
+
   .site-logo {
-    height: 72px;
+    height: 52px;
+  }
+
+  .site-logo-slogan {
+    height: 24px;
+    max-width: min(170px, 38vw);
   }
 
   .newsletter h2 {
@@ -6085,8 +6186,17 @@ textarea {
     padding-bottom: 8px;
   }
 
+  .site-brand {
+    gap: 2px;
+  }
+
   .site-logo {
-    height: 64px;
+    height: 44px;
+  }
+
+  .site-logo-slogan {
+    height: 20px;
+    max-width: min(140px, 42vw);
   }
 
   .header-actions {
@@ -6105,6 +6215,10 @@ textarea {
 
   .hero h1 {
     font-size: 2.2rem;
+  }
+
+  .hero {
+    background-position: 65% top;
   }
 
   .hero p {
@@ -6211,6 +6325,15 @@ textarea {
 
   .dropdown-menu {
     min-width: 250px;
+  }
+
+  .footer-logo {
+    height: 60px;
+  }
+
+  .footer-logo-slogan {
+    height: 26px;
+    max-width: 180px;
   }
 
   .hero h1 {
