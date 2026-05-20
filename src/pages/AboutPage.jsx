@@ -130,8 +130,7 @@ function AboutPage() {
               </div>
               <h3>Misyon</h3>
               <p>
-                Üniversitemiz temel değerleri doğrultusunda bireyler yetiştirmek; araştırmalar yoluyla evrensel düzeyde fikir, bilgi, bilim, teknoloji ve
-                hizmet üreterek toplumsal sorunların çözümüne ve hayat boyu öğrenme sürecine katkıda bulunmaktır.
+                Gazi Üniversitesi Uzaktan Eğitim Uygulama ve Araştırma Merkezi’nin misyonu, çağdaş bilgi ve iletişim teknolojilerini kullanarak eğitim ve öğretimin etkinliğini artıran, hayat boyu öğrenimin önemini kavramış, kişilerin eğitim ihtiyaçlarını karşılamayı ilke edinmiş, sürdürülebilir eğitim sistemine sahip, yeniliklere açık, katılımcı, ulusal düzeyde rekabet edebilir, uluslararası işbirliğine açık, lider bir merkez olmaktır.
               </p>
             </article>
             <article className="about-page-mvv-card">
@@ -139,7 +138,7 @@ function AboutPage() {
                 <i className="fa-solid fa-eye" />
               </div>
               <h3>Vizyon</h3>
-              <p>Uluslararası düzeyde bilim, teknoloji ve sanatta, girişimci ve öncü bir üniversite olmak.</p>
+              <p>Gazi Üniversitesi Uzaktan Eğitim Uygulama ve Araştırma Merkezi'nin vizyonu bütün çalışma ekibiyle, sadece Gazi Üniversitesi’e değil, tüm Türkiye’ye uzatan eğitim hizmetlerini ulaştırmaktır.</p>
             </article>
           </div>
         </div>

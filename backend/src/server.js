@@ -456,6 +456,16 @@ const migrateExamResultsPermissions = async () => {
   `);
 };
 
+const migrateCertificateListPermissions = async () => {
+  await pool.query(`
+    INSERT INTO permissions (role_id, module_name, can_view, can_create, can_update, can_delete)
+    SELECT r.id, 'certificateList', p.can_view, FALSE, FALSE, FALSE
+    FROM roles r
+    INNER JOIN permissions p ON p.role_id = r.id AND p.module_name = 'examResults'
+    ON CONFLICT (role_id, module_name) DO NOTHING
+  `);
+};
+
 const migrateExamQuestionSettingsColumns = async () => {
   await pool.query(`ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS exam_target_difficulty TEXT NOT NULL DEFAULT 'medium'`);
   await pool.query(`ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS exam_question_count INT NOT NULL DEFAULT 20`);
@@ -573,6 +583,7 @@ const permissionModules = [
   "examQuestions",
   "examPortalAccess",
   "examResults",
+  "certificateList",
   "activityLogs",
   "roles",
   "adminMessaging",
@@ -2773,6 +2784,31 @@ app.get("/api/admin/activity-logs", auth, async (req, res, next) => {
   }
 });
 
+const VALID_DATE_RANGE_PERIODS = new Set(["today", "week", "month", "year", "all"]);
+
+const parseDateRangePeriod = (raw) => {
+  const period = String(raw || "all").trim().toLowerCase();
+  return VALID_DATE_RANGE_PERIODS.has(period) ? period : "all";
+};
+
+const buildIstanbulDateFilterSql = (columnSql, period) => {
+  if (!period || period === "all") return "";
+  const tz = "Europe/Istanbul";
+  if (period === "today") {
+    return ` AND ${columnSql} >= ((NOW() AT TIME ZONE '${tz}')::date) AT TIME ZONE '${tz}' AND ${columnSql} < (((NOW() AT TIME ZONE '${tz}')::date + INTERVAL '1 day')) AT TIME ZONE '${tz}'`;
+  }
+  if (period === "week") {
+    return ` AND ${columnSql} >= (((NOW() AT TIME ZONE '${tz}')::date - INTERVAL '6 days')) AT TIME ZONE '${tz}'`;
+  }
+  if (period === "month") {
+    return ` AND ${columnSql} >= (date_trunc('month', NOW() AT TIME ZONE '${tz}') AT TIME ZONE '${tz}')`;
+  }
+  if (period === "year") {
+    return ` AND ${columnSql} >= (date_trunc('year', NOW() AT TIME ZONE '${tz}') AT TIME ZONE '${tz}')`;
+  }
+  return "";
+};
+
 app.get("/api/admin/exam-portal/visits", auth, checkPermission("examPortalAccess", "can_view"), async (req, res, next) => {
   try {
     const page = Math.max(1, Number(req.query.page || 1));
@@ -2780,10 +2816,12 @@ app.get("/api/admin/exam-portal/visits", auth, checkPermission("examPortalAccess
     const offset = (page - 1) * pageSize;
     const search = String(req.query.search || "").trim().toLowerCase();
     const searchParam = search ? `%${search}%` : "";
+    const period = parseDateRangePeriod(req.query.period);
+    const dateFilter = buildIstanbulDateFilterSql("created_at", period);
     const countSql = `SELECT COUNT(*)::int AS total FROM exam_portal_visits
-      WHERE ($1::text = '' OR LOWER(CONCAT(COALESCE(portal_url,''), ' ', COALESCE(education_code,''), ' ', COALESCE(national_id,''))) LIKE $1)`;
+      WHERE ($1::text = '' OR LOWER(CONCAT(COALESCE(portal_url,''), ' ', COALESCE(education_code,''), ' ', COALESCE(national_id,''))) LIKE $1)${dateFilter}`;
     const listSql = `SELECT * FROM exam_portal_visits
-      WHERE ($1::text = '' OR LOWER(CONCAT(COALESCE(portal_url,''), ' ', COALESCE(education_code,''), ' ', COALESCE(national_id,''))) LIKE $1)
+      WHERE ($1::text = '' OR LOWER(CONCAT(COALESCE(portal_url,''), ' ', COALESCE(education_code,''), ' ', COALESCE(national_id,''))) LIKE $1)${dateFilter}
       ORDER BY created_at DESC LIMIT $2 OFFSET $3`;
     const [countResult, listResult] = await Promise.all([
       pool.query(countSql, [searchParam]),
@@ -2823,9 +2861,12 @@ app.get("/api/admin/exam-portal/limit-exceeded", auth, checkPermission("examPort
     const offset = (page - 1) * pageSize;
     const search = String(req.query.search || "").trim().toLowerCase();
     const searchParam = search ? `%${search}%` : "";
+    const period = parseDateRangePeriod(req.query.period);
+    const attemptDateFilter = buildIstanbulDateFilterSql("started_at", period);
     const countSql = `SELECT COUNT(*)::int AS total FROM (
         SELECT UPPER(TRIM(education_code)) AS education_code, national_id, COUNT(*)::int AS start_count
         FROM exam_attempts
+        WHERE 1=1${attemptDateFilter}
         GROUP BY UPPER(TRIM(education_code)), national_id
         HAVING COUNT(*)::int >= $1
       ) t
@@ -2833,6 +2874,7 @@ app.get("/api/admin/exam-portal/limit-exceeded", auth, checkPermission("examPort
     const listSql = `SELECT education_code, national_id, start_count FROM (
         SELECT UPPER(TRIM(education_code)) AS education_code, national_id, COUNT(*)::int AS start_count
         FROM exam_attempts
+        WHERE 1=1${attemptDateFilter}
         GROUP BY UPPER(TRIM(education_code)), national_id
         HAVING COUNT(*)::int >= $1
       ) t
@@ -2940,6 +2982,7 @@ app.get("/api/admin/exam-results", auth, checkPermission("examResults", "can_vie
     const educationCodeRaw = String(req.query.educationCode || "").trim().toUpperCase();
     const nationalIdRaw = String(req.query.nationalId || "").trim();
     const certificateOnly = ["1", "true", "yes"].includes(String(req.query.certificateOnly || "").toLowerCase());
+    const period = parseDateRangePeriod(req.query.period);
 
     const params = [];
     const conditions = [];
@@ -2963,7 +3006,8 @@ app.get("/api/admin/exam-results", auth, checkPermission("examResults", "can_vie
       conditions.push(`best_score >= 60`);
     }
 
-    const whereSql = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const dateFilter = buildIstanbulDateFilterSql("COALESCE(best_recorded_at, updated_at)", period);
+    const whereSql = conditions.length ? `WHERE ${conditions.join(" AND ")}${dateFilter}` : dateFilter ? `WHERE 1=1${dateFilter}` : "";
     const countSql = `SELECT COUNT(*)::int AS total FROM exam_portal_best_scores ${whereSql}`;
     const listSql = `SELECT * FROM exam_portal_best_scores ${whereSql} ORDER BY updated_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     const [countResult, listResult] = await Promise.all([
@@ -2985,6 +3029,119 @@ app.get("/api/admin/exam-results", auth, checkPermission("examResults", "can_vie
         totalPages: Math.max(1, Math.ceil(countResult.rows[0].total / pageSize)),
       },
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+const fetchCertificateRowContext = async (id) => {
+  const result = await pool.query(
+    `SELECT b.*,
+            TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) AS participant_name,
+            COALESCE(ae.name, ed.name, '') AS education_name,
+            d.city AS participant_city,
+            d.country_code AS participant_country
+     FROM exam_portal_best_scores b
+     LEFT JOIN normal_user_details d ON d.national_id = b.national_id
+     LEFT JOIN normal_users u ON u.id = d.user_id
+     LEFT JOIN approved_educations ae ON UPPER(TRIM(ae.code)) = UPPER(TRIM(b.education_code))
+     LEFT JOIN educations ed ON UPPER(TRIM(ed.code)) = UPPER(TRIM(b.education_code))
+     WHERE b.id = $1
+       AND b.payment_received = TRUE
+       AND b.best_score >= 60
+     LIMIT 1`,
+    [id],
+  );
+  return result.rows[0] || null;
+};
+
+app.get("/api/admin/certificate-list", auth, checkPermission("certificateList", "can_view"), async (req, res, next) => {
+  try {
+    const page = Math.max(1, Number(req.query.page || 1));
+    const pageSize = 20;
+    const offset = (page - 1) * pageSize;
+    const searchRaw = String(req.query.search || "").trim();
+    const period = parseDateRangePeriod(req.query.period);
+
+    const params = [];
+    const conditions = ["b.payment_received = TRUE", "b.best_score >= 60"];
+
+    if (searchRaw) {
+      params.push(`%${searchRaw.toLowerCase()}%`);
+      conditions.push(
+        `LOWER(CONCAT(COALESCE(b.education_code,''), ' ', COALESCE(b.national_id,''), ' ', COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''), ' ', COALESCE(ae.name,''))) LIKE $${params.length}`,
+      );
+    }
+
+    const dateFilter = buildIstanbulDateFilterSql("b.best_recorded_at", period);
+    const joinSql = `
+      FROM exam_portal_best_scores b
+      LEFT JOIN normal_user_details d ON d.national_id = b.national_id
+      LEFT JOIN normal_users u ON u.id = d.user_id
+      LEFT JOIN approved_educations ae ON UPPER(TRIM(ae.code)) = UPPER(TRIM(b.education_code))
+    `;
+    const whereSql = `WHERE ${conditions.join(" AND ")}${dateFilter}`;
+    const countSql = `SELECT COUNT(*)::int AS total ${joinSql} ${whereSql}`;
+    const listSql = `SELECT b.*,
+            TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) AS participant_name,
+            COALESCE(ae.name, '') AS education_name
+     ${joinSql}
+     ${whereSql}
+     ORDER BY b.best_recorded_at DESC
+     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    const [countResult, listResult] = await Promise.all([
+      pool.query(countSql, params),
+      pool.query(listSql, [...params, pageSize, offset]),
+    ]);
+    return res.json({
+      data: listResult.rows.map((row) => {
+        const api = toApiObject(row);
+        return {
+          ...api,
+          participantName: String(row.participant_name || "").trim(),
+          educationName: String(row.education_name || "").trim(),
+          certificateEligible: true,
+        };
+      }),
+      pagination: {
+        page,
+        pageSize,
+        total: countResult.rows[0].total,
+        totalPages: Math.max(1, Math.ceil(countResult.rows[0].total / pageSize)),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/admin/certificate-list/:id/generate-pdf", auth, checkPermission("certificateList", "can_view"), async (req, res, next) => {
+  try {
+    const id = String(req.params.id || "").trim();
+    const row = await fetchCertificateRowContext(id);
+    if (!row) {
+      return res.status(404).json({
+        message: "Kayıt bulunamadı veya sertifika için uygun değil (ödeme alınmış ve ≥60 puan gerekir).",
+      });
+    }
+
+    const { buildCertificatePdf } = await import("./certificatePdf.js");
+    const participantName = String(row.participant_name || "").trim();
+    const birthParts = [row.participant_city, row.participant_country].filter(Boolean);
+    const { pdfBytes, fileName } = await buildCertificatePdf({
+      nationalId: row.national_id,
+      fullName: participantName || "—",
+      birthInfo: birthParts.length ? birthParts.join(" / ") : "—",
+      educationCode: row.education_code,
+      educationName: row.education_name || row.education_code,
+      bestScore: row.best_score,
+      bestRecordedAt: row.best_recorded_at,
+      issuePlace: "Ankara",
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    return res.send(Buffer.from(pdfBytes));
   } catch (error) {
     next(error);
   }
@@ -3755,6 +3912,7 @@ const startServer = async () => {
     migrateExamPortalBestScoresTable,
     migrateExamPortalAccessPermissions,
     migrateExamResultsPermissions,
+    migrateCertificateListPermissions,
     migrateExamQuestionSettingsColumns,
     migrateAdminMessagingTables,
     migrateAdminMessagingPermissions,

@@ -74,21 +74,61 @@ export const adminApi = {
     formData.append("poolQuestionCount", String(poolQuestionCount));
     return request("/admin/uploads/exam-doc", { method: "POST", body: formData });
   },
-  getExamPortalVisits: (page = 1, search = "") =>
-    request(`/admin/exam-portal/visits?page=${page}&search=${encodeURIComponent(search)}`),
+  getExamPortalVisits: ({ page = 1, search = "", period = "all" } = {}) => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    if (search) params.set("search", search);
+    if (period && period !== "all") params.set("period", period);
+    return request(`/admin/exam-portal/visits?${params.toString()}`);
+  },
   deleteExamPortalVisit: (id) => request(`/admin/exam-portal/visits/${id}`, { method: "DELETE" }),
-  getExamPortalLimitExceeded: (page = 1, search = "") =>
-    request(`/admin/exam-portal/limit-exceeded?page=${page}&search=${encodeURIComponent(search)}`),
+  getExamPortalLimitExceeded: ({ page = 1, search = "", period = "all" } = {}) => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    if (search) params.set("search", search);
+    if (period && period !== "all") params.set("period", period);
+    return request(`/admin/exam-portal/limit-exceeded?${params.toString()}`);
+  },
   deleteExamPortalLimitExceeded: (payload) =>
     request("/admin/exam-portal/limit-exceeded", { method: "DELETE", body: JSON.stringify(payload) }),
-  getExamResults: ({ page = 1, search = "", educationCode = "", nationalId = "", certificateOnly = false } = {}) => {
+  getExamResults: ({ page = 1, search = "", educationCode = "", nationalId = "", certificateOnly = false, period = "all" } = {}) => {
     const params = new URLSearchParams();
     params.set("page", String(page));
     if (search) params.set("search", search);
     if (educationCode) params.set("educationCode", educationCode);
     if (nationalId) params.set("nationalId", nationalId);
     if (certificateOnly) params.set("certificateOnly", "1");
+    if (period && period !== "all") params.set("period", period);
     return request(`/admin/exam-results?${params.toString()}`);
+  },
+  getCertificateList: ({ page = 1, search = "", period = "all" } = {}) => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    if (search) params.set("search", search);
+    if (period && period !== "all") params.set("period", period);
+    return request(`/admin/certificate-list?${params.toString()}`);
+  },
+  generateCertificatePdf: async (id) => {
+    const token = getToken();
+    const response = await fetch(`${API_BASE_URL}/admin/certificate-list/${id}/generate-pdf`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      let message = "Sertifika oluşturulamadı.";
+      try {
+        const data = await response.json();
+        if (data?.message) message = data.message;
+      } catch {
+        /* PDF veya boş gövde */
+      }
+      throw new Error(message);
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    const fileName = match?.[1] || `sertifika_${id}.pdf`;
+    return { blob, fileName };
   },
   deleteExamResult: (id) => request(`/admin/exam-results/${id}`, { method: "DELETE" }),
   markExamResultPaymentReceived: (id) =>

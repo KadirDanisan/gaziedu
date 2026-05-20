@@ -146,11 +146,11 @@ function Header() {
     <>
       <div className="topbar">
         <div className="topbar-contact">
-          <a href="tel:03122022000">
-            <i className="fa-solid fa-phone" /> 0 (312) 202 20 00
+          <a href="tel:03122028200">
+            <i className="fa-solid fa-phone" /> 0 (312) 202 82 00
           </a>
-          <a href="mailto:rimer@gazi.edu.tr">
-            <i className="fa-regular fa-envelope" /> rimer@gazi.edu.tr
+          <a href="mailto:guzem@gazi.edu.tr">
+            <i className="fa-regular fa-envelope" /> guzem@gazi.edu.tr
           </a>
         </div>
         <div className="socials">
@@ -322,15 +322,15 @@ function Header() {
       </div>
       <div className={`mobile-menu ${isMobileMenuOpen ? "is-open" : ""}`}>
         <div className="mobile-menu-contact">
-        <a href="tel:03122022000">
-            <i className="fa-solid fa-phone" />  0(312) 202 20 00
+        <a href="tel:03122028200">
+            <i className="fa-solid fa-phone" />  0(312) 202 82 00
           </a>
-          <a href="mailto:rimer@gazi.edu.tr">
-            <i className="fa-regular fa-envelope" /> rimer@gazi.edu.tr
+          <a href="mailto:guzem@gazi.edu.tr">
+            <i className="fa-regular fa-envelope" /> guzem@gazi.edu.tr
           </a>
         </div>
         <div className="mobile-menu-socials">
-        <a href="https://www.facebook.com/GaziUniversitesi.1926" target="_blank"><i className="fa-brands fa-facebook-f" /></a>
+        <a href="https://www.facebook.com/gaziuniuzem" target="_blank"><i className="fa-brands fa-facebook-f" /></a>
         <a href="https://www.linkedin.com/school/gazi-university/" target="_blank"><i className="fa-brands fa-linkedin-in" /></a>
         <a href="https://www.instagram.com/gazi_universitesi/?hl=tr" target="_blank"><i className="fa-brands fa-instagram" /></a>  
         </div>

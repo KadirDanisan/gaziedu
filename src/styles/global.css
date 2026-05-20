@@ -636,6 +636,53 @@ html {
   margin: 14px 0;
 }
 
+.admin-table-tools--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.admin-table-tools__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-date-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-date-range__btn {
+  border: 1px solid #d9e2f2;
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: #fff;
+  color: #1d2740;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.admin-date-range__btn:hover:not(:disabled) {
+  border-color: #b8c5e4;
+  background: #f6f8fd;
+}
+
+.admin-date-range__btn.is-active {
+  border-color: #0d47a1;
+  background: #edf3ff;
+  color: #0d47a1;
+}
+
+.admin-date-range__btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .admin-table-tools input,
 .admin-table-tools select,
 .admin-filter-grid select {

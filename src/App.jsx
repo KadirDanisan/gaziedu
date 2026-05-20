@@ -30,6 +30,7 @@ import RolePermissionPage from "./admin/pages/RolePermissionPage";
 import ExamGeneratorPage from "./admin/pages/ExamGeneratorPage";
 import ExamPortalAccessPage from "./admin/pages/ExamPortalAccessPage";
 import ExamResultsPage from "./admin/pages/ExamResultsPage";
+import CertificateListPage from "./admin/pages/CertificateListPage";
 import AdminMessagingPage from "./admin/pages/AdminMessagingPage";
 import NoAccessPage from "./admin/pages/NoAccessPage";
 import ActivityLogsPage from "./admin/pages/ActivityLogsPage";
@@ -89,6 +90,7 @@ function App() {
                 <Route path="/admin/sinav-sorulari" element={<ModulePermissionGuard moduleKey="examQuestions"><CrudListPage moduleKey="examQuestions" /></ModulePermissionGuard>} />
                 <Route path="/admin/sinav-portali-girisleri" element={<ModulePermissionGuard moduleKey="examPortalAccess"><ExamPortalAccessPage /></ModulePermissionGuard>} />
                 <Route path="/admin/sinav-sonuclari" element={<ModulePermissionGuard moduleKey="examResults"><ExamResultsPage /></ModulePermissionGuard>} />
+                <Route path="/admin/sertifika-listesi" element={<ModulePermissionGuard moduleKey="certificateList"><CertificateListPage /></ModulePermissionGuard>} />
                 <Route path="/admin/yonetici-sohbeti" element={<ModulePermissionGuard moduleKey="adminMessaging"><AdminMessagingPage /></ModulePermissionGuard>} />
                 <Route path="/admin/sinav-olusturucu" element={<ModulePermissionGuard moduleKey="examQuestions"><ExamGeneratorPage /></ModulePermissionGuard>} />
                 <Route path="/admin/aktivite-listesi" element={<ActivityLogsPage />} />

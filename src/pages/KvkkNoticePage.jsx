@@ -45,7 +45,7 @@ function KvkkNoticePage() {
           </li>
           <li>
             <strong>E-posta (örnek iletişim):</strong>{" "}
-            <a href="mailto:rimer@gazi.edu.tr">rimer@gazi.edu.tr</a> (birim ve süreçlere göre resmi başvuru kanalları değişebilir; güncel adres için
+            <a href="mailto:guzem@gazi.edu.tr">guzem@gazi.edu.tr</a> (birim ve süreçlere göre resmi başvuru kanalları değişebilir; güncel adres için
             web sitemizdeki iletişim bilgilerini takip ediniz.)
           </li>
           <li>

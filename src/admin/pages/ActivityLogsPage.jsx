@@ -15,6 +15,7 @@ const moduleLabelMap = {
   examQuestions: "Sınav Soruları",
   examPortalAccess: "Sınav Portalı Girişleri",
   examResults: "Sınav Sonuçları",
+  certificateList: "Sertifika Çıkartma",
   adminMessaging: "Yönetici sohbeti",
   roles: "Rol ve Yetki",
 };

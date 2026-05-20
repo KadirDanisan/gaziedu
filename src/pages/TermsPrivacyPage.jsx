@@ -233,8 +233,8 @@ function TermsPrivacyPage() {
       <section className="legal-page-block" aria-labelledby="tp-20">
         <h2 id="tp-20">20. İletişim</h2>
         <p>
-          Bu metinle ilgili sorularınız için sitede yer alan iletişim bilgilerini kullanabilirsiniz: telefon 0(312) 202 20 00, e-posta{" "}
-          <a href="mailto:rimer@gazi.edu.tr">rimer@gazi.edu.tr</a>, adres 06560 Emniyet Mahallesi Bandırma Caddesi No:6/1 Yenimahalle / Ankara.
+          Bu metinle ilgili sorularınız için sitede yer alan iletişim bilgilerini kullanabilirsiniz: telefon 0(312) 202 82 00, e-posta{" "}
+          <a href="mailto:guzem@gazi.edu.tr">guzem@gazi.edu.tr</a>, adres 06560 Emniyet Mahallesi Bandırma Caddesi No:6/1 Yenimahalle / Ankara.
         </p>
       </section>
     </LegalDocShell>

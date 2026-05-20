@@ -156,6 +156,7 @@ export const permissions = roles.flatMap((role) =>
     "examQuestions",
     "examPortalAccess",
     "examResults",
+    "certificateList",
     "roles",
   ].map((moduleName) => ({
     id: `${role.id}-${moduleName}`,

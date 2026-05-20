@@ -17,14 +17,9 @@ function HomePage() {
         </div>
         <div className="about-content about-content-enter">
           <span className="about-badge">Hakkımızda</span>
-          <h2>Gazi Üniversitesi olarak,</h2>
+          <h2>GUZEM Olarak,</h2>
           <p>
-            Gelecekte birey, kurum ve toplumların şekillenmesinde en belirleyici etkenin bilgi
-            olacağının farkındayız. Bu sebeptendir ki, Türkiye&apos;nin en seçkin üniversiteleri ile
-            çeşitli eğitim konularında işbirliğimiz bulunmaktadır. Amacımız İş dünyasıyla akademik
-            dünya arasında köprü olmak; uygulanabilir bilgi sağlayan, davranış değişikliği yaratan
-            eğitimler hazırlamak; birey ve kurumların modern eğitim metodolojileri bağlamında eğitim
-            almalarını sağlamaktır.
+            Öğrenci memnuniyetini temel ilke edinen GUZEM, en güncel ve etkin uzaktan eğitim yöntem ve teknolojilerini kullanarak öğrencilerine konusunda seçkin öğretim elemanları, uzaktan eğitimde uzman yönetim ve çalışma ekibi ve deneyimli personeli ile en kaliteli ve doyurucu eğitim hizmetini sunmayı hedef edinmiştir.
           </p>
           <a className="btn about-btn" href="#">
             Detaylı Bilgi

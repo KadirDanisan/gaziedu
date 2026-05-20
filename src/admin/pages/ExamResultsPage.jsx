@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { adminApi } from "../api";
+import AdminDateRangeFilter from "../components/AdminDateRangeFilter";
 import { useAdminAuth } from "../context/AdminAuthContext";
+import { DEFAULT_DATE_RANGE_PERIOD } from "../utils/dateRangePeriod";
 
 const formatIstanbul = (value) => {
   if (!value) return "-";
@@ -67,6 +69,7 @@ export default function ExamResultsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [certificateOnly, setCertificateOnly] = useState(false);
+  const [period, setPeriod] = useState(DEFAULT_DATE_RANGE_PERIOD);
 
   const [rows, setRows] = useState([]);
   const [totalPages, setTotalPages] = useState(1);
@@ -89,6 +92,7 @@ export default function ExamResultsPage() {
         page,
         search,
         certificateOnly,
+        period,
       });
       setRows(res.data || []);
       setTotalPages(res.pagination?.totalPages || 1);
@@ -97,7 +101,7 @@ export default function ExamResultsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, certificateOnly]);
+  }, [page, search, certificateOnly, period]);
 
   useEffect(() => {
     load();
@@ -143,26 +147,36 @@ export default function ExamResultsPage() {
         </div>
       </div>
 
-      <div className="admin-table-tools">
-        <input
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && runSearch()}
-          placeholder="Eğitim kodu veya T.C. ara..."
-        />
-        <button type="button" className="btn btn-outline" onClick={runSearch}>
-          Ara
-        </button>
-        <select
-          value={certificateOnly ? "cert" : "all"}
-          onChange={(e) => {
-            setCertificateOnly(e.target.value === "cert");
+      <div className="admin-table-tools admin-table-tools--stacked">
+        <AdminDateRangeFilter
+          value={period}
+          disabled={loading}
+          onChange={(next) => {
+            setPeriod(next);
             setPage(1);
           }}
-        >
-          <option value="all">Tümü</option>
-          <option value="cert">Sertifikaya hak kazananlar (≥60)</option>
-        </select>
+        />
+        <div className="admin-table-tools__row">
+          <input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && runSearch()}
+            placeholder="Eğitim kodu veya T.C. ara..."
+          />
+          <button type="button" className="btn btn-outline" onClick={runSearch}>
+            Ara
+          </button>
+          <select
+            value={certificateOnly ? "cert" : "all"}
+            onChange={(e) => {
+              setCertificateOnly(e.target.value === "cert");
+              setPage(1);
+            }}
+          >
+            <option value="all">Tümü</option>
+            <option value="cert">Sertifikaya hak kazananlar (≥60)</option>
+          </select>
+        </div>
       </div>
 
       {loading ? <p>Yükleniyor...</p> : null}

@@ -18,7 +18,7 @@ function ContactPage() {
           <div>
             <h3>Telefon:</h3>
             <p>
-              <a href="tel:+903122022000">0(312) 202 20 00 </a>
+              <a href="tel:+903122028200">0(312) 202 82 00 </a>
             </p>
             <h3>Faks:</h3>
             <p>
@@ -34,7 +34,7 @@ function ContactPage() {
           <div>
             <h3>E-Mail:</h3>
             <p>
-              <a href="mailto:rimer@gazi.edu.tr"> rimer@gazi.edu.tr</a>
+              <a href="mailto:guzem@gazi.edu.tr"> guzem@gazi.edu.tr</a>
             </p>
            <h3>Kep Adresi:</h3>
             <p>

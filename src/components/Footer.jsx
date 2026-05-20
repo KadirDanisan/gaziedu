@@ -32,7 +32,7 @@ function Footer() {
         </div>
 
         <div className="footer-links">
-          <h4>GAZI UNIVERSITESI</h4>
+          <h4>GAZİ ÜNİVERSİTESİ</h4>
           <Link to="/">Anasayfa</Link>
           <Link to="/egitim-takvimi">Eğitim Takvimi</Link>
           <Link to="/hakkimizda">Hakkımızda</Link>
@@ -50,16 +50,16 @@ function Footer() {
         <div className="footer-contact">
           <h4>İletişime Geç</h4>
           <p>
-            <strong>Telefon:</strong> 0(312) 202 20 00
+            <strong>Telefon:</strong> 0(312) 202 82 00
           </p>
           <p>
-            <strong>E-Mail:</strong> rimer@gazi.edu.tr
+            <strong>E-Mail:</strong> guzem@gazi.edu.tr
           </p>
           <p>
-            <strong>Adres:</strong> 06560 Emniyet Mahallesi Bandırma Caddesi No:6/1 Yenimahalle - ANKARA
+            <strong>Adres:</strong> Gazi Üniversitesi Rektörlük Binası, 06560 Emniyet Mahallesi, Bandırma Caddesi, No:6/1, Yenimahalle - ANKARA
           </p>
           <div className="footer-social">
-            <a href="https://www.facebook.com/GaziUniversitesi.1926" target="_blank" className="fa-brands fa-facebook-f" />
+            <a href="https://www.facebook.com/gaziuniuzem" target="_blank" className="fa-brands fa-facebook-f" />
             <a href="https://www.linkedin.com/school/gazi-university/" target="_blank" className="fa-brands fa-linkedin-in" />
             <a href="https://www.instagram.com/gazi_universitesi/?hl=tr" target="_blank" className="fa-brands fa-instagram" />  
           </div>
@@ -67,7 +67,7 @@ function Footer() {
       </div>
 
       <div className="footer-bottom">
-        <span>Copyright © 2026 GAZI UNIVERSITESI. Tüm hakları saklıdır.</span>
+        <span>Copyright © 2026 GAZİ ÜNİVERSİTESİ. Tüm hakları saklıdır.</span>
       </div>
     </footer>
   );

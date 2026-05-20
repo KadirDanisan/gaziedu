@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { adminApi } from "../api";
+import AdminDateRangeFilter from "../components/AdminDateRangeFilter";
+import { DEFAULT_DATE_RANGE_PERIOD } from "../utils/dateRangePeriod";
 
 const formatIstanbul = (value) => {
   if (!value) return "-";
@@ -23,6 +25,8 @@ export default function ExamPortalAccessPage() {
   const [visitFilter, setVisitFilter] = useState("");
   const [limitInput, setLimitInput] = useState("");
   const [limitFilter, setLimitFilter] = useState("");
+  const [visitPeriod, setVisitPeriod] = useState(DEFAULT_DATE_RANGE_PERIOD);
+  const [limitPeriod, setLimitPeriod] = useState(DEFAULT_DATE_RANGE_PERIOD);
   const [visits, setVisits] = useState([]);
   const [limits, setLimits] = useState([]);
   const [visitTotalPages, setVisitTotalPages] = useState(1);
@@ -37,7 +41,7 @@ export default function ExamPortalAccessPage() {
     setLoadingVisits(true);
     setError("");
     try {
-      const res = await adminApi.getExamPortalVisits(visitPage, visitFilter);
+      const res = await adminApi.getExamPortalVisits({ page: visitPage, search: visitFilter, period: visitPeriod });
       setVisits(res.data || []);
       setVisitTotalPages(res.pagination?.totalPages || 1);
     } catch (e) {
@@ -45,13 +49,13 @@ export default function ExamPortalAccessPage() {
     } finally {
       setLoadingVisits(false);
     }
-  }, [visitPage, visitFilter]);
+  }, [visitPage, visitFilter, visitPeriod]);
 
   const loadLimits = useCallback(async () => {
     setLoadingLimits(true);
     setError("");
     try {
-      const res = await adminApi.getExamPortalLimitExceeded(limitPage, limitFilter);
+      const res = await adminApi.getExamPortalLimitExceeded({ page: limitPage, search: limitFilter, period: limitPeriod });
       setLimits(res.data || []);
       setLimitTotalPages(res.pagination?.totalPages || 1);
     } catch (e) {
@@ -59,7 +63,7 @@ export default function ExamPortalAccessPage() {
     } finally {
       setLoadingLimits(false);
     }
-  }, [limitPage, limitFilter]);
+  }, [limitPage, limitFilter, limitPeriod]);
 
   useEffect(() => {
     loadVisits();
@@ -115,7 +119,15 @@ export default function ExamPortalAccessPage() {
       {error ? <p className="admin-form-error">{error}</p> : null}
 
       <article className="admin-panel-card" style={{ marginBottom: 24 }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 16 }}>
+        <AdminDateRangeFilter
+          value={visitPeriod}
+          disabled={loadingVisits}
+          onChange={(next) => {
+            setVisitPeriod(next);
+            setVisitPage(1);
+          }}
+        />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 16, marginTop: 12 }}>
           <h3 style={{ margin: 0, flex: "1 1 200px" }}>Sınav portalına giriş yapmış hesaplar</h3>
           <input
             type="search"
@@ -205,7 +217,15 @@ export default function ExamPortalAccessPage() {
       </article>
 
       <article className="admin-panel-card">
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 16 }}>
+        <AdminDateRangeFilter
+          value={limitPeriod}
+          disabled={loadingLimits}
+          onChange={(next) => {
+            setLimitPeriod(next);
+            setLimitPage(1);
+          }}
+        />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 16, marginTop: 12 }}>
           <h3 style={{ margin: 0, flex: "1 1 200px" }}>Sınav hakkı dolmuş (5 oturum)</h3>
           <input
             type="search"
