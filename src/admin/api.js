@@ -91,6 +91,8 @@ export const adminApi = {
   },
   deleteExamPortalLimitExceeded: (payload) =>
     request("/admin/exam-portal/limit-exceeded", { method: "DELETE", body: JSON.stringify(payload) }),
+  getExamPortalTestToken: (educationCode) =>
+    request("/admin/exam-portal/test-token", { method: "POST", body: JSON.stringify({ educationCode }) }),
   getExamResults: ({ page = 1, search = "", educationCode = "", nationalId = "", certificateOnly = false, period = "all" } = {}) => {
     const params = new URLSearchParams();
     params.set("page", String(page));

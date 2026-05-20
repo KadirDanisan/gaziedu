@@ -31,15 +31,20 @@ export const publicApi = {
     });
     return request(`/public/educations?${params.toString()}`);
   },
-  recordExamPortalVisit: ({ portalUrl, educationCode, nationalId }) =>
+  validateExamPortalToken: ({ portalToken }) =>
+    request("/public/exam-portal/validate-token", {
+      method: "POST",
+      body: JSON.stringify({ portalToken }),
+    }),
+  recordExamPortalVisit: ({ portalUrl, portalToken }) =>
     request("/public/exam-portal/visit", {
       method: "POST",
-      body: JSON.stringify({ portalUrl, educationCode, nationalId }),
+      body: JSON.stringify({ portalUrl, portalToken }),
     }),
-  startExamPortal: ({ educationCode, nationalId }) =>
+  startExamPortal: ({ portalToken }) =>
     request("/public/exam-portal/start", {
       method: "POST",
-      body: JSON.stringify({ educationCode, nationalId }),
+      body: JSON.stringify({ portalToken }),
     }),
   submitExamPortal: ({ attemptId, answers, reason }) =>
     request(`/public/exam-portal/${attemptId}/submit`, {

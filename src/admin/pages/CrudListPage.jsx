@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAdminAuth } from "../context/AdminAuthContext";
 import { useAdminData } from "../context/AdminDataContext";
+import { adminApi } from "../api";
 import { normalizeEducationCode, parseEducationCode } from "../utils/educationCode";
 import { lookupCodeMatches, normalizeLookupCode, parseApprovedEducationExcelBuffer } from "../utils/parseApprovedEducationExcel";
 
@@ -339,15 +340,20 @@ export default function CrudListPage({ moduleKey }) {
     data.loadBootstrap().catch(() => {});
   }, []);
 
-  const openExamPortalForRow = (row) => {
+  const openExamPortalForRow = async (row) => {
     const educationCode = String(educationsById?.[row.educationId]?.code || "").trim().toUpperCase();
     if (!educationCode) {
       setError("Bu sınav kaydı için eğitim kodu bulunamadı. Önce eğitim kaydında kod tanımlayın.");
       return;
     }
-    const testNationalId = "11111111111";
-    const portalUrl = `${window.location.origin}/sinavportali/${encodeURIComponent(educationCode)}/${testNationalId}`;
-    window.open(portalUrl, "_blank", "noopener,noreferrer");
+    setError("");
+    try {
+      const { path } = await adminApi.getExamPortalTestToken(educationCode);
+      const url = `${window.location.origin}${path}`;
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      setError(e?.message || "Sınav test bağlantısı oluşturulamadı.");
+    }
   };
 
   const openCreate = () => {

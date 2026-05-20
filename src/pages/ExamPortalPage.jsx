@@ -7,19 +7,29 @@ const EXAM_FALLBACK_DURATION_SECONDS = 30 * 60;
 const examStartCache = new Map();
 const EXAM_PORTAL_TITLE = "Gazi Üniversitesi Sertifika Sınavı";
 
+function decodePortalTokenParam(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
 function formatDurationHumanTr(seconds) {
-  const s = Math.max(0, Number(seconds) || 0);
-  if (s <= 0) return "—";
-  const m = Math.floor(s / 60);
-  const r = s % 60;
+  const sec = Math.max(0, Number(seconds) || 0);
+  if (sec <= 0) return "—";
+  const m = Math.floor(sec / 60);
+  const r = sec % 60;
   if (r === 0) return `${m} dakika`;
   return `${m} dakika ${r} saniye`;
 }
 
 function formatTimer(seconds) {
-  const s = Math.max(0, Number(seconds) || 0);
-  const m = Math.floor(s / 60);
-  const r = s % 60;
+  const sec = Math.max(0, Number(seconds) || 0);
+  const m = Math.floor(sec / 60);
+  const r = sec % 60;
   return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
 }
 
@@ -28,7 +38,13 @@ function answerLetter(index) {
 }
 
 export default function ExamPortalPage() {
-  const { educationCode = "", nationalId = "" } = useParams();
+  const { portalToken: portalParam } = useParams();
+  const portalToken = useMemo(() => decodePortalTokenParam(portalParam), [portalParam]);
+
+  const [identity, setIdentity] = useState(null);
+  const [tokenLoading, setTokenLoading] = useState(true);
+  const [tokenError, setTokenError] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [exam, setExam] = useState(null);
@@ -53,17 +69,62 @@ export default function ExamPortalPage() {
   }, [exam]);
 
   useEffect(() => {
-    if (!flowStarted || startRequestedRef.current) return;
+    setFlowStarted(false);
+    setExam(null);
+    setLoadError("");
+    setStarted(false);
+    setResult(null);
+    setAnswers({});
+    startRequestedRef.current = false;
+    submittedRef.current = false;
+  }, [portalToken]);
+
+  useEffect(() => {
+    if (!portalToken) {
+      setTokenLoading(false);
+      setTokenError("Sınav bağlantısı eksik veya geçersiz.");
+      setIdentity(null);
+      return;
+    }
+    let active = true;
+    setTokenLoading(true);
+    setTokenError("");
+    publicApi
+      .validateExamPortalToken({ portalToken })
+      .then((data) => {
+        if (!active) return;
+        setIdentity({
+          educationCode: data.educationCode,
+          nationalId: data.nationalId,
+          participantName: data.participantName || "—",
+        });
+      })
+      .catch((err) => {
+        if (!active) return;
+        setIdentity(null);
+        setTokenError(err?.message || "Bu sınav bağlantısı doğrulanamadı veya süresi dolmuş.");
+      })
+      .finally(() => {
+        if (!active) return;
+        setTokenLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [portalToken]);
+
+  useEffect(() => {
+    if (!flowStarted || startRequestedRef.current || !portalToken || !identity) return;
     startRequestedRef.current = true;
     let active = true;
     setLoading(true);
-    const cacheKey = `${String(educationCode).toUpperCase()}-${nationalId}`;
-    let startPromise = examStartCache.get(cacheKey);
+    setLoadError("");
+    let startPromise = examStartCache.get(portalToken);
     if (!startPromise) {
-      startPromise = publicApi.startExamPortal({ educationCode, nationalId });
-      examStartCache.set(cacheKey, startPromise);
+      startPromise = publicApi.startExamPortal({ portalToken });
+      examStartCache.set(portalToken, startPromise);
       startPromise.catch(() => null).finally(() => {
-        window.setTimeout(() => examStartCache.delete(cacheKey), 3000);
+        window.setTimeout(() => examStartCache.delete(portalToken), 3000);
       });
     }
     startPromise
@@ -74,6 +135,9 @@ export default function ExamPortalPage() {
       })
       .catch((err) => {
         if (!active) return;
+        examStartCache.delete(portalToken);
+        startRequestedRef.current = false;
+        setFlowStarted(false);
         setLoadError(err?.message || "Sınav başlatılamadı.");
       })
       .finally(() => {
@@ -83,7 +147,7 @@ export default function ExamPortalPage() {
     return () => {
       active = false;
     };
-  }, [educationCode, nationalId, flowStarted]);
+  }, [flowStarted, portalToken, identity]);
 
   const submitExam = useCallback(
     async (reason = "manual") => {
@@ -162,16 +226,43 @@ export default function ExamPortalPage() {
       setLoadError("Sorular yüklenemedi. Lütfen sayfayı yenileyin.");
       return;
     }
-    const code = String(examRef.current?.education?.code || educationCode || "").trim().toUpperCase();
-    const tc = String(nationalId || "").trim();
-    if (/^[A-Z]{3}\d{7}$/.test(code) && /^\d{11}$/.test(tc)) {
-      const portalUrl = `${window.location.origin}/sinavportali/${encodeURIComponent(code)}/${tc}`;
-      publicApi.recordExamPortalVisit({ portalUrl, educationCode: code, nationalId: tc }).catch(() => {});
+    if (portalToken) {
+      publicApi
+        .recordExamPortalVisit({ portalUrl: window.location.href, portalToken })
+        .catch(() => {});
     }
     setLoadError("");
     setCurrentIndex(0);
     setStarted(true);
-  }, [questions.length, educationCode, nationalId]);
+  }, [questions.length, portalToken]);
+
+  if (tokenLoading) {
+    return (
+      <main className="exam-portal">
+        <section className="exam-portal-card exam-portal-card--center">
+          <div className="exam-portal-loader" />
+          <h1>Bağlantı doğrulanıyor...</h1>
+          <p>Güvenli sınav bağlantınız kontrol ediliyor.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (tokenError || !identity) {
+    return (
+      <main className="exam-portal">
+        <section className="exam-portal-card exam-portal-card--center">
+          <img src="/Gazi_Üniversitesi_logo.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
+          <h1>Sınav bağlantısı geçersiz</h1>
+          <p>{tokenError || "Bu adres ile sınav açılamaz."}</p>
+          <small>İmzalı bağlantı bozulmuş, süresi dolmuş veya bu ortamda çözülemiyor.</small>
+          <Link to="/" className="btn exam-start-btn" style={{ marginTop: 16 }}>
+            Ana sayfaya git
+          </Link>
+        </section>
+      </main>
+    );
+  }
 
   if (!flowStarted) {
     return (
@@ -186,12 +277,16 @@ export default function ExamPortalPage() {
           </div>
           <div className="exam-ready-grid">
             <div>
+              <span>Ad Soyad</span>
+              <strong>{identity.participantName}</strong>
+            </div>
+            <div>
               <span>Eğitim Kodu</span>
-              <strong>{educationCode}</strong>
+              <strong>{identity.educationCode}</strong>
             </div>
             <div>
               <span>T.C. Kimlik No</span>
-              <strong>{nationalId}</strong>
+              <strong>{identity.nationalId}</strong>
             </div>
             <div>
               <span>Süre ve soru sayısı</span>
@@ -232,7 +327,7 @@ export default function ExamPortalPage() {
           <img src="/Gazi_Üniversitesi_logo.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
           <h1>Sınav açılamadı</h1>
           <p>{loadError}</p>
-          <small>URL: /sinavportali/{educationCode}/{nationalId}</small>
+          <small>Güvenli bağlantı doğrulandı; sınav oturumu başlatılamadı.</small>
         </section>
       </main>
     );
@@ -248,13 +343,23 @@ export default function ExamPortalPage() {
           <div className="exam-result-score">{Math.round(result.score)}</div>
           <p className="exam-result-score-label">100 üzerinden puanınız</p>
           <div className="exam-result-grid">
-            <span>Doğru <strong>{result.correctCount}</strong></span>
-            <span>Yanlış <strong>{result.wrongCount}</strong></span>
-            <span>Boş <strong>{result.blankCount}</strong></span>
-            <span>Süre <strong>{formatTimer(result.durationSeconds)}</strong></span>
+            <span>
+              Doğru <strong>{result.correctCount}</strong>
+            </span>
+            <span>
+              Yanlış <strong>{result.wrongCount}</strong>
+            </span>
+            <span>
+              Boş <strong>{result.blankCount}</strong>
+            </span>
+            <span>
+              Süre <strong>{formatTimer(result.durationSeconds)}</strong>
+            </span>
           </div>
           {Number(result.score) >= 60 ? (
-            <p className="exam-result-note"><strong>Sertifika almaya hak kazandınız.</strong></p>
+            <p className="exam-result-note">
+              <strong>Sertifika almaya hak kazandınız.</strong>
+            </p>
           ) : (
             <p className="exam-result-note">Sertifika almak için en az 60 puan gereklidir.</p>
           )}
@@ -280,12 +385,16 @@ export default function ExamPortalPage() {
           </div>
           <div className="exam-ready-grid">
             <div>
+              <span>Ad Soyad</span>
+              <strong>{identity.participantName}</strong>
+            </div>
+            <div>
               <span>Eğitim Kodu</span>
               <strong>{exam.education.code}</strong>
             </div>
             <div>
               <span>T.C. Kimlik No</span>
-              <strong>{nationalId}</strong>
+              <strong>{identity.nationalId}</strong>
             </div>
             <div>
               <span>Soru sayısı</span>
@@ -300,9 +409,9 @@ export default function ExamPortalPage() {
             <i className="fa-solid fa-circle-info" aria-hidden />
             <p>Sınav başladıktan sonra sekmeyi kapatırsanız mevcut cevaplarınızla sınav tamamlanır ve sonucunuz kaydedilir.</p>
           </div>
-            <button type="button" className="btn exam-start-btn" onClick={handleStartExam}>
-              Hazırım, sınavı başlat
-            </button>
+          <button type="button" className="btn exam-start-btn" onClick={handleStartExam}>
+            Hazırım, sınavı başlat
+          </button>
         </section>
       </main>
     );
@@ -315,7 +424,9 @@ export default function ExamPortalPage() {
           <img src="/Gazi_Üniversitesi_logo.png" alt="Gazi Üniversitesi" />
           <div>
             <strong>{EXAM_PORTAL_TITLE}</strong>
-            <span>{exam.education.code} · {nationalId}</span>
+            <span>
+              {exam.education.code} · {identity.nationalId} · {identity.participantName}
+            </span>
           </div>
         </div>
         <div className={`exam-timer ${remaining <= 300 ? "is-danger" : ""}`}>
@@ -328,7 +439,9 @@ export default function ExamPortalPage() {
         <aside className="exam-question-nav">
           <div>
             <span>İlerleme</span>
-            <strong>{answeredCount}/{questions.length}</strong>
+            <strong>
+              {answeredCount}/{questions.length}
+            </strong>
           </div>
           <div className="exam-question-dots">
             {questions.map((q, index) => (

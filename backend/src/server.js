@@ -10,6 +10,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import mammoth from "mammoth";
 import { GoogleGenAI } from "@google/genai";
+import { signExamPortalLink, verifyExamPortalLink } from "./examPortalLinkToken.js";
 
 const { Pool } = pkg;
 const app = express();
@@ -2138,21 +2139,40 @@ app.get("/api/public/search/trainings", async (req, res, next) => {
   }
 });
 
+app.post("/api/public/exam-portal/validate-token", async (req, res, next) => {
+  try {
+    const portalToken = String(req.body?.portalToken || "").trim();
+    const out = verifyExamPortalLink(portalToken);
+    return res.json({
+      educationCode: out.educationCode,
+      nationalId: out.nationalId,
+      participantName: out.participantName,
+    });
+  } catch (error) {
+    const status = error.statusCode || 400;
+    return res.status(status).json({ message: error.message || "Geçersiz bağlantı." });
+  }
+});
+
 app.post("/api/public/exam-portal/visit", async (req, res, next) => {
   try {
+    const portalToken = String(req.body?.portalToken || "").trim();
+    if (!portalToken) {
+      return res.status(400).json({ message: "Geçerli sınav bağlantısı (portalToken) gerekli." });
+    }
+    let educationCode;
+    let nationalId;
+    try {
+      const v = verifyExamPortalLink(portalToken);
+      educationCode = v.educationCode;
+      nationalId = v.nationalId;
+    } catch (e) {
+      const status = e.statusCode || 401;
+      return res.status(status).json({ message: e.message || "Geçersiz bağlantı." });
+    }
+
     const portalUrl = String(req.body?.portalUrl || "").trim().slice(0, 2048);
-    const educationCode = String(req.body?.educationCode || "")
-      .trim()
-      .toUpperCase()
-      .replace(/\s+/g, "");
-    const nationalId = String(req.body?.nationalId || "").trim();
-    if (!isValidEducationCode(educationCode)) {
-      return res.status(400).json({ message: "Geçerli eğitim kodu gerekli (ör. GZM-1-32-03)." });
-    }
-    if (!/^\d{11}$/.test(nationalId)) {
-      return res.status(400).json({ message: "T.C. kimlik no 11 haneli olmalıdır." });
-    }
-    const safeUrl = portalUrl.length ? portalUrl : `/sinavportali/${educationCode}/${nationalId}`;
+    const safeUrl = portalUrl.length ? portalUrl : `/sinavportali/${encodeURIComponent(portalToken)}`;
     const insert = await pool.query(
       `INSERT INTO exam_portal_visits (portal_url, education_code, national_id) VALUES ($1, $2, $3) RETURNING id, portal_url, education_code, national_id, created_at`,
       [safeUrl, educationCode, nationalId],
@@ -2165,16 +2185,19 @@ app.post("/api/public/exam-portal/visit", async (req, res, next) => {
 
 app.post("/api/public/exam-portal/start", async (req, res, next) => {
   try {
-    const educationCode = String(req.body?.educationCode || "")
-      .trim()
-      .toUpperCase()
-      .replace(/\s+/g, "");
-    const nationalId = String(req.body?.nationalId || "").trim();
-    if (!isValidEducationCode(educationCode)) {
-      return res.status(400).json({ message: "Geçerli eğitim kodu gerekli (ör. GZM-1-32-03)." });
+    const portalToken = String(req.body?.portalToken || "").trim();
+    if (!portalToken) {
+      return res.status(400).json({ message: "Geçerli sınav bağlantısı (portalToken) gerekli." });
     }
-    if (!/^\d{11}$/.test(nationalId)) {
-      return res.status(400).json({ message: "T.C. kimlik no 11 haneli olmalıdır." });
+    let educationCode;
+    let nationalId;
+    try {
+      const v = verifyExamPortalLink(portalToken);
+      educationCode = v.educationCode;
+      nationalId = v.nationalId;
+    } catch (e) {
+      const status = e.statusCode || 401;
+      return res.status(status).json({ message: e.message || "Geçersiz bağlantı." });
     }
 
     const attemptsCheck = await pool.query(
@@ -2849,6 +2872,26 @@ app.delete("/api/admin/exam-portal/visits/:id", auth, checkPermission("examPorta
     await pool.query(`DELETE FROM exam_portal_visits WHERE id = $1`, [id]);
     await writeActivityLog({ req, action: "delete", moduleName: "examPortalAccess", entityId: id, oldData: previous.rows[0] });
     return res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/admin/exam-portal/test-token", auth, checkPermission("examQuestions", "can_view"), async (req, res, next) => {
+  try {
+    let educationCode;
+    try {
+      educationCode = normalizeEducationCodeValue(req.body?.educationCode);
+    } catch (e) {
+      return res.status(400).json({ message: e.message || "Geçersiz eğitim kodu." });
+    }
+    const token = signExamPortalLink({
+      educationCode,
+      nationalId: "11111111111",
+      participantName: "Gazi Test",
+    });
+    const path = `/sinavportali/${encodeURIComponent(token)}`;
+    return res.json({ portalToken: token, path });
   } catch (error) {
     next(error);
   }

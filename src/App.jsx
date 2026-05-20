@@ -11,6 +11,7 @@ import KvkkNoticePage from "./pages/KvkkNoticePage";
 import TermsPrivacyPage from "./pages/TermsPrivacyPage";
 import TrainingDetailPage from "./pages/TrainingDetailPage";
 import ExamPortalPage from "./pages/ExamPortalPage";
+import ExamPortalLegacyPage from "./pages/ExamPortalLegacyPage";
 import AuthPage from "./pages/AuthPage";
 import AccountProfilePage from "./pages/AccountProfilePage";
 import AccountOrdersPage from "./pages/AccountOrdersPage";
@@ -65,7 +66,8 @@ function App() {
               </Route>
             </Route>
 
-            <Route path="/sinavportali/:educationCode/:nationalId" element={<ExamPortalPage />} />
+            <Route path="/sinavportali/:educationCode/:nationalId" element={<ExamPortalLegacyPage />} />
+            <Route path="/sinavportali/:portalToken" element={<ExamPortalPage />} />
             <Route path="/admin/giris" element={<AdminLoginPage />} />
             <Route element={<ProtectedAdminRoute />}>
               <Route element={<AdminLayout />}>
