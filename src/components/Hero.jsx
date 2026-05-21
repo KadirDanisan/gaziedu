@@ -123,16 +123,22 @@ function Hero() {
 
   return (
     <section className="hero">
+      <div className="hero-media" aria-hidden="true" />
       <div className="hero-overlay">
-        <div className="hero-content">
-          <div>
-            <h1>Kariyerinizde fark yaratacak <br /> yenilikçi eğitimler</h1>
-            <p>Üniversitemiz ayrıcalığıyla</p>
-            <button className="btn hero-cta-btn">Eğitimleri Görüntüle</button>
-          </div>
+        <div className="hero-inner">
+          <div className="hero-content">
+            <div className="hero-copy">
+              <h1>
+                Kariyerinizde fark yaratacak <br /> yenilikçi eğitimler
+              </h1>
+              <p>Üniversitemiz ayrıcalığıyla</p>
+              <Link className="btn hero-cta-btn" to="/tum-egitimler">
+                Eğitimleri Görüntüle
+              </Link>
+            </div>
 
-          <div
-            className="hero-card-stack"
+            <div
+              className="hero-card-stack"
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
@@ -140,59 +146,73 @@ function Hero() {
             onPointerLeave={handlePointerUp}
           >
             {isLoading && <p>Yükleniyor...</p>}
-            {stackedCourses.map((course) => (
-              <article
-                key={`${course.title}-${course.index}`}
-                className="hero-course-card"
-                style={{
-                  zIndex: 20 - Math.abs(course.relative),
-                  transform: `translateX(${
-                    course.relative * (isMobileView ? 26 : 58)
-                  }px) translateY(${
-                    Math.abs(course.relative) * (isMobileView ? 8 : 12)
-                  }px) rotate(${course.relative * (isMobileView ? 2.2 : 5)}deg) scale(${
-                    course.relative === 0 ? 1 : isMobileView ? 0.96 : 0.93
-                  })`,
-                  opacity: Math.abs(course.relative) > (isMobileView ? 1 : 2) ? 0 : 1,
-                }}
-              >
-                <CourseCardThumb course={course} variant="hero" />
-                <div className="hero-course-body">
-                  <div className="hero-course-meta">
-                    <span>
-                      <i className="fa-regular fa-user" /> {course.attendees}
-                    </span>
-                    <span>
-                      <i className="fa-regular fa-calendar" /> {course.date}
-                    </span>
+            {stackedCourses.map((course) => {
+              const reviewCount = Number(course.ratingCount ?? 0) || 0;
+              const hasRating = reviewCount > 0 && course.rating;
+
+              return (
+                <article
+                  key={`${course.title}-${course.index}`}
+                  className="hero-course-card"
+                  style={{
+                    zIndex: 20 - Math.abs(course.relative),
+                    transform: `translateX(${
+                      course.relative * (isMobileView ? 26 : 58)
+                    }px) translateY(${
+                      Math.abs(course.relative) * (isMobileView ? 8 : 12)
+                    }px) rotate(${course.relative * (isMobileView ? 2.2 : 5)}deg) scale(${
+                      course.relative === 0 ? 1 : isMobileView ? 0.96 : 0.93
+                    })`,
+                    opacity: Math.abs(course.relative) > (isMobileView ? 1 : 2) ? 0 : 1,
+                  }}
+                >
+                  <div className="hero-course-media">
+                    <CourseCardThumb course={course} variant="hero" />
+                    {hasRating ? (
+                      <div className="hero-course-rating-badge">
+                        <i className="fa-solid fa-star" aria-hidden />
+                        <span>
+                          {course.rating} · {reviewCount} değerlendirme
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
-                  <div className="hero-course-meta">
-                    <span>
-                      <i className="fa-regular fa-clock" /> {course.duration}
-                    </span>
-                    <span>
-                      <i className="fa-solid fa-globe" /> {course.mode}
-                    </span>
-                  </div>
-                  <h3>
-                    <Link to={`/egitim-detay/${makeSlug(course.title)}`} state={{ course }}>
-                      {course.title}
+                  <div className="hero-course-body">
+                    <div className="hero-course-meta">
+                      <span>
+                        <i className="fa-regular fa-user" /> {course.attendees}
+                      </span>
+                      <span>
+                        <i className="fa-regular fa-calendar" /> {course.date}
+                      </span>
+                    </div>
+                    <div className="hero-course-meta">
+                      <span>
+                        <i className="fa-regular fa-clock" /> {course.duration}
+                      </span>
+                      <span>
+                        <i className="fa-solid fa-globe" /> {course.mode}
+                      </span>
+                    </div>
+                    <h3>
+                      <Link to={`/egitim-detay/${makeSlug(course.title)}`} state={{ course }}>
+                        {course.title}
+                      </Link>
+                    </h3>
+                    {course.category ? <p className="hero-course-category">{course.category}</p> : null}
+                    <Link
+                      className="hero-course-cta"
+                      to={`/egitim-detay/${makeSlug(course.title)}`}
+                      state={{ course }}
+                    >
+                      Eğitimi İncele <i className="fa-solid fa-arrow-right" aria-hidden />
                     </Link>
-                  </h3>
-                  <p className="hero-rating">
-                    <i className="fa-solid fa-star" />
-                    <i className="fa-solid fa-star" />
-                    <i className="fa-solid fa-star" />
-                    <i className="fa-solid fa-star" />
-                    <i className="fa-solid fa-star" /> ({course.rating})
-                  </p>
-                  <Link to={`/egitim-detay/${makeSlug(course.title)}`} state={{ course }}>
-                    Eğitimi İncele
-                  </Link>
-                </div>
-              </article>
-            ))}
+                  </div>
+                </article>
+              );
+            })}
             {!isLoading && !stackedCourses.length && <p>Eğitim bulunamadı.</p>}
+            </div>
           </div>
         </div>
       </div>

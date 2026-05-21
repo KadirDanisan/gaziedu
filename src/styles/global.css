@@ -2460,7 +2460,7 @@ a {
 }
 
 .course-card-thumb--hero {
-  height: 156px;
+  height: clamp(140px, 12vw, 188px);
 }
 
 .course-card-thumb--upcoming {
@@ -2514,56 +2514,103 @@ a {
 }
 
 .hero {
-  --hero-min-height: 560px;
+  --hero-min-height: clamp(520px, 72vh, 900px);
   position: relative;
   z-index: 0;
+  isolation: isolate;
+  overflow: hidden;
   min-height: max(var(--hero-min-height), calc(100svh - var(--site-header-height)));
-  background-color: #0a2f7a;
+  background: #061428;
+}
+
+.hero-media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-color: #061428;
   background-image: url("/banner.png");
   background-repeat: no-repeat;
   background-size: cover;
-  background-position: center top;
+  background-position: center 32%;
+  transform: scale(1.03);
 }
 
 .hero-overlay {
-  min-height: 100%;
-  background: rgba(10, 10, 10, 0.45);
+  position: relative;
+  z-index: 1;
+  min-height: max(var(--hero-min-height), calc(100svh - var(--site-header-height)));
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
   color: #fff;
-  padding: clamp(32px, 8vh, 72px) 4vw;
+  padding: clamp(28px, 5vh, 72px) clamp(16px, 4vw, 72px);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(6, 12, 28, 0.42) 0%,
+      rgba(6, 14, 32, 0.32) 45%,
+      rgba(5, 12, 30, 0.4) 100%
+    ),
+    linear-gradient(
+      100deg,
+      rgba(4, 10, 24, 0.3) 0%,
+      rgba(8, 16, 36, 0.22) 50%,
+      rgba(6, 14, 32, 0.28) 100%
+    );
+}
+
+.hero-inner {
+  width: 100%;
+  max-width: min(1560px, 100%);
+  margin: 0 auto;
 }
 
 .hero-content {
   display: grid;
-  grid-template-columns: 1fr minmax(280px, 430px);
-  gap: 40px;
+  grid-template-columns: minmax(0, 1.05fr) minmax(260px, clamp(280px, 26vw, 400px));
+  gap: clamp(24px, 4vw, 56px);
   align-items: center;
 }
 
+.hero-copy {
+  max-width: 42rem;
+}
+
 .hero h1 {
-  font-size: 3rem;
-  margin: 0 0 8px;
+  font-size: clamp(2rem, 1rem + 2.4vw, 3.75rem);
+  line-height: 1.12;
+  margin: 0 0 clamp(8px, 1.2vh, 14px);
+  letter-spacing: -0.02em;
+}
+
+.hero p {
+  margin: 0;
+  font-size: clamp(1rem, 0.75rem + 0.55vw, 1.32rem);
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .hero-cta-btn {
-  margin-top: 8px;
-  padding: 14px 28px;
-  font-size: 1.05rem;
+  margin-top: clamp(14px, 2vh, 22px);
+  padding: clamp(12px, 1.2vh, 16px) clamp(22px, 2vw, 34px);
+  font-size: clamp(1rem, 0.2vw + 0.92rem, 1.16rem);
   font-weight: 700;
+  display: inline-flex;
 }
 
 .hero-card-stack {
   position: relative;
   width: 100%;
-  max-width: 380px;
-  min-height: 430px;
-  margin-left: clamp(8px, 1.8vw, 2px);
+  max-width: clamp(280px, 26vw, 400px);
+  min-height: clamp(380px, 42vh, 520px);
+  margin-left: auto;
   overflow: visible;
   cursor: grab;
   touch-action: pan-y;
 }
 
 .hero-course-card {
-  --card-width: min(84vw, 300px);
+  --card-width: clamp(260px, 22vw, 360px);
   position: absolute;
   top: 0;
   left: 50%;
@@ -2571,20 +2618,46 @@ a {
   margin-left: calc(var(--card-width) / -2);
   background: #fff;
   color: #1a1b23;
-  border-radius: 18px;
+  border-radius: clamp(14px, 1vw, 18px);
   overflow: hidden;
   transition: transform 320ms ease, box-shadow 320ms ease, opacity 260ms ease;
-  box-shadow: 0 10px 26px rgba(13, 18, 24, 0.2);
+  box-shadow: 0 clamp(10px, 1.2vw, 18px) clamp(22px, 2.4vw, 32px) rgba(13, 18, 24, 0.22);
   user-select: none;
 }
 
 .hero-course-card:hover {
-  transform: translateX(0) translateY(0) rotate(0deg) scale(1.02) !important;
   box-shadow: 0 16px 36px rgba(13, 18, 24, 0.28);
+}
+
+.hero-course-media {
+  position: relative;
 }
 
 .hero-course-card .course-card-thumb {
   width: 100%;
+}
+
+.hero-course-rating-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(12, 18, 32, 0.82);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+  backdrop-filter: blur(4px);
+}
+
+.hero-course-rating-badge i {
+  color: #f59b21;
+  font-size: 0.7rem;
 }
 
 .hero-course-body {
@@ -2592,13 +2665,21 @@ a {
 }
 
 .hero-course-body h3 {
-  margin: 10px 0;
+  margin: 10px 0 6px;
   font-size: 1rem;
   line-height: 1.2;
 }
 
 .hero-course-body h3 a {
   color: #1a1b23;
+}
+
+.hero-course-category {
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #0d47a1;
+  line-height: 1.35;
 }
 
 .hero-course-meta {
@@ -2616,14 +2697,25 @@ a {
   gap: 6px;
 }
 
-.hero-rating {
-  color: #f59b21;
-  font-size: 0.85rem;
+.hero-course-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #0d47a1;
+  background: #e9f1ff;
+  transition: background-color 180ms ease, transform 180ms ease, color 180ms ease;
 }
 
-.hero-course-body a {
-  font-weight: 700;
-  color: #262626;
+.hero-course-cta:hover {
+  background: #d7e8ff;
+  color: #08306f;
+  transform: translateX(2px);
 }
 
 .btn {
@@ -2652,6 +2744,51 @@ a {
 .section.about img {
   width: 100%;
   max-width: 620px;
+}
+
+.about-carousel {
+  position: relative;
+  width: 100%;
+  max-width: 620px;
+}
+
+.about-carousel-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #e8edf5;
+  box-shadow: 0 18px 42px rgba(15, 28, 52, 0.14);
+}
+
+.about-carousel-slide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transform: scale(1.03);
+  transition: opacity 700ms ease, transform 900ms ease;
+  pointer-events: none;
+}
+
+.about-carousel-slide.is-active {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .about-carousel-slide {
+    transition: opacity 200ms ease;
+    transform: none;
+  }
+
+  .about-carousel-slide.is-active {
+    transform: none;
+  }
 }
 
 .about-media-enter {
@@ -2715,6 +2852,48 @@ a {
 .about-btn {
   margin-top: 10px;
   display: inline-flex;
+}
+
+.about-values {
+  margin-top: 18px;
+}
+
+.about-values h2 {
+  margin: 0 0 10px;
+}
+
+.about-values-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 24px;
+}
+
+.about-values-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 1.03rem;
+  font-weight: 500;
+  line-height: 1.55;
+  color: #3d4452;
+}
+
+.about-values-list li::before {
+  content: "►";
+  color: #3d4452;
+  font-size: 0.7rem;
+  line-height: 1.65;
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+@media (max-width: 640px) {
+  .about-values-list {
+    grid-template-columns: 1fr;
+  }
 }
 
 .section.dark {
@@ -2975,6 +3154,24 @@ a {
   color: #7c8597;
 }
 
+.upcoming-rating-count {
+  color: #7c8597;
+  font-weight: 500;
+}
+
+.upcoming-rating strong {
+  margin: 0 4px;
+}
+
+.upcoming-rating-badge {
+  background: rgba(20, 24, 36, 0.82);
+  color: #fff;
+}
+
+.upcoming-rating-badge i {
+  color: #f59b21;
+}
+
 .upcoming-card-cta {
   display: inline-flex;
   align-items: center;
@@ -3168,6 +3365,25 @@ a {
 
 .check-line input {
   margin-top: 2px;
+}
+
+.contact-recaptcha-block {
+  display: grid;
+  gap: 8px;
+}
+
+.contact-recaptcha-label {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #3d4452;
+}
+
+.contact-recaptcha-warn {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  max-width: 42rem;
+  color: #8a2a2a;
 }
 
 .contact-recaptcha {
@@ -3746,6 +3962,20 @@ textarea {
   background: #fff;
   border-radius: 12px;
   overflow: hidden;
+  box-shadow: 0 10px 24px rgba(13, 24, 48, 0.08);
+  transition: transform 260ms ease, box-shadow 260ms ease, border-color 260ms ease;
+}
+
+.all-training-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 38px rgba(5, 22, 56, 0.2);
+  border-color: rgba(13, 71, 161, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .all-training-card:hover {
+    transform: none;
+  }
 }
 
 .all-training-card-image .course-card-thumb {
@@ -3816,6 +4046,12 @@ textarea {
   color: #0d47a1;
   font-weight: 700;
   font-size: 0.9rem;
+  transition: color 180ms ease, transform 180ms ease;
+}
+
+.all-training-link:hover {
+  color: #08306f;
+  transform: translateX(2px);
 }
 
 .all-trainings-pagination-wrap {
@@ -5666,6 +5902,26 @@ textarea {
   color: #0d47a1;
 }
 
+@media (min-width: 1600px) {
+  .hero-inner {
+    max-width: 1680px;
+  }
+
+  .hero-content {
+    grid-template-columns: minmax(0, 1.1fr) minmax(300px, 420px);
+    gap: clamp(36px, 4vw, 72px);
+  }
+
+  .hero-card-stack {
+    max-width: 420px;
+    min-height: clamp(420px, 44vh, 560px);
+  }
+
+  .hero-course-card {
+    --card-width: clamp(280px, 20vw, 380px);
+  }
+}
+
 @media (max-width: 1200px) {
   .nav nav {
     gap: 16px;
@@ -5682,8 +5938,12 @@ textarea {
   }
 
   .hero-content {
-    grid-template-columns: 1fr minmax(260px, 360px);
-    gap: 28px;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 360px);
+    gap: clamp(22px, 3vw, 40px);
+  }
+
+  .hero-media {
+    background-position: center 30%;
   }
 
   .all-trainings-grid {
@@ -5718,12 +5978,15 @@ textarea {
   }
 
   .hero {
-    --hero-min-height: 500px;
-    background-position: 58% top;
+    --hero-min-height: clamp(480px, 68vh, 760px);
+  }
+
+  .hero-media {
+    background-position: 58% 28%;
   }
 
   .hero-overlay {
-    padding: clamp(28px, 6vh, 56px) 3.5vw;
+    padding: clamp(24px, 5vh, 56px) 3.5vw;
   }
 
   .grid {
@@ -5930,14 +6193,14 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .hero {
-    background-position: 60% top;
+  .hero-media {
+    background-position: 60% 30%;
   }
 
   .hero-card-stack {
     margin-top: 24px;
     max-width: 100%;
-    min-height: 390px;
+    min-height: clamp(360px, 48vh, 440px);
     margin-left: 0;
     overflow: hidden;
   }
@@ -6213,20 +6476,12 @@ textarea {
     min-width: 120px;
   }
 
-  .hero h1 {
-    font-size: 2.2rem;
-  }
-
-  .hero {
-    background-position: 65% top;
-  }
-
-  .hero p {
-    font-size: 0.95rem;
+  .hero-media {
+    background-position: 65% 32%;
   }
 
   .hero-card-stack {
-    min-height: 340px;
+    min-height: clamp(320px, 50vh, 400px);
   }
 
   .hero-course-card {

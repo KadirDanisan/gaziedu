@@ -130,6 +130,13 @@ function AllTrainingsPage() {
   }, [currentPage, debouncedSearch, selectedCategories, sortBy, itemsPerPage]);
 
   useEffect(() => {
+    const sortParam = String(searchParams.get("sort") || "").toLowerCase();
+    const allowed = new Set(["newest", "oldest", "rating", "most_reviews"]);
+    if (!allowed.has(sortParam)) return;
+    setSortBy((prev) => (prev === sortParam ? prev : sortParam));
+  }, [searchParams]);
+
+  useEffect(() => {
     const raw = searchParams.get("kategori");
     if (!raw || !raw.trim()) {
       setSelectedCategories((prev) => (prev.length === 0 ? prev : []));
@@ -298,7 +305,8 @@ function AllTrainingsPage() {
             >
               <option value="newest">En yeni</option>
               <option value="oldest">En eski</option>
-              <option value="rating">Değerlendirme</option>
+              <option value="rating">En yüksek puan</option>
+              <option value="most_reviews">En çok değerlendirilen</option>
             </select>
           </div>
         </div>

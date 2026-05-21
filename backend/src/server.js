@@ -28,28 +28,64 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL || "postgres://postgres:1234@localhost:5432/guzem",
 });
 
-/** reCAPTCHA v2 (checkbox): RECAPTCHA_SECRET_KEY tanımlıysa siteverify zorunlu. */
-async function verifyRecaptchaV2IfConfigured(token) {
-  const secret = (process.env.RECAPTCHA_SECRET_KEY || "").trim();
+const RECAPTCHA_V2_ERROR_MESSAGES = {
+  "missing-input-secret": "reCAPTCHA gizli anahtarı eksik (RECAPTCHA_SECRET_KEY).",
+  "invalid-input-secret": "reCAPTCHA gizli anahtarı geçersiz. Secret Key’i kontrol edin (v2 Checkbox çifti olmalı).",
+  "missing-input-response": 'reCAPTCHA yanıtı eksik. "Ben robot değilim" kutusunu işaretleyin.',
+  "invalid-input-response": "reCAPTCHA yanıtı geçersiz veya süresi dolmuş. Kutuyu yeniden işaretleyin.",
+  "bad-request": "reCAPTCHA isteği hatalı.",
+  "timeout-or-duplicate": "reCAPTCHA süresi doldu veya tekrar kullanıldı. Lütfen kutuyu yeniden işaretleyin.",
+};
+
+function normalizeRecaptchaSecret(raw) {
+  if (raw == null) return "";
+  let s = String(raw).trim().replace(/\u200b/g, "");
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.slice(1, -1).trim();
+  }
+  return s.replace(/\s+/g, "");
+}
+
+/** reCAPTCHA v2 — POST https://www.google.com/recaptcha/api/siteverify */
+async function verifyRecaptchaV2IfConfigured(token, remoteip) {
+  const secret = normalizeRecaptchaSecret(process.env.RECAPTCHA_SECRET_KEY);
   if (!secret) return { ok: true };
-  if (!token || typeof token !== "string" || !token.trim()) {
+
+  const responseToken = typeof token === "string" ? token.trim() : "";
+  if (!responseToken) {
     return {
       ok: false,
       message:
-        "reCAPTCHA yanıtı gelmedi. Gizli anahtar açıkken site anahtarı da gerekir: proje kökünde VITE_RECAPTCHA_SITE_KEY ile frontend yeniden build edilmelidir.",
+        'reCAPTCHA doğrulaması gerekli. İstemci Site Key (VITE_RECAPTCHA_SITE_KEY) ve "Ben robot değilim" kutusu gerekir.',
     };
   }
-  const body = new URLSearchParams({ secret, response: token.trim() });
+
+  const params = new URLSearchParams({
+    secret,
+    response: responseToken,
+  });
+  if (remoteip && String(remoteip).trim()) {
+    params.set("remoteip", String(remoteip).trim());
+  }
+
   const res = await fetch("https://www.google.com/recaptcha/api/siteverify", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString(),
+    body: params.toString(),
   });
+
   const data = await res.json().catch(() => ({}));
-  if (!data.success) {
-    return { ok: false, message: "reCAPTCHA doğrulanamadı. Lütfen tekrar deneyin." };
+  if (data.success) {
+    return { ok: true };
   }
-  return { ok: true };
+
+  const codes = Array.isArray(data["error-codes"]) ? data["error-codes"] : [];
+  const firstCode = codes[0];
+  const message =
+    (firstCode && RECAPTCHA_V2_ERROR_MESSAGES[firstCode]) ||
+    "reCAPTCHA doğrulanamadı. Lütfen tekrar deneyin.";
+
+  return { ok: false, message, codes };
 }
 
 app.use(cors());
@@ -2013,7 +2049,11 @@ app.post("/api/contact-forms", async (req, res, next) => {
       return res.status(400).json({ message: "Ad soyad, e-posta ve mesaj alanları zorunludur." });
     }
 
-    const captcha = await verifyRecaptchaV2IfConfigured(recaptchaToken);
+    const remoteip =
+      String(req.headers["x-forwarded-for"] || "")
+        .split(",")[0]
+        .trim() || req.socket?.remoteAddress || "";
+    const captcha = await verifyRecaptchaV2IfConfigured(recaptchaToken, remoteip);
     if (!captcha.ok) {
       return res.status(400).json({ message: captcha.message });
     }
@@ -2374,7 +2414,13 @@ app.get("/api/public/educations", async (req, res, next) => {
     const searchRaw = String(req.query.search || "").trim();
     const sortRaw = String(req.query.sort || "newest").toLowerCase();
     const sort =
-      sortRaw === "oldest" ? "oldest" : sortRaw === "rating" || sortRaw === "degerlendirme" ? "rating" : "newest";
+      sortRaw === "oldest"
+        ? "oldest"
+        : sortRaw === "most_reviews" || sortRaw === "most-reviewed" || sortRaw === "en-cok-degerlendirme"
+          ? "most_reviews"
+          : sortRaw === "rating" || sortRaw === "degerlendirme"
+            ? "rating"
+            : "newest";
 
     const catRaw = req.query.category;
     const categoryList = (Array.isArray(catRaw) ? catRaw : catRaw != null && catRaw !== "" ? [catRaw] : [])
@@ -2394,13 +2440,19 @@ app.get("/api/public/educations", async (req, res, next) => {
       conditions.push(`LOWER(TRIM(COALESCE(c.category_name, ''))) = ANY($${params.length}::text[])`);
     }
 
+    if (sort === "most_reviews") {
+      conditions.push(`e.rating_count > 0`);
+    }
+
     const whereSql = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const orderSql =
       sort === "oldest"
         ? `e.created_at ASC`
-        : sort === "rating"
-          ? `e.rating_average DESC NULLS LAST, e.rating_count DESC, e.created_at DESC`
-          : `e.created_at DESC`;
+        : sort === "most_reviews"
+          ? `e.rating_count DESC, e.rating_average DESC NULLS LAST, e.created_at DESC`
+          : sort === "rating"
+            ? `e.rating_average DESC NULLS LAST, e.rating_count DESC, e.created_at DESC`
+            : `e.created_at DESC`;
 
     const offset = (page - 1) * pageSize;
 
