@@ -1,6 +1,6 @@
 import { resolvePublicImageUrl } from "../api/publicApi";
 
-const GAZI_LOGO_SRC = "/Guzem_logo.png";
+const GAZI_LOGO_SRC = "/Guzem-05.png";
 
 /**
  * Eğitim kartı görseli: hover’da kapak yerine Gazi logosu (sol) + kurum logosu (sağ).

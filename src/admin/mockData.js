@@ -13,7 +13,7 @@ export const institutions = [
   {
     id: "i-gazi",
     name: "Gazi Üniversitesi",
-    logoUrl: "/Guzem_logo.png",
+    logoUrl: "/Guzem-05.png",
     websiteUrl: "https://gazi.edu.tr",
     description: "Akademik ve uygulamalı eğitim merkezi.",
     authorizedPerson: "Mehmet Demir",

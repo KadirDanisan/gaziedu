@@ -164,13 +164,8 @@ function Header() {
         <Link to="/" className="site-brand">
           <img
             className="site-logo"
-            src="/Guzem_logo.png"
+            src="/Guzem-05.png"
             alt="Gazi Üniversitesi"
-          />
-          <img
-            className="site-logo-slogan"
-            src="/GUZEM_SLOGAN.png"
-            alt="GAZİ'nin Dijital Yüzü"
           />
         </Link>
         <nav>

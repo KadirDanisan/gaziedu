@@ -252,7 +252,7 @@ export default function ExamPortalPage() {
     return (
       <main className="exam-portal">
         <section className="exam-portal-card exam-portal-card--center">
-          <img src="/Guzem_logo.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
+          <img src="/Guzem-05.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
           <h1>Sınav bağlantısı geçersiz</h1>
           <p>{tokenError || "Bu adres ile sınav açılamaz."}</p>
           <small>İmzalı bağlantı bozulmuş, süresi dolmuş veya bu ortamda çözülemiyor.</small>
@@ -269,7 +269,7 @@ export default function ExamPortalPage() {
       <main className="exam-portal">
         <section className="exam-portal-card exam-ready-card">
           <div className="exam-ready-brand">
-            <img src="/Guzem_logo.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
+            <img src="/Guzem-05.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
             <div>
               <p className="exam-portal-eyebrow">Gazi Üniversitesi Sertifikasyon Sınav Portalı</p>
               <h1>Hoş geldiniz</h1>
@@ -324,7 +324,7 @@ export default function ExamPortalPage() {
     return (
       <main className="exam-portal">
         <section className="exam-portal-card exam-portal-card--center">
-          <img src="/Guzem_logo.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
+          <img src="/Guzem-05.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
           <h1>Sınav açılamadı</h1>
           <p>{loadError}</p>
           <small>Güvenli bağlantı doğrulandı; sınav oturumu başlatılamadı.</small>
@@ -337,7 +337,7 @@ export default function ExamPortalPage() {
     return (
       <main className="exam-portal">
         <section className="exam-portal-card exam-result-card">
-          <img src="/Guzem_logo.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
+          <img src="/Guzem-05.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
           <p className="exam-portal-eyebrow">Sınav tamamlandı</p>
           <h1>{EXAM_PORTAL_TITLE}</h1>
           <div className="exam-result-score">{Math.round(result.score)}</div>
@@ -377,7 +377,7 @@ export default function ExamPortalPage() {
       <main className="exam-portal">
         <section className="exam-portal-card exam-ready-card">
           <div className="exam-ready-brand">
-            <img src="/Guzem_logo.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
+            <img src="/Guzem-05.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
             <div>
               <p className="exam-portal-eyebrow">Sınav Portalı</p>
               <h1>{EXAM_PORTAL_TITLE}</h1>
@@ -421,7 +421,7 @@ export default function ExamPortalPage() {
     <main className="exam-portal exam-portal--active">
       <header className="exam-topbar">
         <div className="exam-topbar-brand">
-          <img src="/Guzem_logo.png" alt="Gazi Üniversitesi" />
+          <img src="/Guzem-05.png" alt="Gazi Üniversitesi" />
           <div>
             <strong>{EXAM_PORTAL_TITLE}</strong>
             <span>

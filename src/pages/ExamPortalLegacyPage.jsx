@@ -5,7 +5,7 @@ export default function ExamPortalLegacyPage() {
   return (
     <main className="exam-portal">
       <section className="exam-portal-card exam-portal-card--center">
-        <img src="/Guzem_logo.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
+        <img src="/Guzem-05.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
         <h1>Bağlantı kullanılamıyor</h1>
         <p>
           Sınav portalı artık yalnızca güvenli (imzalı) bağlantı ile açılır. Eski adres biçimi

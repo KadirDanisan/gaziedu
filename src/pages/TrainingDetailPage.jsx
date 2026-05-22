@@ -507,12 +507,14 @@ function TrainingDetailPage() {
 
         <aside className="training-detail-sidebar rbt-shadow-box">
           <div className="training-detail-side-brand">
-            {institutionLogoSrc ? (
+            {institutionLogoSrc ? (<>
               <img
                 src={institutionLogoSrc}
                 alt={c.institutionName || "Kurum"}
                 className="training-detail-side-brand-logo"
               />
+              <img src="/Guzem-05.png" alt="Gazi Üniversitesi"  className="training-detail-side-brand-logo" />
+              </>
             ) : (
               <div className="training-detail-side-brand-placeholder" aria-hidden>
                 <i className="fa-solid fa-building-columns" />

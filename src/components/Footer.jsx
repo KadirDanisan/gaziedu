@@ -29,7 +29,7 @@ function Footer() {
           <Link to="/" className="footer-brand-link">
             <img
               className="footer-logo"
-              src="/Guzem_logo.png"
+              src="/Guzem-05.png"
               alt="Gazi Üniversitesi"
             />
             <img
