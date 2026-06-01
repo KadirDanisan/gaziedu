@@ -32,10 +32,6 @@ function ContactPage() {
             <p>
               <a href="mailto:guzem@gazi.edu.tr"> guzem@gazi.edu.tr</a>
             </p>
-           <h3>Kep Adresi:</h3>
-            <p>
-              <a href="mailto:gaziuniversitesi@hs01.kep.tr"> gaziuniversitesi@hs01.kep.tr</a>
-            </p>
           </div>
         </article>
 
