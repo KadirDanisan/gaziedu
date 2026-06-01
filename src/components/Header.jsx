@@ -147,7 +147,7 @@ function Header() {
       <div className="topbar">
         <div className="topbar-contact">
           <a href="tel:03122028200">
-            <i className="fa-solid fa-phone" /> 0 (312) 202 82 00
+            <i className="fa-solid fa-phone" /> 0 (312) 202 82 01
           </a>
           <a href="mailto:guzem@gazi.edu.tr">
             <i className="fa-regular fa-envelope" /> guzem@gazi.edu.tr
@@ -322,8 +322,8 @@ function Header() {
       </div>
       <div className={`mobile-menu ${isMobileMenuOpen ? "is-open" : ""}`}>
         <div className="mobile-menu-contact">
-        <a href="tel:03122028200">
-            <i className="fa-solid fa-phone" />  0(312) 202 82 00
+        <a href="tel:03122028201">
+            <i className="fa-solid fa-phone" />  0(312) 202 82 01
           </a>
           <a href="mailto:guzem@gazi.edu.tr">
             <i className="fa-regular fa-envelope" /> guzem@gazi.edu.tr

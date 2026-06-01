@@ -18,11 +18,7 @@ function ContactPage() {
           <div>
             <h3>Telefon:</h3>
             <p>
-              <a href="tel:+903122028200">0(312) 202 82 00 </a>
-            </p>
-            <h3>Faks:</h3>
-            <p>
-              <a href="tel:+903122213202"> 0(312) 221 32 02</a>
+              <a href="tel:+903122028201">0(312) 202 82 01 </a>
             </p>
           </div>
         </article>

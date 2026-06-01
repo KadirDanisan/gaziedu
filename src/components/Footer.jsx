@@ -59,7 +59,7 @@ function Footer() {
         <div className="footer-contact">
           <h4>İletişime Geç</h4>
           <p>
-            <strong>Telefon:</strong> 0(312) 202 82 00
+            <strong>Telefon:</strong> 0(312) 202 82 01
           </p>
           <p>
             <strong>E-Mail:</strong> guzem@gazi.edu.tr
