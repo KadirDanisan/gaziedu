@@ -52,7 +52,7 @@ function AllTrainingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const { isLoggedIn, isFavorite, toggleFavorite } = useAuth();
   const itemsPerPage = 9;
-  const navigate = UseNavigate();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 350);

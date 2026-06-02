@@ -19,7 +19,7 @@ function TrainingCalendarPage() {
   const [isLoading, setIsLoading] = useState(true);
   const { isLoggedIn, isFavorite, toggleFavorite } = useAuth();
   const paginatedCourses = useMemo(() => calendarCourses, [calendarCourses]);
-  const navigate = UseNavigate();
+  const navigate = useNavigate();
 
   useEffect(() => {
     let active = true;

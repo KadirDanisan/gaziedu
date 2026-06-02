@@ -9,7 +9,7 @@ function UpcomingCourses() {
   const [latestCourses, setLatestCourses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const { isLoggedIn, isFavorite, toggleFavorite } = useAuth();
-  const navigate = UseNavigate();
+  const navigate = useNavigate();
 
   useEffect(() => {
     let active = true;
