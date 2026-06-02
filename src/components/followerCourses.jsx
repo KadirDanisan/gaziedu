@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { NavLink, Navigate, Outlet, Link, useNavigate } from "react-router-dom";
 import { makeSlug } from "../data/homeData";
 import { publicApi, resolvePublicImageUrl } from "../api/publicApi";
 import CourseCardThumb from "./CourseCardThumb";
@@ -9,7 +9,7 @@ function FollowerCourses() {
   const [topRatedCourses, setTopRatedCourses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const { isLoggedIn, isFavorite, toggleFavorite } = useAuth();
-
+  const navigate = useNavigate();
   useEffect(() => {
     let active = true;
     setIsLoading(true);
@@ -45,13 +45,13 @@ function FollowerCourses() {
 
   const handleFavoriteClick = async (course) => {
     if (!isLoggedIn) {
-      alert("Favorilere eklemek için giriş yapmalısınız.");
+      navigate("/kullanici-islemleri");
       return;
     }
     try {
       await toggleFavorite(course.id, course.sourceType || "education");
     } catch (error) {
-      alert(error.message || "Favori işlemi başarısız.");
+      console.error(error.message || "Favori işlemi başarısız.");
     }
   };
 
