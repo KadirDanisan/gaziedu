@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"; 
-import { NavLink, Navigate, Outlet, Link, UseNavigate } from "react-router-dom";
+import { NavLink, Navigate, Outlet, Link, useNavigate } from "react-router-dom";
 import { makeSlug } from "../data/homeData";
 import { publicApi, resolvePublicImageUrl } from "../api/publicApi";
 import CourseCardThumb from "./CourseCardThumb";
