@@ -99,11 +99,6 @@ export default function AdminLayout() {
             src="/Guzem-05.png"
             alt="Gazi Üniversitesi"
           />
-          <img
-            className="admin-brand-logo admin-brand-logo--partner"
-            src="/yokak_logo.svg"
-            alt="YÖKAK"
-          />
         </div>
         <nav className="admin-side-nav">
           {ADMIN_MODULES.filter((module) => module.key === "activityLogs" || hasPermission(module.key, "canView")).map((module) => (
