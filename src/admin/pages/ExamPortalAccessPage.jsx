@@ -89,7 +89,7 @@ export default function ExamPortalAccessPage() {
   const handleResetLimit = async (row) => {
     if (
       !window.confirm(
-        `${row.educationCode} / ${row.nationalId} için tüm sınav oturumları (${row.startCount} kayıt) silinecek. Devam?`,
+        `${row.participantName || "—"} · ${row.educationCode} / ${row.nationalId} için tüm sınav oturumları (${row.startCount} kayıt) silinecek. Devam?`,
       )
     ) {
       return;
@@ -132,7 +132,7 @@ export default function ExamPortalAccessPage() {
           <input
             type="search"
             className="admin-input"
-            placeholder="URL, eğitim kodu veya T.C. ara..."
+            placeholder="URL, eğitim kodu, ad veya T.C. ara..."
             value={visitInput}
             onChange={(e) => setVisitInput(e.target.value)}
             onKeyDown={(e) => {
@@ -161,6 +161,7 @@ export default function ExamPortalAccessPage() {
               <thead>
                 <tr>
                   <th>Portal URL</th>
+                  <th>Ad Soyad</th>
                   <th>Eğitim kodu</th>
                   <th>T.C.</th>
                   <th>Tarih</th>
@@ -170,12 +171,13 @@ export default function ExamPortalAccessPage() {
               <tbody>
                 {visits.length === 0 ? (
                   <tr>
-                    <td colSpan={5}>Kayıt yok.</td>
+                    <td colSpan={6}>Kayıt yok.</td>
                   </tr>
                 ) : (
                   visits.map((row) => (
                     <tr key={row.id}>
                       <td style={{ maxWidth: 360, wordBreak: "break-all" }}>{row.portalUrl || "-"}</td>
+                      <td>{row.participantName || "—"}</td>
                       <td>{row.educationCode || "-"}</td>
                       <td>{row.nationalId || "-"}</td>
                       <td>{formatIstanbul(row.createdAt)}</td>
@@ -230,7 +232,7 @@ export default function ExamPortalAccessPage() {
           <input
             type="search"
             className="admin-input"
-            placeholder="Eğitim kodu veya T.C. ara..."
+            placeholder="Eğitim kodu, ad veya T.C. ara..."
             value={limitInput}
             onChange={(e) => setLimitInput(e.target.value)}
             onKeyDown={(e) => {
@@ -258,6 +260,7 @@ export default function ExamPortalAccessPage() {
             <table className="admin-table">
               <thead>
                 <tr>
+                  <th>Ad Soyad</th>
                   <th>Eğitim kodu</th>
                   <th>T.C.</th>
                   <th>Oturum sayısı</th>
@@ -267,13 +270,14 @@ export default function ExamPortalAccessPage() {
               <tbody>
                 {limits.length === 0 ? (
                   <tr>
-                    <td colSpan={4}>Kayıt yok.</td>
+                    <td colSpan={5}>Kayıt yok.</td>
                   </tr>
                 ) : (
                   limits.map((row) => {
                     const key = `${row.educationCode}-${row.nationalId}`;
                     return (
                       <tr key={key}>
+                        <td>{row.participantName || "—"}</td>
                         <td>{row.educationCode}</td>
                         <td>{row.nationalId}</td>
                         <td>{row.startCount}</td>

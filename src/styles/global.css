@@ -358,6 +358,37 @@ html {
   margin-top: 24px;
 }
 
+.exam-portal-card--error {
+  max-width: 640px;
+}
+
+.exam-portal-error-message {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  width: min(100%, 520px);
+  margin: 4px 0 0;
+  padding: 16px 18px;
+  border-radius: 18px;
+  text-align: left;
+  color: #7f1d1d;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.exam-portal-error-message i {
+  margin-top: 2px;
+  font-size: 1.1rem;
+  color: #dc2626;
+  flex-shrink: 0;
+}
+
+.exam-portal-error-message p {
+  margin: 0;
+  line-height: 1.55;
+  font-weight: 600;
+}
+
 .exam-inline-error {
   margin: 14px 0 0;
   color: #b42318;

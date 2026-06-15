@@ -465,6 +465,99 @@ const migrateExamPortalBestScoresTable = async () => {
   await pool.query(`CREATE INDEX IF NOT EXISTS exam_portal_best_scores_updated_idx ON exam_portal_best_scores (updated_at DESC)`);
 };
 
+const migrateExamPortalParticipantNameColumns = async () => {
+  await pool.query(`ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS participant_name TEXT`);
+  await pool.query(`ALTER TABLE exam_portal_best_scores ADD COLUMN IF NOT EXISTS participant_name TEXT`);
+  await pool.query(`ALTER TABLE exam_portal_visits ADD COLUMN IF NOT EXISTS participant_name TEXT`);
+  await pool.query(`
+    UPDATE exam_portal_best_scores b
+    SET participant_name = src.participant_name
+    FROM (
+      SELECT DISTINCT ON (UPPER(TRIM(education_code)), TRIM(national_id))
+        UPPER(TRIM(education_code)) AS education_code,
+        TRIM(national_id) AS national_id,
+        TRIM(participant_name) AS participant_name
+      FROM exam_attempts
+      WHERE participant_name IS NOT NULL
+        AND TRIM(participant_name) <> ''
+        AND status = 'completed'
+      ORDER BY UPPER(TRIM(education_code)), TRIM(national_id), submitted_at DESC NULLS LAST
+    ) src
+    WHERE UPPER(TRIM(b.education_code)) = src.education_code
+      AND TRIM(b.national_id) = src.national_id
+      AND (b.participant_name IS NULL OR TRIM(b.participant_name) = '')
+  `);
+  await pool.query(`
+    UPDATE exam_portal_visits v
+    SET participant_name = src.participant_name
+    FROM (
+      SELECT DISTINCT ON (UPPER(TRIM(education_code)), TRIM(national_id))
+        UPPER(TRIM(education_code)) AS education_code,
+        TRIM(national_id) AS national_id,
+        TRIM(participant_name) AS participant_name
+      FROM exam_attempts
+      WHERE participant_name IS NOT NULL
+        AND TRIM(participant_name) <> ''
+      ORDER BY UPPER(TRIM(education_code)), TRIM(national_id), COALESCE(submitted_at, started_at) DESC NULLS LAST
+    ) src
+    WHERE UPPER(TRIM(v.education_code)) = src.education_code
+      AND TRIM(v.national_id) = src.national_id
+      AND (v.participant_name IS NULL OR TRIM(v.participant_name) = '')
+  `);
+};
+
+/** Tamamlanmış sınav oturumlarından eksik özet kayıtlarını doldurur (GZM-1-32-03 formatı). */
+const migrateBackfillExamPortalBestScores = async () => {
+  await pool.query(`
+    WITH ranked AS (
+      SELECT
+        UPPER(TRIM(education_code)) AS education_code,
+        TRIM(national_id) AS national_id,
+        score::numeric AS score,
+        COALESCE(submitted_at, updated_at, started_at) AS attempt_at,
+        ROW_NUMBER() OVER (
+          PARTITION BY UPPER(TRIM(education_code)), TRIM(national_id)
+          ORDER BY score DESC, COALESCE(submitted_at, updated_at, started_at) DESC
+        ) AS best_rank,
+        ROW_NUMBER() OVER (
+          PARTITION BY UPPER(TRIM(education_code)), TRIM(national_id)
+          ORDER BY COALESCE(submitted_at, updated_at, started_at) DESC
+        ) AS last_rank
+      FROM exam_attempts
+      WHERE status = 'completed'
+        AND education_code IS NOT NULL
+        AND TRIM(education_code) <> ''
+        AND national_id IS NOT NULL
+        AND TRIM(national_id) <> ''
+    ),
+    best AS (
+      SELECT education_code, national_id, score, attempt_at
+      FROM ranked
+      WHERE best_rank = 1
+    ),
+    last AS (
+      SELECT education_code, national_id, score, attempt_at
+      FROM ranked
+      WHERE last_rank = 1
+    )
+    INSERT INTO exam_portal_best_scores (education_code, national_id, best_score, best_recorded_at, last_attempt_at, last_score)
+    SELECT b.education_code, b.national_id, b.score, b.attempt_at, l.attempt_at, l.score
+    FROM best b
+    INNER JOIN last l ON l.education_code = b.education_code AND l.national_id = b.national_id
+    WHERE b.education_code ~ '^[A-Z]{3}-[0-9]+-[0-9]+-[0-9]+$'
+      AND b.national_id ~ '^[0-9]{11}$'
+    ON CONFLICT (education_code, national_id) DO UPDATE SET
+      best_score = GREATEST(exam_portal_best_scores.best_score, EXCLUDED.best_score),
+      best_recorded_at = CASE
+        WHEN EXCLUDED.best_score > exam_portal_best_scores.best_score THEN EXCLUDED.best_recorded_at
+        ELSE exam_portal_best_scores.best_recorded_at
+      END,
+      last_attempt_at = GREATEST(exam_portal_best_scores.last_attempt_at, EXCLUDED.last_attempt_at),
+      last_score = EXCLUDED.last_score,
+      updated_at = NOW()
+  `);
+};
+
 const migrateExamPortalAccessPermissions = async () => {
   await pool.query(`
     INSERT INTO permissions (role_id, module_name, can_view, can_create, can_update, can_delete)
@@ -681,6 +774,7 @@ const dbToApiMap = {
   last_attempt_at: "lastAttemptAt",
   last_score: "lastScore",
   payment_received: "paymentReceived",
+  participant_name: "participantName",
 };
 
 const apiToDbMap = Object.fromEntries(Object.entries(dbToApiMap).map(([k, v]) => [v, k]));
@@ -1070,14 +1164,29 @@ const gradeExamAttempt = (questions = [], answers = {}) => {
   return { correctCount, wrongCount, blankCount, score, normalizedAnswers };
 };
 
-const upsertExamPortalBestScore = async ({ educationCode, nationalId, attemptScore }) => {
-  const code = String(educationCode || "").trim().toUpperCase();
+const EXAM_DIFFICULTY_LABELS = {
+  easy: "Temel",
+  medium: "Orta",
+  hard: "İleri",
+};
+
+const formatEducationSeviye = (raw) => {
+  const key = String(raw || "medium").trim().toLowerCase();
+  return EXAM_DIFFICULTY_LABELS[key] || "Orta";
+};
+
+const upsertExamPortalBestScore = async ({ educationCode, nationalId, attemptScore, participantName }) => {
+  const code = String(educationCode || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
   const tc = String(nationalId || "").trim();
   const newScore = Number(attemptScore);
-  if (!/^[A-Z]{3}\d{7}$/.test(code) || !/^\d{11}$/.test(tc) || !Number.isFinite(newScore)) return;
+  const name = String(participantName || "").trim().slice(0, 200);
+  if (!isValidEducationCode(code) || !/^\d{11}$/.test(tc) || !Number.isFinite(newScore)) return;
   await pool.query(
-    `INSERT INTO exam_portal_best_scores (education_code, national_id, best_score, best_recorded_at, last_attempt_at, last_score)
-     VALUES ($1, $2, $3, NOW(), NOW(), $3)
+    `INSERT INTO exam_portal_best_scores (education_code, national_id, best_score, best_recorded_at, last_attempt_at, last_score, participant_name)
+     VALUES ($1, $2, $3, NOW(), NOW(), $3, NULLIF($4, ''))
      ON CONFLICT (education_code, national_id) DO UPDATE SET
        best_score = GREATEST(exam_portal_best_scores.best_score, EXCLUDED.last_score),
        best_recorded_at = CASE
@@ -1086,8 +1195,9 @@ const upsertExamPortalBestScore = async ({ educationCode, nationalId, attemptSco
        END,
        last_attempt_at = NOW(),
        last_score = EXCLUDED.last_score,
+       participant_name = COALESCE(NULLIF(EXCLUDED.participant_name, ''), exam_portal_best_scores.participant_name),
        updated_at = NOW()`,
-    [code, tc, newScore],
+    [code, tc, newScore, name],
   );
 };
 
@@ -2202,10 +2312,12 @@ app.post("/api/public/exam-portal/visit", async (req, res, next) => {
     }
     let educationCode;
     let nationalId;
+    let participantName = "";
     try {
       const v = verifyExamPortalLink(portalToken);
       educationCode = v.educationCode;
       nationalId = v.nationalId;
+      participantName = v.participantName;
     } catch (e) {
       const status = e.statusCode || 401;
       return res.status(status).json({ message: e.message || "Geçersiz bağlantı." });
@@ -2214,8 +2326,10 @@ app.post("/api/public/exam-portal/visit", async (req, res, next) => {
     const portalUrl = String(req.body?.portalUrl || "").trim().slice(0, 2048);
     const safeUrl = portalUrl.length ? portalUrl : `/sinavportali/${encodeURIComponent(portalToken)}`;
     const insert = await pool.query(
-      `INSERT INTO exam_portal_visits (portal_url, education_code, national_id) VALUES ($1, $2, $3) RETURNING id, portal_url, education_code, national_id, created_at`,
-      [safeUrl, educationCode, nationalId],
+      `INSERT INTO exam_portal_visits (portal_url, education_code, national_id, participant_name)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, portal_url, education_code, national_id, participant_name, created_at`,
+      [safeUrl, educationCode, nationalId, String(participantName || "").trim().slice(0, 200) || null],
     );
     return res.status(201).json(toApiObject(insert.rows[0]));
   } catch (error) {
@@ -2231,10 +2345,12 @@ app.post("/api/public/exam-portal/start", async (req, res, next) => {
     }
     let educationCode;
     let nationalId;
+    let participantName = "";
     try {
       const v = verifyExamPortalLink(portalToken);
       educationCode = v.educationCode;
       nationalId = v.nationalId;
+      participantName = v.participantName;
     } catch (e) {
       const status = e.statusCode || 401;
       return res.status(status).json({ message: e.message || "Geçersiz bağlantı." });
@@ -2300,10 +2416,17 @@ app.post("/api/public/exam-portal/start", async (req, res, next) => {
     const durationSeconds = selectedQuestions.length * EXAM_SECONDS_PER_QUESTION;
     const attemptResult = await pool.query(
       `INSERT INTO exam_attempts
-        (education_id, exam_question_id, education_code, national_id, selected_questions)
-       VALUES ($1, $2, $3, $4, $5::jsonb)
+        (education_id, exam_question_id, education_code, national_id, participant_name, selected_questions)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb)
        RETURNING id, started_at`,
-      [effectiveEducation.id, questionSet.id, educationCode, nationalId, JSON.stringify(selectedQuestions)],
+      [
+        effectiveEducation.id,
+        questionSet.id,
+        educationCode,
+        nationalId,
+        String(participantName || "").trim().slice(0, 200) || null,
+        JSON.stringify(selectedQuestions),
+      ],
     );
     const attempt = attemptResult.rows[0];
 
@@ -2331,7 +2454,7 @@ app.post("/api/public/exam-portal/:attemptId/submit", async (req, res, next) => 
     const reason = String(req.body?.reason || "manual").trim().slice(0, 64) || "manual";
     const answers = req.body?.answers && typeof req.body.answers === "object" ? req.body.answers : {};
     const previousResult = await pool.query(
-      `SELECT id, education_code, national_id, selected_questions, started_at, status, correct_count, wrong_count, blank_count, score, duration_seconds
+      `SELECT id, education_code, national_id, participant_name, selected_questions, started_at, status, correct_count, wrong_count, blank_count, score, duration_seconds
        FROM exam_attempts
        WHERE id = $1
        LIMIT 1`,
@@ -2390,6 +2513,7 @@ app.post("/api/public/exam-portal/:attemptId/submit", async (req, res, next) => 
       educationCode: previous.education_code,
       nationalId: previous.national_id,
       attemptScore: graded.score,
+      participantName: previous.participant_name,
     });
     return res.json({
       attemptId: row.id,
@@ -2894,9 +3018,9 @@ app.get("/api/admin/exam-portal/visits", auth, checkPermission("examPortalAccess
     const period = parseDateRangePeriod(req.query.period);
     const dateFilter = buildIstanbulDateFilterSql("created_at", period);
     const countSql = `SELECT COUNT(*)::int AS total FROM exam_portal_visits
-      WHERE ($1::text = '' OR LOWER(CONCAT(COALESCE(portal_url,''), ' ', COALESCE(education_code,''), ' ', COALESCE(national_id,''))) LIKE $1)${dateFilter}`;
+      WHERE ($1::text = '' OR LOWER(CONCAT(COALESCE(portal_url,''), ' ', COALESCE(education_code,''), ' ', COALESCE(national_id,''), ' ', COALESCE(participant_name,''))) LIKE $1)${dateFilter}`;
     const listSql = `SELECT * FROM exam_portal_visits
-      WHERE ($1::text = '' OR LOWER(CONCAT(COALESCE(portal_url,''), ' ', COALESCE(education_code,''), ' ', COALESCE(national_id,''))) LIKE $1)${dateFilter}
+      WHERE ($1::text = '' OR LOWER(CONCAT(COALESCE(portal_url,''), ' ', COALESCE(education_code,''), ' ', COALESCE(national_id,''), ' ', COALESCE(participant_name,''))) LIKE $1)${dateFilter}
       ORDER BY created_at DESC LIMIT $2 OFFSET $3`;
     const [countResult, listResult] = await Promise.all([
       pool.query(countSql, [searchParam]),
@@ -2959,22 +3083,61 @@ app.get("/api/admin/exam-portal/limit-exceeded", auth, checkPermission("examPort
     const period = parseDateRangePeriod(req.query.period);
     const attemptDateFilter = buildIstanbulDateFilterSql("started_at", period);
     const countSql = `SELECT COUNT(*)::int AS total FROM (
-        SELECT UPPER(TRIM(education_code)) AS education_code, national_id, COUNT(*)::int AS start_count
-        FROM exam_attempts
+        SELECT grouped.education_code, grouped.national_id, grouped.start_count, grouped.participant_name
+        FROM (
+          SELECT
+            UPPER(TRIM(ea.education_code)) AS education_code,
+            ea.national_id,
+            COUNT(*)::int AS start_count,
+            (
+              SELECT TRIM(ea2.participant_name)
+              FROM exam_attempts ea2
+              WHERE UPPER(TRIM(ea2.education_code)) = UPPER(TRIM(ea.education_code))
+                AND ea2.national_id = ea.national_id
+                AND ea2.participant_name IS NOT NULL
+                AND TRIM(ea2.participant_name) <> ''
+              ORDER BY ea2.started_at DESC
+              LIMIT 1
+            ) AS participant_name
+          FROM exam_attempts ea
+          WHERE 1=1${attemptDateFilter}
+          GROUP BY UPPER(TRIM(ea.education_code)), ea.national_id
+          HAVING COUNT(*)::int >= $1
+        ) grouped
+        WHERE ($2::text = '' OR LOWER(CONCAT(
+          COALESCE(grouped.education_code,''), ' ',
+          COALESCE(grouped.national_id,''), ' ',
+          COALESCE(grouped.participant_name,''), ' ',
+          grouped.start_count::text
+        )) LIKE $2)
+      ) t`;
+    const listSql = `SELECT education_code, national_id, start_count, participant_name FROM (
+        SELECT
+          UPPER(TRIM(ea.education_code)) AS education_code,
+          ea.national_id,
+          COUNT(*)::int AS start_count,
+          (
+            SELECT TRIM(ea2.participant_name)
+            FROM exam_attempts ea2
+            WHERE UPPER(TRIM(ea2.education_code)) = UPPER(TRIM(ea.education_code))
+              AND ea2.national_id = ea.national_id
+              AND ea2.participant_name IS NOT NULL
+              AND TRIM(ea2.participant_name) <> ''
+            ORDER BY ea2.started_at DESC
+            LIMIT 1
+          ) AS participant_name
+        FROM exam_attempts ea
         WHERE 1=1${attemptDateFilter}
-        GROUP BY UPPER(TRIM(education_code)), national_id
+        GROUP BY UPPER(TRIM(ea.education_code)), ea.national_id
         HAVING COUNT(*)::int >= $1
-      ) t
-      WHERE ($2::text = '' OR LOWER(CONCAT(education_code, ' ', national_id, ' ', start_count::text)) LIKE $2)`;
-    const listSql = `SELECT education_code, national_id, start_count FROM (
-        SELECT UPPER(TRIM(education_code)) AS education_code, national_id, COUNT(*)::int AS start_count
-        FROM exam_attempts
-        WHERE 1=1${attemptDateFilter}
-        GROUP BY UPPER(TRIM(education_code)), national_id
-        HAVING COUNT(*)::int >= $1
-      ) t
-      WHERE ($2::text = '' OR LOWER(CONCAT(education_code, ' ', national_id, ' ', start_count::text)) LIKE $2)
-      ORDER BY education_code ASC, national_id ASC
+      ) grouped
+      WHERE ($2::text = '' OR LOWER(CONCAT(
+        COALESCE(grouped.education_code,''), ' ',
+        COALESCE(grouped.national_id,''), ' ',
+        COALESCE(grouped.participant_name,''), ' ',
+        grouped.start_count::text
+      )) LIKE $2)
+      ORDER BY grouped.education_code ASC, grouped.national_id ASC
       LIMIT $3 OFFSET $4`;
     const [countResult, listResult] = await Promise.all([
       pool.query(countSql, [EXAM_PORTAL_MAX_STARTS, searchParam]),
@@ -2985,6 +3148,7 @@ app.get("/api/admin/exam-portal/limit-exceeded", auth, checkPermission("examPort
         educationCode: row.education_code,
         nationalId: row.national_id,
         startCount: row.start_count,
+        participantName: String(row.participant_name || "").trim(),
       })),
       pagination: {
         page,
@@ -3084,27 +3248,46 @@ app.get("/api/admin/exam-results", auth, checkPermission("examResults", "can_vie
 
     if (educationCodeRaw) {
       params.push(`%${educationCodeRaw.toLowerCase()}%`);
-      conditions.push(`LOWER(education_code) LIKE $${params.length}`);
+      conditions.push(`LOWER(b.education_code) LIKE $${params.length}`);
     }
     if (nationalIdRaw) {
       const digits = nationalIdRaw.replace(/\D/g, "");
       if (digits.length) {
         params.push(`%${digits}%`);
-        conditions.push(`national_id LIKE $${params.length}`);
+        conditions.push(`b.national_id LIKE $${params.length}`);
       }
     }
     if (searchRaw) {
       params.push(`%${searchRaw.toLowerCase()}%`);
-      conditions.push(`LOWER(CONCAT(COALESCE(education_code,''), ' ', COALESCE(national_id,''))) LIKE $${params.length}`);
+      conditions.push(
+        `LOWER(CONCAT(COALESCE(b.education_code,''), ' ', COALESCE(b.national_id,''), ' ', COALESCE(b.participant_name,''), ' ', COALESCE(latest_attempt.participant_name,''))) LIKE $${params.length}`,
+      );
     }
     if (certificateOnly) {
-      conditions.push(`best_score >= 60`);
+      conditions.push(`b.best_score >= 60`);
     }
 
-    const dateFilter = buildIstanbulDateFilterSql("COALESCE(best_recorded_at, updated_at)", period);
+    const dateFilter = buildIstanbulDateFilterSql("COALESCE(b.best_recorded_at, b.updated_at)", period);
+    const joinSql = `
+      FROM exam_portal_best_scores b
+      LEFT JOIN LATERAL (
+        SELECT TRIM(participant_name) AS participant_name
+        FROM exam_attempts ea
+        WHERE UPPER(TRIM(ea.education_code)) = UPPER(TRIM(b.education_code))
+          AND ea.national_id = b.national_id
+          AND ea.participant_name IS NOT NULL
+          AND TRIM(ea.participant_name) <> ''
+        ORDER BY ea.submitted_at DESC NULLS LAST, ea.started_at DESC
+        LIMIT 1
+      ) latest_attempt ON TRUE
+    `;
     const whereSql = conditions.length ? `WHERE ${conditions.join(" AND ")}${dateFilter}` : dateFilter ? `WHERE 1=1${dateFilter}` : "";
-    const countSql = `SELECT COUNT(*)::int AS total FROM exam_portal_best_scores ${whereSql}`;
-    const listSql = `SELECT * FROM exam_portal_best_scores ${whereSql} ORDER BY updated_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    const countSql = `SELECT COUNT(*)::int AS total ${joinSql} ${whereSql}`;
+    const listSql = `SELECT b.*,
+            COALESCE(NULLIF(TRIM(b.participant_name), ''), NULLIF(TRIM(latest_attempt.participant_name), ''), '') AS participant_name
+     ${joinSql}
+     ${whereSql}
+     ORDER BY b.updated_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     const [countResult, listResult] = await Promise.all([
       pool.query(countSql, params),
       pool.query(listSql, [...params, pageSize, offset]),
@@ -3114,6 +3297,7 @@ app.get("/api/admin/exam-results", auth, checkPermission("examResults", "can_vie
         const api = toApiObject(row);
         return {
           ...api,
+          participantName: String(row.participant_name || api.participantName || "").trim(),
           certificateEligible: Number(row.best_score) >= 60,
         };
       }),
@@ -3132,15 +3316,45 @@ app.get("/api/admin/exam-results", auth, checkPermission("examResults", "can_vie
 const fetchCertificateRowContext = async (id) => {
   const result = await pool.query(
     `SELECT b.*,
-            TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) AS participant_name,
-            COALESCE(ae.name, ed.name, '') AS education_name,
-            d.city AS participant_city,
+            COALESCE(
+              NULLIF(TRIM(b.participant_name), ''),
+              NULLIF(TRIM(latest_attempt.participant_name), ''),
+              ''
+            ) AS participant_name,
+            COALESCE(ae.name, ed.name, ec.education_name, '') AS education_name,
+            COALESCE(cat_ed.category_name, cat_ec.category_name, cat_ae.category_name, '') AS education_category,
+            COALESCE(exam_cfg.exam_target_difficulty, 'medium') AS exam_target_difficulty,
+            COALESCE(ed.duration, ec.duration, '') AS education_duration,
+            COALESCE(ed.created_at, ae.created_at, ec.created_at) AS education_created_at,
             d.country_code AS participant_country
      FROM exam_portal_best_scores b
      LEFT JOIN normal_user_details d ON d.national_id = b.national_id
-     LEFT JOIN normal_users u ON u.id = d.user_id
      LEFT JOIN approved_educations ae ON UPPER(TRIM(ae.code)) = UPPER(TRIM(b.education_code))
      LEFT JOIN educations ed ON UPPER(TRIM(ed.code)) = UPPER(TRIM(b.education_code))
+     LEFT JOIN education_calendar ec ON UPPER(TRIM(ec.code)) = UPPER(TRIM(b.education_code))
+     LEFT JOIN education_categories cat_ed ON cat_ed.id = ed.category_id
+     LEFT JOIN education_categories cat_ec ON cat_ec.id = ec.category_id
+     LEFT JOIN education_categories cat_ae ON cat_ae.id = ae.category_id
+     LEFT JOIN LATERAL (
+       SELECT TRIM(participant_name) AS participant_name
+       FROM exam_attempts ea
+       WHERE UPPER(TRIM(ea.education_code)) = UPPER(TRIM(b.education_code))
+         AND ea.national_id = b.national_id
+         AND ea.status = 'completed'
+         AND ea.participant_name IS NOT NULL
+         AND TRIM(ea.participant_name) <> ''
+       ORDER BY ea.submitted_at DESC NULLS LAST, ea.started_at DESC
+       LIMIT 1
+     ) latest_attempt ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT eq.exam_target_difficulty
+       FROM exam_questions eq
+       INNER JOIN educations e ON e.id = eq.education_id
+       WHERE UPPER(TRIM(e.code)) = UPPER(TRIM(b.education_code))
+         AND eq.generated_questions IS NOT NULL
+       ORDER BY eq.updated_at DESC
+       LIMIT 1
+     ) exam_cfg ON TRUE
      WHERE b.id = $1
        AND b.payment_received = TRUE
        AND b.best_score >= 60
@@ -3164,7 +3378,7 @@ app.get("/api/admin/certificate-list", auth, checkPermission("certificateList", 
     if (searchRaw) {
       params.push(`%${searchRaw.toLowerCase()}%`);
       conditions.push(
-        `LOWER(CONCAT(COALESCE(b.education_code,''), ' ', COALESCE(b.national_id,''), ' ', COALESCE(u.first_name,''), ' ', COALESCE(u.last_name,''), ' ', COALESCE(ae.name,''))) LIKE $${params.length}`,
+        `LOWER(CONCAT(COALESCE(b.education_code,''), ' ', COALESCE(b.national_id,''), ' ', COALESCE(b.participant_name,''), ' ', COALESCE(latest_attempt.participant_name,''), ' ', COALESCE(ae.name,''))) LIKE $${params.length}`,
       );
     }
 
@@ -3172,13 +3386,23 @@ app.get("/api/admin/certificate-list", auth, checkPermission("certificateList", 
     const joinSql = `
       FROM exam_portal_best_scores b
       LEFT JOIN normal_user_details d ON d.national_id = b.national_id
-      LEFT JOIN normal_users u ON u.id = d.user_id
       LEFT JOIN approved_educations ae ON UPPER(TRIM(ae.code)) = UPPER(TRIM(b.education_code))
+      LEFT JOIN LATERAL (
+        SELECT TRIM(participant_name) AS participant_name
+        FROM exam_attempts ea
+        WHERE UPPER(TRIM(ea.education_code)) = UPPER(TRIM(b.education_code))
+          AND ea.national_id = b.national_id
+          AND ea.status = 'completed'
+          AND ea.participant_name IS NOT NULL
+          AND TRIM(ea.participant_name) <> ''
+        ORDER BY ea.submitted_at DESC NULLS LAST, ea.started_at DESC
+        LIMIT 1
+      ) latest_attempt ON TRUE
     `;
     const whereSql = `WHERE ${conditions.join(" AND ")}${dateFilter}`;
     const countSql = `SELECT COUNT(*)::int AS total ${joinSql} ${whereSql}`;
     const listSql = `SELECT b.*,
-            TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) AS participant_name,
+            COALESCE(NULLIF(TRIM(b.participant_name), ''), NULLIF(TRIM(latest_attempt.participant_name), ''), '') AS participant_name,
             COALESCE(ae.name, '') AS education_name
      ${joinSql}
      ${whereSql}
@@ -3221,17 +3445,31 @@ app.post("/api/admin/certificate-list/:id/generate-pdf", auth, checkPermission("
     }
 
     const { buildCertificatePdf } = await import("./certificatePdf.js");
+    const { buildCertificateBilingualFields } = await import("./certificateTranslation.js");
     const participantName = String(row.participant_name || "").trim();
-    const birthParts = [row.participant_city, row.participant_country].filter(Boolean);
+    const countryCode = String(row.participant_country || "TR").trim().toUpperCase();
+    const birthInfo = countryCode === "TR" || countryCode === "Türkçe" ? "Türkçe" : countryCode;
+    const educationCategory = String(row.education_category || "").trim() || "—";
+    const bilingual = await buildCertificateBilingualFields({
+      educationName: row.education_name || row.education_code,
+      educationCategory,
+      examTargetDifficulty: row.exam_target_difficulty,
+    });
+
     const { pdfBytes, fileName } = await buildCertificatePdf({
+      id: row.id,
       nationalId: row.national_id,
       fullName: participantName || "—",
-      birthInfo: birthParts.length ? birthParts.join(" / ") : "—",
+      birthInfo,
       educationCode: row.education_code,
-      educationName: row.education_name || row.education_code,
-      bestScore: row.best_score,
-      bestRecordedAt: row.best_recorded_at,
-      issuePlace: "Ankara",
+      educationName: bilingual.educationNameLine,
+      educationCategory: bilingual.educationCategoryLine,
+      level: bilingual.levelLine,
+      issuePlace: "Gazi Üniversitesi\nUzaktan Eğitim Uyg.\nve Arş. Merkezi",
+      controlDate: row.best_recorded_at,
+      programStartDate: row.education_created_at,
+      programEndDate: row.last_attempt_at,
+      duration: row.education_duration,
     });
 
     res.setHeader("Content-Type", "application/pdf");
@@ -4005,6 +4243,8 @@ const startServer = async () => {
     migrateExamAttemptsTable,
     migrateExamPortalVisitTable,
     migrateExamPortalBestScoresTable,
+    migrateExamPortalParticipantNameColumns,
+    migrateBackfillExamPortalBestScores,
     migrateExamPortalAccessPermissions,
     migrateExamResultsPermissions,
     migrateCertificateListPermissions,

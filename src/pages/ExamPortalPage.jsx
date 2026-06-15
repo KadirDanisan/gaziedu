@@ -123,13 +123,19 @@ export default function ExamPortalPage() {
     if (!startPromise) {
       startPromise = publicApi.startExamPortal({ portalToken });
       examStartCache.set(portalToken, startPromise);
-      startPromise.catch(() => null).finally(() => {
+      startPromise.finally(() => {
         window.setTimeout(() => examStartCache.delete(portalToken), 3000);
       });
     }
     startPromise
       .then((data) => {
         if (!active) return;
+        if (!data?.attemptId) {
+          setLoadError("Sınav başlatılamadı.");
+          setFlowStarted(false);
+          startRequestedRef.current = false;
+          return;
+        }
         setExam(data);
         setRemaining(data.durationSeconds ?? EXAM_FALLBACK_DURATION_SECONDS);
       })
@@ -323,11 +329,18 @@ export default function ExamPortalPage() {
   if (loadError && !exam) {
     return (
       <main className="exam-portal">
-        <section className="exam-portal-card exam-portal-card--center">
+        <section className="exam-portal-card exam-portal-card--center exam-portal-card--error">
           <img src="/Guzem-05.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
+          <p className="exam-portal-eyebrow">Sınav başlatılamadı</p>
           <h1>Sınav açılamadı</h1>
-          <p>{loadError}</p>
+          <div className="exam-portal-error-message" role="alert">
+            <i className="fa-solid fa-circle-exclamation" aria-hidden />
+            <p>{loadError}</p>
+          </div>
           <small>Güvenli bağlantı doğrulandı; sınav oturumu başlatılamadı.</small>
+          <Link to="/" className="btn exam-start-btn" style={{ marginTop: 8 }}>
+            Ana sayfaya git
+          </Link>
         </section>
       </main>
     );

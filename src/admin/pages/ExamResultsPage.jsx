@@ -161,7 +161,7 @@ export default function ExamResultsPage() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && runSearch()}
-            placeholder="Eğitim kodu veya T.C. ara..."
+            placeholder="Eğitim kodu, T.C. veya ad ara..."
           />
           <button type="button" className="btn btn-outline" onClick={runSearch}>
             Ara
@@ -194,6 +194,7 @@ export default function ExamResultsPage() {
             <table className="admin-table">
               <thead>
                 <tr>
+                  <th>Ad Soyad</th>
                   <th>Eğitim kodu</th>
                   <th>T.C.</th>
                   <th>En yüksek puan</th>
@@ -210,6 +211,7 @@ export default function ExamResultsPage() {
                   const paid = Boolean(row.paymentReceived);
                   return (
                     <tr key={row.id}>
+                      <td>{row.participantName || "—"}</td>
                       <td>{row.educationCode}</td>
                       <td>{row.nationalId}</td>
                       <td>

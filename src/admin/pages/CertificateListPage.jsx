@@ -86,8 +86,8 @@ export default function CertificateListPage() {
           <h2>Sertifika Çıkartma Sistemi</h2>
           <p>
             Ödemesi alınmış ve sınavdan en az 60 puan almış katılımcılar. Her satır için{" "}
-            <strong>Sertifika Hazırla</strong> ile şablon PDF üzerine ad, T.C., eğitim kodu ve eğitim adı
-            yazdırılır.
+            <strong>Sertifika Hazırla</strong> ile GUZEM başarı sertifikası PDF olarak oluşturulur (ad, T.C.,
+            eğitim bilgileri, belge numarası ve tamamlama metni).
           </p>
         </div>
       </div>
