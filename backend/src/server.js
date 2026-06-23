@@ -897,6 +897,163 @@ const formatPublicCourse = (row) => ({
   ...formatPublicCourseInstructor(row),
 });
 
+const makeSlug = (value) =>
+  String(value || "")
+    .toLocaleLowerCase("tr-TR")
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ş/g, "s")
+    .replace(/ı/g, "i")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const sqlTitleSlugExpr = (column) =>
+  `regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(lower(translate(${column}, 'İI', 'ii')), 'ğ', 'g', 'g'), 'ü', 'u', 'g'), 'ş', 's', 'g'), 'ı', 'i', 'g'), 'ö', 'o', 'g'), 'ç', 'c', 'g'), '[^a-z0-9]+', '-', 'g')`;
+
+const sqlTitleSlugTrimmed = (column) =>
+  `regexp_replace(regexp_replace(${sqlTitleSlugExpr(column)}, '^-+', ''), '-+$', '')`;
+
+const loadPublicCategoryOptions = async () => {
+  const categoryRows = await pool.query(`SELECT id, category_name FROM education_categories ORDER BY category_name ASC`);
+  return [
+    { id: "", name: "Tüm Eğitimler" },
+    ...categoryRows.rows.map((row) => ({ id: row.id, name: row.category_name })),
+  ];
+};
+
+const EDUCATION_DETAIL_SELECT = `e.id, e.name, e.description, e.image_url, e.code, e.duration, e.content_doc_path, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
+          ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email,
+          NULL::text AS instructor_info, NULL::timestamptz AS calendar_date`;
+
+const CALENDAR_DETAIL_SELECT = `ec.id, ec.education_name, ec.description, ec.image_url, ec.code, ec.duration, ec.content_doc_path, ec.calendar_date, ec.category_id, ec.institution_id, ec.instructor_id, ec.instructor_info, ec.rating_average, ec.rating_count, c.category_name, 'calendar'::text AS source_type, inst.name AS institution_name, inst.logo_url AS institution_logo_url, inst.website_url AS institution_website_url,
+                     ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email`;
+
+const buildEducationCalendarQuery = (query) => {
+  const page = Math.max(1, Number(query.page || 1));
+  const pageSize = Math.min(50, Math.max(1, Number(query.pageSize || 10)));
+  const sortRaw = String(query.sort || "newest").toLowerCase();
+  const sort = sortRaw === "newest" ? "DESC" : "ASC";
+  const categoryId = String(query.categoryId || "").trim();
+  const dateFrom = String(query.dateFrom || "").trim();
+  const dateTo = String(query.dateTo || "").trim();
+  const params = [];
+  const conditions = [];
+
+  if (categoryId) {
+    params.push(categoryId);
+    conditions.push(`e.category_id = $${params.length}`);
+  }
+
+  if (dateFrom) {
+    params.push(dateFrom);
+    conditions.push(`e.created_at >= $${params.length}::timestamptz`);
+  }
+
+  if (dateTo) {
+    params.push(dateTo);
+    conditions.push(`e.created_at <= ($${params.length}::date + interval '1 day' - interval '1 second')`);
+  }
+
+  const whereSql = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const orderSql = sort === "ASC" ? "e.created_at ASC" : "e.created_at DESC";
+
+  return { page, pageSize, params, whereSql, orderSql, offset: (page - 1) * pageSize };
+};
+
+const formatPublicCourseRows = (rows, { withContent = false } = {}) =>
+  rows.map((row) => formatPublicCourse({ ...row, content_html: withContent ? row.content_html || "" : "" }));
+
+const EDUCATION_LIST_SELECT = `e.id, e.name, e.description, e.image_url, e.code, e.duration, e.content_doc_path, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
+          ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email,
+          NULL::text AS instructor_info`;
+
+const parseEducationsCatalogQuery = (query) => {
+  const page = Math.max(1, Number(query.page || 1));
+  const pageSize = Math.min(50, Math.max(1, Number(query.pageSize || 9)));
+  const searchRaw = String(query.search || "").trim();
+  const sortRaw = String(query.sort || "newest").toLowerCase();
+  const sort =
+    sortRaw === "oldest"
+      ? "oldest"
+      : sortRaw === "most_reviews" || sortRaw === "most-reviewed" || sortRaw === "en-cok-degerlendirme"
+        ? "most_reviews"
+        : sortRaw === "rating" || sortRaw === "degerlendirme"
+          ? "rating"
+          : "newest";
+
+  const catRaw = query.category;
+  const categoryList = (Array.isArray(catRaw) ? catRaw : catRaw != null && catRaw !== "" ? [catRaw] : [])
+    .map((s) => String(s || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  const params = [];
+  const conditions = [];
+
+  if (searchRaw) {
+    params.push(`%${escapeIlikePattern(searchRaw)}%`);
+    conditions.push(`e.name ILIKE $${params.length} ESCAPE '\\'`);
+  }
+
+  if (categoryList.length) {
+    params.push(categoryList);
+    conditions.push(`LOWER(TRIM(COALESCE(c.category_name, ''))) = ANY($${params.length}::text[])`);
+  }
+
+  if (sort === "most_reviews") {
+    conditions.push(`e.rating_count > 0`);
+  }
+
+  const whereSql = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const orderSql =
+    sort === "oldest"
+      ? `e.created_at ASC`
+      : sort === "most_reviews"
+        ? `e.rating_count DESC, e.rating_average DESC NULLS LAST, e.created_at DESC`
+        : sort === "rating"
+          ? `e.rating_average DESC NULLS LAST, e.rating_count DESC, e.created_at DESC`
+          : `e.created_at DESC`;
+
+  return { page, pageSize, sort, whereSql, orderSql, params, offset: (page - 1) * pageSize };
+};
+
+const queryPublicEducationsList = async (query) => {
+  const { page, pageSize, whereSql, orderSql, params, offset } = parseEducationsCatalogQuery(query);
+
+  const baseCountSql = `SELECT COUNT(*)::int AS total
+      FROM educations e
+      LEFT JOIN education_categories c ON c.id = e.category_id
+      ${whereSql}`;
+
+  const listSql = `SELECT ${EDUCATION_LIST_SELECT}
+       FROM educations e
+       LEFT JOIN education_categories c ON c.id = e.category_id
+       LEFT JOIN institutions i ON i.id = e.institution_id
+       LEFT JOIN instructors ins ON ins.id = e.instructor_id
+       ${whereSql}
+       ORDER BY ${orderSql}
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+
+  const [countResult, listResult] = await Promise.all([
+    pool.query(baseCountSql, params),
+    pool.query(listSql, [...params, pageSize, offset]),
+  ]);
+
+  const courses = formatPublicCourseRows(listResult.rows.map((row) => ({ ...row, content_html: "" })));
+  const total = countResult.rows[0]?.total || 0;
+
+  return {
+    courses,
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    },
+  };
+};
+
 const formatEducationReviewRow = (row) => {
   const first = String(row.first_name || "").trim();
   const last = String(row.last_name || "").trim();
@@ -2344,28 +2501,31 @@ app.post("/api/public/exam-portal/start", async (req, res, next) => {
       return res.status(400).json({ message: "Geçerli sınav bağlantısı (portalToken) gerekli." });
     }
     let educationCode;
+    console.log(educationCode);
     let nationalId;
     let participantName = "";
     try {
       const v = verifyExamPortalLink(portalToken);
       educationCode = v.educationCode;
+      console.log(educationCode);
       nationalId = v.nationalId;
       participantName = v.participantName;
     } catch (e) {
       const status = e.statusCode || 401;
       return res.status(status).json({ message: e.message || "Geçersiz bağlantı." });
     }
-
+    console.log(educationCode);
     const attemptsCheck = await pool.query(
       `SELECT COUNT(*)::int AS c FROM exam_attempts WHERE UPPER(TRIM(education_code)) = $1 AND national_id = $2`,
       [educationCode, nationalId],
     );
+    console.log(educationCode);
     if (Number(attemptsCheck.rows[0]?.c || 0) >= EXAM_PORTAL_MAX_STARTS) {
       return res.status(403).json({
         message: `Bu eğitim (${educationCode}) için sınav başlatma hakkınız doldu (en fazla ${EXAM_PORTAL_MAX_STARTS} oturum).`,
       });
     }
-
+    console.log(educationCode);
     const educationResult = await pool.query(
       `SELECT id, name, code, duration
        FROM educations
@@ -2374,6 +2534,7 @@ app.post("/api/public/exam-portal/start", async (req, res, next) => {
        LIMIT 1`,
       [educationCode],
     );
+    console.log(educationCode);
     const education = educationResult.rows[0];
     if (!education) {
       return res.status(404).json({ message: "Bu eğitim kodu ile eğitim bulunamadı." });
@@ -2530,61 +2691,37 @@ app.post("/api/public/exam-portal/:attemptId/submit", async (req, res, next) => 
   }
 });
 
-/** Tüm Eğitimler sayfası: yalnızca `educations`, sayfalı; kategori, arama, sıralama sunucuda */
-app.get("/api/public/educations", async (req, res, next) => {
+app.get("/api/public/top-rated-courses", async (req, res, next) => {
   try {
-    const page = Math.max(1, Number(req.query.page || 1));
-    const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize || 9)));
-    const searchRaw = String(req.query.search || "").trim();
-    const sortRaw = String(req.query.sort || "newest").toLowerCase();
-    const sort =
-      sortRaw === "oldest"
-        ? "oldest"
-        : sortRaw === "most_reviews" || sortRaw === "most-reviewed" || sortRaw === "en-cok-degerlendirme"
-          ? "most_reviews"
-          : sortRaw === "rating" || sortRaw === "degerlendirme"
-            ? "rating"
-            : "newest";
+    const limit = 3;
+    const listSql = `SELECT ${EDUCATION_LIST_SELECT}
+       FROM educations e
+       LEFT JOIN education_categories c ON c.id = e.category_id
+       LEFT JOIN institutions i ON i.id = e.institution_id
+       LEFT JOIN instructors ins ON ins.id = e.instructor_id
+       WHERE e.rating_count > 0
+       ORDER BY e.rating_count DESC, e.rating_average DESC NULLS LAST, e.created_at DESC
+       LIMIT $1`;
+    const result = await pool.query(listSql, [limit]);
+    const courses = formatPublicCourseRows(result.rows.map((row) => ({ ...row, content_html: "" })));
+    return res.json({ courses });
+  } catch (error) {
+    return next(error);
+  }
+});
 
-    const catRaw = req.query.category;
-    const categoryList = (Array.isArray(catRaw) ? catRaw : catRaw != null && catRaw !== "" ? [catRaw] : [])
-      .map((s) => String(s || "").trim().toLowerCase())
-      .filter(Boolean);
+app.get("/api/public/all-trainings", async (req, res, next) => {
+  try {
+    const result = await queryPublicEducationsList(req.query);
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+});
 
-    const params = [];
-    const conditions = [];
-
-    if (searchRaw) {
-      params.push(`%${escapeIlikePattern(searchRaw)}%`);
-      conditions.push(`e.name ILIKE $${params.length} ESCAPE '\\'`);
-    }
-
-    if (categoryList.length) {
-      params.push(categoryList);
-      conditions.push(`LOWER(TRIM(COALESCE(c.category_name, ''))) = ANY($${params.length}::text[])`);
-    }
-
-    if (sort === "most_reviews") {
-      conditions.push(`e.rating_count > 0`);
-    }
-
-    const whereSql = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const orderSql =
-      sort === "oldest"
-        ? `e.created_at ASC`
-        : sort === "most_reviews"
-          ? `e.rating_count DESC, e.rating_average DESC NULLS LAST, e.created_at DESC`
-          : sort === "rating"
-            ? `e.rating_average DESC NULLS LAST, e.rating_count DESC, e.created_at DESC`
-            : `e.created_at DESC`;
-
-    const offset = (page - 1) * pageSize;
-
-    const baseCountSql = `SELECT COUNT(*)::int AS total
-      FROM educations e
-      LEFT JOIN education_categories c ON c.id = e.category_id
-      ${whereSql}`;
-
+app.get("/api/public/hero-courses", async (req, res, next) => {
+  try {
+    const limit = 5;
     const listSql = `SELECT e.id, e.name, e.description, e.image_url, e.code, e.duration, e.content_doc_path, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
           ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email,
           NULL::text AS instructor_info
@@ -2592,27 +2729,71 @@ app.get("/api/public/educations", async (req, res, next) => {
        LEFT JOIN education_categories c ON c.id = e.category_id
        LEFT JOIN institutions i ON i.id = e.institution_id
        LEFT JOIN instructors ins ON ins.id = e.instructor_id
-       ${whereSql}
-       ORDER BY ${orderSql}
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+       ORDER BY RANDOM()
+       LIMIT $1`;
+    const result = await pool.query(listSql, [limit]);
+    const courses = formatPublicCourseRows(result.rows.map((row) => ({ ...row, content_html: "" })));
+    return res.json({ courses });
+  } catch (error) {
+    return next(error);
+  }
+});
 
-    const [countResult, listResult, categoryRows] = await Promise.all([
-      pool.query(baseCountSql, params),
+app.get("/api/public/categories", async (req, res, next) => {
+  try {
+    const categories = await loadPublicCategoryOptions();
+    return res.json({ categories });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/api/public/upcoming-courses", async (req, res, next) => {
+  try {
+    const limit = 3;
+    const listSql = `SELECT ${EDUCATION_LIST_SELECT}
+       FROM educations e
+       LEFT JOIN education_categories c ON c.id = e.category_id
+       LEFT JOIN institutions i ON i.id = e.institution_id
+       LEFT JOIN instructors ins ON ins.id = e.instructor_id
+       ORDER BY e.created_at DESC
+       LIMIT $1`;
+    const result = await pool.query(listSql, [limit]);
+    const courses = formatPublicCourseRows(result.rows.map((row) => ({ ...row, content_html: "" })));
+    return res.json({ courses });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/api/public/education-calendar", async (req, res, next) => {
+  try {
+    const { page, pageSize, params, whereSql, orderSql, offset } = buildEducationCalendarQuery(req.query);
+
+    const countSql = `SELECT COUNT(*)::int AS total
+                      FROM educations e
+                      LEFT JOIN education_categories c ON c.id = e.category_id
+                      ${whereSql}`;
+    const listSql = `SELECT ${EDUCATION_LIST_SELECT}, e.created_at AS calendar_date
+                     FROM educations e
+                     LEFT JOIN education_categories c ON c.id = e.category_id
+                     LEFT JOIN institutions i ON i.id = e.institution_id
+                     LEFT JOIN instructors ins ON ins.id = e.instructor_id
+                     ${whereSql}
+                     ORDER BY ${orderSql}
+                     LIMIT $${params.length + 1}
+                     OFFSET $${params.length + 2}`;
+
+    const [countResult, listResult] = await Promise.all([
+      pool.query(countSql, params),
       pool.query(listSql, [...params, pageSize, offset]),
-      pool.query(`SELECT id, category_name FROM education_categories ORDER BY category_name ASC`),
     ]);
 
-    const rowsWithEmptyContent = listResult.rows.map((row) => ({ ...row, content_html: "" }));
-    const data = rowsWithEmptyContent.map((row) => formatPublicCourse(row));
-    const categories = [
-      { id: "", name: "Tüm Eğitimler" },
-      ...categoryRows.rows.map((row) => ({ id: row.id, name: row.category_name })),
-    ];
+    const courses = formatPublicCourseRows(listResult.rows.map((row) => ({ ...row, content_html: "" })));
     const total = countResult.rows[0]?.total || 0;
 
     return res.json({
-      categories,
-      data,
+      courses,
       pagination: {
         page,
         pageSize,
@@ -2621,169 +2802,45 @@ app.get("/api/public/educations", async (req, res, next) => {
       },
     });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
-app.get("/api/public/courses", async (req, res, next) => {
+app.get("/api/public/educations/detail/:slug", async (req, res, next) => {
   try {
-    const page = Math.max(1, Number(req.query.page || 1));
-    const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize || 6)));
-    const sort = String(req.query.sort || "oldest").toLowerCase() === "newest" ? "DESC" : "ASC";
-    const categoryId = String(req.query.categoryId || "").trim();
-    const category = String(req.query.category || "").trim().toLowerCase();
-    const dateFrom = String(req.query.dateFrom || "").trim();
-    const dateTo = String(req.query.dateTo || "").trim();
-    const search = String(req.query.search || "").trim().toLowerCase();
-    const calendarParams = [];
-    const calendarConditions = [];
-
-    if (categoryId) {
-      calendarParams.push(categoryId);
-      calendarConditions.push(`ec.category_id = $${calendarParams.length}`);
-    } else if (category) {
-      calendarParams.push(category);
-      calendarConditions.push(`LOWER(COALESCE(c.category_name, '')) = $${calendarParams.length}`);
+    const slug = String(req.params.slug || "").trim();
+    if (!slug) {
+      return res.status(400).json({ message: "Slug gerekli." });
     }
 
-    if (dateFrom) {
-      calendarParams.push(dateFrom);
-      calendarConditions.push(`ec.calendar_date >= $${calendarParams.length}::timestamptz`);
+    const calendarSql = `SELECT ${CALENDAR_DETAIL_SELECT}
+                         FROM education_calendar ec
+                         LEFT JOIN education_categories c ON c.id = ec.category_id
+                         LEFT JOIN institutions inst ON inst.id = ec.institution_id
+                         LEFT JOIN instructors ins ON ins.id = ec.instructor_id
+                         WHERE ${sqlTitleSlugTrimmed("ec.education_name")} = $1
+                         LIMIT 1`;
+    const educationSql = `SELECT ${EDUCATION_DETAIL_SELECT}
+                          FROM educations e
+                          LEFT JOIN education_categories c ON c.id = e.category_id
+                          LEFT JOIN institutions i ON i.id = e.institution_id
+                          LEFT JOIN instructors ins ON ins.id = e.instructor_id
+                          WHERE ${sqlTitleSlugTrimmed("e.name")} = $1
+                          LIMIT 1`;
+
+    let row = (await pool.query(calendarSql, [slug])).rows[0];
+    if (!row) {
+      row = (await pool.query(educationSql, [slug])).rows[0];
+    }
+    if (!row) {
+      return res.status(404).json({ message: "Eğitim bulunamadı." });
     }
 
-    if (dateTo) {
-      calendarParams.push(dateTo);
-      calendarConditions.push(`ec.calendar_date <= ($${calendarParams.length}::date + interval '1 day' - interval '1 second')`);
-    }
-
-    if (search) {
-      calendarParams.push(`%${search}%`);
-      calendarConditions.push(`LOWER(COALESCE(ec.education_name, '')) LIKE $${calendarParams.length}`);
-    }
-
-    const calendarWhere = calendarConditions.length ? `WHERE ${calendarConditions.join(" AND ")}` : "";
-    const countSql = `SELECT COUNT(*)::int AS total
-                      FROM education_calendar ec
-                      LEFT JOIN education_categories c ON c.id = ec.category_id
-                      ${calendarWhere}`;
-    const listSql = `SELECT ec.id, ec.education_name, ec.description, ec.image_url, ec.code, ec.duration, ec.content_doc_path, ec.calendar_date, ec.category_id, ec.institution_id, ec.instructor_id, ec.instructor_info, ec.rating_average, ec.rating_count, c.category_name, 'calendar'::text AS source_type, inst.name AS institution_name, inst.logo_url AS institution_logo_url, inst.website_url AS institution_website_url,
-                     ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email
-                     FROM education_calendar ec
-                     LEFT JOIN education_categories c ON c.id = ec.category_id
-                     LEFT JOIN institutions inst ON inst.id = ec.institution_id
-                     LEFT JOIN instructors ins ON ins.id = ec.instructor_id
-                     ${calendarWhere}
-                     ORDER BY ec.calendar_date ${sort}
-                     LIMIT $${calendarParams.length + 1}
-                     OFFSET $${calendarParams.length + 2}`;
-    const offset = (page - 1) * pageSize;
-
-    const [educations, calendarCount, calendar, categoryRows] = await Promise.all([
-      pool.query(
-        `SELECT e.id, e.name, e.description, e.image_url, e.code, e.duration, e.content_doc_path, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
-          ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email,
-          NULL::text AS instructor_info
-         FROM educations e
-         LEFT JOIN education_categories c ON c.id = e.category_id
-         LEFT JOIN institutions i ON i.id = e.institution_id
-         LEFT JOIN instructors ins ON ins.id = e.instructor_id
-         ORDER BY e.created_at DESC`,
-      ),
-      pool.query(countSql, calendarParams),
-      pool.query(listSql, [...calendarParams, pageSize, offset]),
-      pool.query(`SELECT id, category_name FROM education_categories ORDER BY category_name ASC`),
-    ]);
-
-    const educationRowsWithContent = await Promise.all(
-      educations.rows.map(async (row) => ({
-        ...row,
-        content_html: await extractEducationContentHtml(row.content_doc_path),
-      })),
-    );
-    const calendarRowsWithContent = await Promise.all(
-      calendar.rows.map(async (row) => ({
-        ...row,
-        content_html: await extractEducationContentHtml(row.content_doc_path),
-      })),
-    );
-    const educationItems = educationRowsWithContent.map((row) => formatPublicCourse(row));
-    let calendarItems = calendarRowsWithContent.map((row) => formatPublicCourse(row));
-    const categories = [
-      { id: "", name: "Tüm Eğitimler" },
-      ...categoryRows.rows.map((row) => ({ id: row.id, name: row.category_name })),
-    ];
-    let total = calendarCount.rows[0]?.total || 0;
-    if (total === 0) {
-      const fallbackParams = [];
-      const fallbackConditions = [];
-
-      if (categoryId) {
-        fallbackParams.push(categoryId);
-        fallbackConditions.push(`e.category_id = $${fallbackParams.length}`);
-      } else if (category) {
-        fallbackParams.push(category);
-        fallbackConditions.push(`LOWER(COALESCE(c.category_name, '')) = $${fallbackParams.length}`);
-      }
-
-      if (dateFrom) {
-        fallbackParams.push(dateFrom);
-        fallbackConditions.push(`e.created_at >= $${fallbackParams.length}::timestamptz`);
-      }
-
-      if (dateTo) {
-        fallbackParams.push(dateTo);
-        fallbackConditions.push(`e.created_at <= ($${fallbackParams.length}::date + interval '1 day' - interval '1 second')`);
-      }
-
-      if (search) {
-        fallbackParams.push(`%${search}%`);
-        fallbackConditions.push(`LOWER(COALESCE(e.name, '')) LIKE $${fallbackParams.length}`);
-      }
-
-      const fallbackWhere = fallbackConditions.length ? `WHERE ${fallbackConditions.join(" AND ")}` : "";
-      const fallbackCountSql = `SELECT COUNT(*)::int AS total
-                                FROM educations e
-                                LEFT JOIN education_categories c ON c.id = e.category_id
-                                ${fallbackWhere}`;
-      const fallbackListSql = `SELECT e.id, e.name AS education_name, e.description, e.image_url, e.code, e.duration, e.content_doc_path, e.created_at AS calendar_date, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
-                               ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email,
-                               NULL::text AS instructor_info
-                               FROM educations e
-                               LEFT JOIN education_categories c ON c.id = e.category_id
-                               LEFT JOIN institutions i ON i.id = e.institution_id
-                               LEFT JOIN instructors ins ON ins.id = e.instructor_id
-                               ${fallbackWhere}
-                               ORDER BY e.created_at ${sort}
-                               LIMIT $${fallbackParams.length + 1}
-                               OFFSET $${fallbackParams.length + 2}`;
-      const [fallbackCount, fallbackList] = await Promise.all([
-        pool.query(fallbackCountSql, fallbackParams),
-        pool.query(fallbackListSql, [...fallbackParams, pageSize, offset]),
-      ]);
-      total = fallbackCount.rows[0]?.total || 0;
-      const fallbackRowsWithContent = await Promise.all(
-        fallbackList.rows.map(async (row) => ({
-          ...row,
-          content_html: await extractEducationContentHtml(row.content_doc_path),
-        })),
-      );
-      calendarItems = fallbackRowsWithContent.map((row) => formatPublicCourse(row));
-    }
-
-    const allItems = [...educationItems, ...calendarItems];
-
-    return res.json({
-      categories,
-      educations: educationItems,
-      educationCalendar: calendarItems,
-      courses: allItems,
-      pagination: {
-        page,
-        pageSize,
-        total,
-        totalPages: Math.max(1, Math.ceil(total / pageSize)),
-      },
-    });
+    const withContent = {
+      ...row,
+      content_html: await extractEducationContentHtml(row.content_doc_path),
+    };
+    return res.json({ course: formatPublicCourse(withContent) });
   } catch (error) {
     return next(error);
   }

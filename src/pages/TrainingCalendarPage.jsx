@@ -1,9 +1,26 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { publicApi, resolvePublicImageUrl } from "../api/publicApi";
 import CourseCardThumb from "../components/CourseCardThumb";
 import { makeSlug } from "../data/homeData";
 import { useAuth } from "../context/AuthContext";
+
+function formatCalendarBadge(course) {
+  const raw = course.calendarDate;
+  if (raw) {
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) {
+      return {
+        day: String(d.getDate()).padStart(2, "0"),
+        month: d.toLocaleDateString("tr-TR", { month: "long" }).toUpperCase(),
+      };
+    }
+  }
+  const label = String(course.date || "").trim();
+  if (!label) return { day: "—", month: "" };
+  const [day, month] = label.split(" ");
+  return { day: day || "—", month: (month || "").toUpperCase() };
+}
 
 function TrainingCalendarPage() {
   const [calendarCourses, setCalendarCourses] = useState([]);
@@ -12,45 +29,59 @@ function TrainingCalendarPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [sortOrder, setSortOrder] = useState("newest");
-  const [query, setQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 4;
+  const itemsPerPage = 10;
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const categoriesLoadingRef = useRef(false);
+  const categoriesLoadedRef = useRef(false);
   const { isLoggedIn, isFavorite, toggleFavorite } = useAuth();
   const paginatedCourses = useMemo(() => calendarCourses, [calendarCourses]);
   const navigate = useNavigate();
+
+  const loadCategoryOptions = useCallback(() => {
+    if (categoriesLoadedRef.current || categoriesLoadingRef.current) return;
+    categoriesLoadingRef.current = true;
+    publicApi
+      .getCategories()
+      .then((data) => {
+        const parsed = Array.isArray(data?.categories)
+          ? data.categories.map((item) =>
+              typeof item === "string" ? { id: item === "Tüm Eğitimler" ? "" : item, name: item } : item,
+            )
+          : [{ id: "", name: "Tüm Eğitimler" }];
+        setCategoryOptions(parsed.length ? parsed : [{ id: "", name: "Tüm Eğitimler" }]);
+        categoriesLoadedRef.current = true;
+      })
+      .catch(() => {
+        setCategoryOptions([{ id: "", name: "Tüm Eğitimler" }]);
+      })
+      .finally(() => {
+        categoriesLoadingRef.current = false;
+      });
+  }, []);
 
   useEffect(() => {
     let active = true;
     setIsLoading(true);
     publicApi
-      .getCalendarCourses({
+      .getEducationCalendar({
         page: currentPage,
         pageSize: itemsPerPage,
         categoryId: selectedCategoryId,
         dateFrom,
         dateTo,
         sort: sortOrder,
-        search: query,
       })
       .then((data) => {
         if (!active) return;
-        const parsedCategories = Array.isArray(data?.categories)
-          ? data.categories.map((item) =>
-              typeof item === "string" ? { id: item === "Tüm Eğitimler" ? "" : item, name: item } : item
-            )
-          : [{ id: "", name: "Tüm Eğitimler" }];
-        setCategoryOptions(parsedCategories.length ? parsedCategories : [{ id: "", name: "Tüm Eğitimler" }]);
-        const items = Array.isArray(data?.educationCalendar) ? data.educationCalendar : [];
+        const items = Array.isArray(data?.courses) ? data.courses : [];
         setCalendarCourses(
           items.map((course, idx) => ({
             ...course,
             id: course.id || `${course.title}-${idx}`,
             image: resolvePublicImageUrl(course.image),
-            attendees: "Sınırsız Kayıt",
-            mode: "Uzaktan Eğitim",
-          }))
+          })),
         );
         setTotalPages(data?.pagination?.totalPages || 1);
       })
@@ -66,11 +97,7 @@ function TrainingCalendarPage() {
     return () => {
       active = false;
     };
-  }, [currentPage, selectedCategoryId, dateFrom, dateTo, sortOrder, query]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedCategoryId, dateFrom, dateTo, sortOrder, query]);
+  }, [currentPage, selectedCategoryId, dateFrom, dateTo, sortOrder, itemsPerPage]);
 
   const handleFavoriteClick = async (course) => {
     if (!isLoggedIn) {
@@ -83,6 +110,7 @@ function TrainingCalendarPage() {
       console.error(error.message || "Favori işlemi başarısız.");
     }
   };
+
   return (
     <>
       <section className="calendar-hero">
@@ -94,28 +122,21 @@ function TrainingCalendarPage() {
               <li>Eğitim Takvimi</li>
             </ul>
             <h1>Eğitim Takvimi</h1>
-            <p>Yaklaşan eğitimleri ve sınıfları bu sayfada filtreleyebilirsiniz.</p>
+            <p>Son eklenen eğitimleri bu sayfada filtreleyebilirsiniz.</p>
           </div>
-          <form
-            className="calendar-search"
-            onSubmit={(event) => {
-              event.preventDefault();
-            }}
-          >
-            <input
-              type="search"
-              placeholder="Eğitim arayın.."
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <i className="fa-solid fa-magnifying-glass" />
-          </form>
         </div>
 
         <div className="calendar-filters">
           <div className="calendar-filter-field">
             <label>Eğitim Ana Kategorisi</label>
-            <select value={selectedCategoryId} onChange={(event) => setSelectedCategoryId(event.target.value)}>
+            <select
+              value={selectedCategoryId}
+              onFocus={loadCategoryOptions}
+              onChange={(event) => {
+                setSelectedCategoryId(event.target.value);
+                setCurrentPage(1);
+              }}
+            >
               {categoryOptions.map((category) => (
                 <option key={category.id || "all"} value={category.id}>
                   {category.name}
@@ -126,7 +147,13 @@ function TrainingCalendarPage() {
 
           <div className="calendar-filter-field">
             <label>Sıralama:</label>
-            <select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}>
+            <select
+              value={sortOrder}
+              onChange={(event) => {
+                setSortOrder(event.target.value);
+                setCurrentPage(1);
+              }}
+            >
               <option value="newest">En Yeni</option>
               <option value="oldest">En Eski</option>
             </select>
@@ -134,12 +161,26 @@ function TrainingCalendarPage() {
 
           <div className="calendar-filter-field">
             <label>Başlangıç Tarihi:</label>
-            <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(event) => {
+                setDateFrom(event.target.value);
+                setCurrentPage(1);
+              }}
+            />
           </div>
 
           <div className="calendar-filter-field">
             <label>Bitiş Tarihi:</label>
-            <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(event) => {
+                setDateTo(event.target.value);
+                setCurrentPage(1);
+              }}
+            />
           </div>
         </div>
       </section>
@@ -192,7 +233,15 @@ function TrainingCalendarPage() {
               </ul>
             </div>
             <div className="calendar-item-side">
-              <div className="calendar-date">{String(course.date || "").slice(0, 2)} MAYIS</div>
+              {(() => {
+                const badge = formatCalendarBadge(course);
+                return (
+                  <div className="calendar-date">
+                    {badge.day}
+                    {badge.month ? ` ${badge.month}` : ""}
+                  </div>
+                );
+              })()}
               <Link
                 to={`/egitim-detay/${makeSlug(course.title)}`}
                 state={{ course }}

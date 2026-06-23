@@ -15,17 +15,15 @@ function UpcomingCourses() {
     let active = true;
     setIsLoading(true);
     publicApi
-      .getCalendarCourses({ page: 1, pageSize: 3, sort: "newest" })
+      .getUpcomingCourses()
       .then((data) => {
         if (!active) return;
-        const items = Array.isArray(data?.educationCalendar) ? data.educationCalendar : [];
+        const items = Array.isArray(data?.courses) ? data.courses : [];
         setLatestCourses(
-          items.slice(0, 3).map((course, idx) => ({
+          items.map((course, idx) => ({
             ...course,
             id: course.id || `${course.title}-${idx}`,
             image: resolvePublicImageUrl(course.image),
-            attendees: "Sınırsız Kayıt",
-            mode: "Uzaktan Eğitim",
           }))
         );
       })

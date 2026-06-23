@@ -16,18 +16,16 @@ function Hero() {
     let active = true;
     setIsLoading(true);
     publicApi
-      .getCourses()
+      .getHeroCourses()
       .then((data) => {
         if (!active) return;
         const items = Array.isArray(data?.courses) ? data.courses : [];
         if (!items.length) return;
         setHeroCourses(
-          items.slice(0, 5).map((course, idx) => ({
+          items.map((course, idx) => ({
             ...course,
             id: course.id || `${course.title}-${idx}`,
             image: resolvePublicImageUrl(course.image),
-            attendees: "Sınırsız Kayıt",
-            mode: "Uzaktan Eğitim",
           }))
         );
       })

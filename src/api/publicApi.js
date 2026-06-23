@@ -17,9 +17,27 @@ async function request(path, options = {}) {
   return data;
 }
 
+const singleFlightCache = new Map();
+
+function singleFlight(key, fetcher) {
+  if (singleFlightCache.has(key)) {
+    return singleFlightCache.get(key);
+  }
+  const promise = fetcher().catch((error) => {
+    singleFlightCache.delete(key);
+    throw error;
+  });
+  singleFlightCache.set(key, promise);
+  return promise;
+}
+
 export const publicApi = {
-  getCourses: () => request("/public/courses"),
-  getEducationsCatalog: ({ page = 1, pageSize = 9, search = "", categories = [], sort = "newest" } = {}) => {
+  getHeroCourses: () => singleFlight("hero-courses", () => request("/public/hero-courses")),
+  getCategories: () => singleFlight("categories", () => request("/public/categories")),
+  getUpcomingCourses: () => singleFlight("upcoming-courses", () => request("/public/upcoming-courses")),
+  getTopRatedCourses: () => singleFlight("top-rated-courses", () => request("/public/top-rated-courses")),
+  getEducationDetail: (slug) => request(`/public/educations/detail/${encodeURIComponent(slug)}`),
+  getAllTrainings: ({ page = 1, pageSize = 9, search = "", categories = [], sort = "newest" } = {}) => {
     const params = new URLSearchParams();
     params.set("page", String(page));
     params.set("pageSize", String(pageSize));
@@ -29,7 +47,20 @@ export const publicApi = {
       const s = String(c || "").trim();
       if (s) params.append("category", s);
     });
-    return request(`/public/educations?${params.toString()}`);
+    const query = params.toString();
+    const cacheKey = `all-trainings:${query}`;
+    return singleFlight(cacheKey, () => request(`/public/all-trainings?${query}`));
+  },
+  getEducationCalendar: (params = {}) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && String(value).length) {
+        searchParams.set(key, String(value));
+      }
+    });
+    const query = searchParams.toString();
+    const cacheKey = `education-calendar:${query}`;
+    return singleFlight(cacheKey, () => request(`/public/education-calendar${query ? `?${query}` : ""}`));
   },
   validateExamPortalToken: ({ portalToken }) =>
     request("/public/exam-portal/validate-token", {
@@ -67,16 +98,6 @@ export const publicApi = {
     }
     return request(`/public/education-reviews?${query}`);
   },
-  getCalendarCourses: (params = {}) => {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && String(value).length) {
-        searchParams.set(key, String(value));
-      }
-    });
-    const query = searchParams.toString();
-    return request(`/public/courses${query ? `?${query}` : ""}`);
-  },
 };
 
 export const resolvePublicImageUrl = (value) => {
@@ -85,3 +106,4 @@ export const resolvePublicImageUrl = (value) => {
   if (value.startsWith("/")) return `${API_ORIGIN}${value}`;
   return `${API_ORIGIN}/${value}`;
 };
+

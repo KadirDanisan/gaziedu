@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { makeSlug } from "../data/homeData";
 import { publicApi, resolvePublicImageUrl } from "../api/publicApi";
 import { userApi } from "../api/userApi";
 import { useAuth } from "../context/AuthContext";
@@ -306,7 +305,7 @@ function TrainingDetailPage() {
   const { slug } = useParams();
   const location = useLocation();
   const stateCourse = location.state?.course;
-  const [apiCourses, setApiCourses] = useState([]);
+  const [apiCourse, setApiCourse] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [ratingLive, setRatingLive] = useState(null);
 
@@ -314,24 +313,21 @@ function TrainingDetailPage() {
     let active = true;
     setIsLoading(true);
     publicApi
-      .getCourses()
+      .getEducationDetail(slug)
       .then((data) => {
         if (!active) return;
-        const items = Array.isArray(data?.courses) ? data.courses : [];
-        setApiCourses(
-          items.map((course, idx) => ({
-            ...course,
-            id: course.id || `${course.title}-${idx}`,
-            sourceType: course.sourceType || "education",
-            image: resolvePublicImageUrl(course.image),
-            attendees: course.attendees || "Sınırsız Kayıt",
-            mode: course.mode || "Uzaktan Eğitim",
-          })),
-        );
+        const course = data?.course;
+        if (!course) return;
+        setApiCourse({
+          ...course,
+          id: course.id,
+          sourceType: course.sourceType || "education",
+          image: resolvePublicImageUrl(course.image),
+        });
       })
       .catch(() => {
         if (!active) return;
-        setApiCourses([]);
+        setApiCourse(null);
       })
       .finally(() => {
         if (!active) return;
@@ -340,11 +336,10 @@ function TrainingDetailPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [slug]);
 
   const fallbackCourse = useMemo(() => stateCourse || null, [stateCourse]);
-  const apiMatchedCourse = apiCourses.find((item) => makeSlug(item.title) === slug);
-  const course = apiMatchedCourse || fallbackCourse;
+  const course = apiCourse || fallbackCourse;
 
   useEffect(() => {
     setRatingLive(null);

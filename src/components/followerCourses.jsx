@@ -14,17 +14,15 @@ function FollowerCourses() {
     let active = true;
     setIsLoading(true);
     publicApi
-      .getEducationsCatalog({ page: 1, pageSize: 3, sort: "most_reviews" })
+      .getTopRatedCourses()
       .then((data) => {
         if (!active) return;
-        const items = Array.isArray(data?.data) ? data.data : [];
+        const items = Array.isArray(data?.courses) ? data.courses : [];
         setTopRatedCourses(
-          items.slice(0, 3).map((course, idx) => ({
+          items.map((course, idx) => ({
             ...course,
             id: course.id || `${course.title}-${idx}`,
             image: resolvePublicImageUrl(course.image),
-            attendees: course.attendees || "Sınırsız Kayıt",
-            mode: course.mode || "Uzaktan Eğitim",
           }))
         );
       })

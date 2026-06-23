@@ -12,8 +12,8 @@ export const categories = [
 ];
 
 export const makeSlug = (value) =>
-  value
-    .toLowerCase()
+  String(value || "")
+    .toLocaleLowerCase("tr-TR")
     .replace(/ğ/g, "g")
     .replace(/ü/g, "u")
     .replace(/ş/g, "s")

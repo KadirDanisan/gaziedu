@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { publicApi, resolvePublicImageUrl } from "../api/publicApi";
 import CourseCardThumb from "../components/CourseCardThumb";
@@ -53,21 +53,50 @@ function AllTrainingsPage() {
   const { isLoggedIn, isFavorite, toggleFavorite } = useAuth();
   const itemsPerPage = 9;
   const navigate = useNavigate();
+  const lastDebouncedSearchRef = useRef("");
 
   useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 350);
+    const t = window.setTimeout(() => {
+      const nextSearch = searchInput.trim();
+      if (lastDebouncedSearchRef.current !== nextSearch) {
+        lastDebouncedSearchRef.current = nextSearch;
+        setDebouncedSearch(nextSearch);
+        setCurrentPage(1);
+      }
+    }, 350);
     return () => window.clearTimeout(t);
   }, [searchInput]);
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearch, selectedCategories, sortBy]);
+    let active = true;
+    publicApi
+      .getCategories()
+      .then((data) => {
+        if (!active) return;
+        if (Array.isArray(data?.categories) && data.categories.length) {
+          const categoryNames = data.categories
+            .map((item) => (typeof item === "string" ? item : item.name))
+            .filter((item) => item && item !== "Tüm Eğitimler");
+          setAvailableCategories((prev) =>
+            prev.length === categoryNames.length && prev.every((v, i) => v === categoryNames[i])
+              ? prev
+              : categoryNames,
+          );
+        }
+      })
+      .catch(() => {
+        if (active) setAvailableCategories([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
     setIsLoading(true);
     publicApi
-      .getEducationsCatalog({
+      .getAllTrainings({
         page: currentPage,
         pageSize: itemsPerPage,
         search: debouncedSearch,
@@ -76,14 +105,12 @@ function AllTrainingsPage() {
       })
       .then((data) => {
         if (!active) return;
-        const rows = Array.isArray(data?.data) ? data.data : [];
+        const rows = Array.isArray(data?.courses) ? data.courses : [];
         setListItems(
           rows.map((course, idx) => ({
             ...course,
             id: course.id || `${course.title}-${idx}`,
             image: resolvePublicImageUrl(course.image),
-            attendees: course.attendees || "Sınırsız Kayıt",
-            mode: course.mode || "Uzaktan Eğitim",
           })),
         );
         if (data?.pagination) {
@@ -103,16 +130,6 @@ function AllTrainingsPage() {
           );
         } else {
           setPagination((prev) => (prev.total === 0 && prev.totalPages === 1 ? prev : defaultPagination));
-        }
-        if (Array.isArray(data?.categories) && data.categories.length) {
-          const categoryNames = data.categories
-            .map((item) => (typeof item === "string" ? item : item.name))
-            .filter((item) => item && item !== "Tüm Eğitimler");
-          setAvailableCategories((prev) =>
-            prev.length === categoryNames.length && prev.every((v, i) => v === categoryNames[i])
-              ? prev
-              : categoryNames,
-          );
         }
       })
       .catch(() => {
@@ -134,7 +151,8 @@ function AllTrainingsPage() {
     const sortParam = String(searchParams.get("sort") || "").toLowerCase();
     const allowed = new Set(["newest", "oldest", "rating", "most_reviews"]);
     if (!allowed.has(sortParam)) return;
-    setSortBy((prev) => (prev === sortParam ? prev : sortParam));
+    setSortBy(sortParam);
+    setCurrentPage(1);
   }, [searchParams]);
 
   useEffect(() => {
@@ -158,6 +176,7 @@ function AllTrainingsPage() {
   const totalCount = pagination.total;
 
   const toggleCategory = (category) => {
+    setCurrentPage(1);
     setSelectedCategories((prev) => {
       const nextCategories = prev.includes(category)
         ? prev.filter((item) => item !== category)
@@ -302,7 +321,10 @@ function AllTrainingsPage() {
             <select
               id="all-trainings-sort"
               value={sortBy}
-              onChange={(event) => setSortBy(event.target.value)}
+              onChange={(event) => {
+                setSortBy(event.target.value);
+                setCurrentPage(1);
+              }}
             >
               <option value="newest">En yeni</option>
               <option value="oldest">En eski</option>

@@ -20,7 +20,7 @@ import AccountSettingsPage from "./pages/AccountSettingsPage";
 import AccountChangePasswordPage from "./pages/AccountChangePasswordPage";
 import AccountLayout from "./components/AccountLayout";
 import { AuthProvider } from "./context/AuthContext";
-import AdminProviders from "./admin/context/AdminProviders";
+import { AdminRouteShell } from "./admin/context/AdminProviders";
 import AdminLayout from "./admin/components/AdminLayout";
 import ProtectedAdminRoute from "./admin/components/ProtectedAdminRoute";
 import ModulePermissionGuard from "./admin/components/ModulePermissionGuard";
@@ -39,11 +39,10 @@ import ActivityLogsPage from "./admin/pages/ActivityLogsPage";
 function App() {
   return (
     <AuthProvider>
-      <AdminProviders>
-        <BrowserRouter>
-          <ScrollToTop />
-          <Routes>
-            <Route path="/" element={<SiteLayout />}>
+      <BrowserRouter>
+        <ScrollToTop />
+        <Routes>
+          <Route path="/" element={<SiteLayout />}>
               <Route index element={<HomePage />} />
               <Route path="egitim-takvimi" element={<TrainingCalendarPage />} />
               <Route path="tum-egitimler" element={<AllTrainingsPage />} />
@@ -66,8 +65,10 @@ function App() {
               </Route>
             </Route>
 
-            <Route path="/sinavportali/:educationCode/:nationalId" element={<ExamPortalLegacyPage />} />
-            <Route path="/sinavportali/:portalToken" element={<ExamPortalPage />} />
+          <Route path="/sinavportali/:educationCode/:nationalId" element={<ExamPortalLegacyPage />} />
+          <Route path="/sinavportali/:portalToken" element={<ExamPortalPage />} />
+
+          <Route element={<AdminRouteShell />}>
             <Route path="/admin/giris" element={<AdminLoginPage />} />
             <Route element={<ProtectedAdminRoute />}>
               <Route element={<AdminLayout />}>
@@ -101,11 +102,11 @@ function App() {
                 <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
               </Route>
             </Route>
+          </Route>
 
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </AdminProviders>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
     </AuthProvider>
   );
 }

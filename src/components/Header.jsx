@@ -18,6 +18,8 @@ function Header() {
   const [isMobileCoursesOpen, setIsMobileCoursesOpen] = useState(false);
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
   const [categoryItems, setCategoryItems] = useState([]);
+  const categoriesLoadingRef = useRef(false);
+  const categoriesLoadedRef = useRef(false);
   const { isLoggedIn, user, logout, favorites, loadFavorites } = useAuth();
   const desktopDropdownRef = useRef(null);
   const favoritesPanelRef = useRef(null);
@@ -100,23 +102,24 @@ function Header() {
     };
   }, [searchQuery, isSearchOpen]);
 
-  useEffect(() => {
-    let active = true;
+  const loadCategories = useCallback(() => {
+    if (categoriesLoadedRef.current || categoriesLoadingRef.current) return;
+    categoriesLoadingRef.current = true;
     publicApi
-      .getCourses()
+      .getCategories()
       .then((data) => {
-        if (!active) return;
         if (Array.isArray(data?.categories) && data.categories.length) {
           const parsed = data.categories.map((item) => (typeof item === "string" ? item : item.name));
           setCategoryItems(parsed.filter(Boolean));
         }
+        categoriesLoadedRef.current = true;
       })
       .catch(() => {
-        if (active) setCategoryItems([]);
+        setCategoryItems([]);
+      })
+      .finally(() => {
+        categoriesLoadingRef.current = false;
       });
-    return () => {
-      active = false;
-    };
   }, []);
 
   useEffect(() => {
@@ -170,7 +173,7 @@ function Header() {
         </Link>
         <nav>
           <div className="dropdown" ref={desktopDropdownRef} onMouseLeave={handleDesktopDropdownMouseLeave}>
-            <button className="dropdown-trigger" type="button">
+            <button className="dropdown-trigger" type="button" onClick={loadCategories}>
               Eğitimler <i className="fa-solid fa-chevron-down" />
             </button>
             <div className="dropdown-menu categories-mega-menu" role="menu" aria-label="Eğitim kategorileri">
@@ -339,7 +342,10 @@ function Header() {
             <button
               className="mobile-dropdown-trigger"
               type="button"
-              onClick={() => setIsMobileCoursesOpen((prev) => !prev)}
+              onClick={() => {
+                loadCategories();
+                setIsMobileCoursesOpen((prev) => !prev);
+              }}
               aria-expanded={isMobileCoursesOpen}
             >
               Eğitimler <i className="fa-solid fa-chevron-down" />
