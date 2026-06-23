@@ -3082,62 +3082,52 @@ app.get("/api/admin/exam-portal/limit-exceeded", auth, checkPermission("examPort
     const searchParam = search ? `%${search}%` : "";
     const period = parseDateRangePeriod(req.query.period);
     const attemptDateFilter = buildIstanbulDateFilterSql("started_at", period);
-    const countSql = `SELECT COUNT(*)::int AS total FROM (
-        SELECT grouped.education_code, grouped.national_id, grouped.start_count, grouped.participant_name
-        FROM (
-          SELECT
-            UPPER(TRIM(ea.education_code)) AS education_code,
-            ea.national_id,
-            COUNT(*)::int AS start_count,
-            (
-              SELECT TRIM(ea2.participant_name)
-              FROM exam_attempts ea2
-              WHERE UPPER(TRIM(ea2.education_code)) = UPPER(TRIM(ea.education_code))
-                AND ea2.national_id = ea.national_id
-                AND ea2.participant_name IS NOT NULL
-                AND TRIM(ea2.participant_name) <> ''
-              ORDER BY ea2.started_at DESC
-              LIMIT 1
-            ) AS participant_name
-          FROM exam_attempts ea
-          WHERE 1=1${attemptDateFilter}
-          GROUP BY UPPER(TRIM(ea.education_code)), ea.national_id
-          HAVING COUNT(*)::int >= $1
-        ) grouped
-        WHERE ($2::text = '' OR LOWER(CONCAT(
-          COALESCE(grouped.education_code,''), ' ',
-          COALESCE(grouped.national_id,''), ' ',
-          COALESCE(grouped.participant_name,''), ' ',
-          grouped.start_count::text
-        )) LIKE $2)
-      ) t`;
-    const listSql = `SELECT education_code, national_id, start_count, participant_name FROM (
+    const groupedSql = `
         SELECT
           UPPER(TRIM(ea.education_code)) AS education_code,
           ea.national_id,
-          COUNT(*)::int AS start_count,
+          COUNT(*)::int AS start_count
+        FROM exam_attempts ea
+        WHERE 1=1${attemptDateFilter}
+        GROUP BY UPPER(TRIM(ea.education_code)), ea.national_id
+        HAVING COUNT(*)::int >= $1`;
+    const withParticipantSql = `
+        SELECT
+          grouped.education_code,
+          grouped.national_id,
+          grouped.start_count,
           (
             SELECT TRIM(ea2.participant_name)
             FROM exam_attempts ea2
-            WHERE UPPER(TRIM(ea2.education_code)) = UPPER(TRIM(ea.education_code))
-              AND ea2.national_id = ea.national_id
+            WHERE UPPER(TRIM(ea2.education_code)) = grouped.education_code
+              AND ea2.national_id = grouped.national_id
               AND ea2.participant_name IS NOT NULL
               AND TRIM(ea2.participant_name) <> ''
             ORDER BY ea2.started_at DESC
             LIMIT 1
           ) AS participant_name
-        FROM exam_attempts ea
-        WHERE 1=1${attemptDateFilter}
-        GROUP BY UPPER(TRIM(ea.education_code)), ea.national_id
-        HAVING COUNT(*)::int >= $1
-      ) grouped
-      WHERE ($2::text = '' OR LOWER(CONCAT(
-        COALESCE(grouped.education_code,''), ' ',
-        COALESCE(grouped.national_id,''), ' ',
-        COALESCE(grouped.participant_name,''), ' ',
-        grouped.start_count::text
-      )) LIKE $2)
-      ORDER BY grouped.education_code ASC, grouped.national_id ASC
+        FROM (${groupedSql}) grouped`;
+    const countSql = `SELECT COUNT(*)::int AS total FROM (
+        SELECT *
+        FROM (${withParticipantSql}) rows_with_name
+        WHERE ($2::text = '' OR LOWER(CONCAT(
+          COALESCE(rows_with_name.education_code,''), ' ',
+          COALESCE(rows_with_name.national_id,''), ' ',
+          COALESCE(rows_with_name.participant_name,''), ' ',
+          rows_with_name.start_count::text
+        )) LIKE $2)
+      ) t`;
+    const listSql = `SELECT education_code, national_id, start_count, participant_name FROM (
+        SELECT *
+        FROM (${withParticipantSql}) rows_with_name
+        WHERE ($2::text = '' OR LOWER(CONCAT(
+          COALESCE(rows_with_name.education_code,''), ' ',
+          COALESCE(rows_with_name.national_id,''), ' ',
+          COALESCE(rows_with_name.participant_name,''), ' ',
+          rows_with_name.start_count::text
+        )) LIKE $2)
+      ) filtered
+      ORDER BY education_code ASC, national_id ASC
       LIMIT $3 OFFSET $4`;
     const [countResult, listResult] = await Promise.all([
       pool.query(countSql, [EXAM_PORTAL_MAX_STARTS, searchParam]),
