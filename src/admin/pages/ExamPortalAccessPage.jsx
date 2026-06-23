@@ -36,6 +36,7 @@ export default function ExamPortalAccessPage() {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState("");
   const [busyLimitKey, setBusyLimitKey] = useState("");
+  const [portalUrlView, setPortalUrlView] = useState(null);
 
   const loadVisits = useCallback(async () => {
     setLoadingVisits(true);
@@ -176,7 +177,19 @@ export default function ExamPortalAccessPage() {
                 ) : (
                   visits.map((row) => (
                     <tr key={row.id}>
-                      <td style={{ maxWidth: 360, wordBreak: "break-all" }}>{row.portalUrl || "-"}</td>
+                      <td>
+                        {row.portalUrl ? (
+                          <button
+                            type="button"
+                            className="btn btn-outline"
+                            onClick={() => setPortalUrlView(row.portalUrl)}
+                          >
+                            URL&apos;ye bak
+                          </button>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
                       <td>{row.participantName || "—"}</td>
                       <td>{row.educationCode || "-"}</td>
                       <td>{row.nationalId || "-"}</td>
@@ -318,6 +331,61 @@ export default function ExamPortalAccessPage() {
           </div>
         ) : null}
       </article>
+
+      {portalUrlView ? (
+        <div
+          className="admin-modal-backdrop"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setPortalUrlView(null);
+          }}
+        >
+          <div
+            className="admin-modal admin-modal--detail"
+            style={{ maxWidth: 640, width: "min(640px, 94vw)" }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="portal-url-modal-title"
+          >
+            <header className="admin-modal__header admin-modal__header--detail">
+              <div className="admin-modal__header-text">
+                <h3 id="portal-url-modal-title" className="admin-modal__title">
+                  Portal URL
+                </h3>
+              </div>
+            </header>
+            <div className="admin-modal__body">
+              <p
+                style={{
+                  margin: 0,
+                  wordBreak: "break-all",
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}
+              >
+                {portalUrlView}
+              </p>
+            </div>
+            <footer className="admin-modal__footer">
+              <div className="admin-modal-actions admin-modal-actions--stretch">
+                <button type="button" className="btn btn-outline" onClick={() => setPortalUrlView(null)}>
+                  Kapat
+                </button>
+                <a
+                  href={portalUrlView}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-primary"
+                  style={{ textAlign: "center", textDecoration: "none" }}
+                >
+                  Yeni sekmede aç
+                </a>
+              </div>
+            </footer>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
