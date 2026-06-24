@@ -20,15 +20,37 @@ async function request(path, options = {}) {
 const singleFlightCache = new Map();
 
 function singleFlight(key, fetcher) {
-  if (singleFlightCache.has(key)) {
-    return singleFlightCache.get(key);
-  }
-  const promise = fetcher().catch((error) => {
+  const now = Date.now();
+  const cached = singleFlightCache.get(key);
+  if (cached) {
+    if (cached.promise) return cached.promise;
+    if (cached.result !== undefined && now - cached.settledAt < 3000) {
+      return Promise.resolve(cached.result);
+    }
     singleFlightCache.delete(key);
-    throw error;
-  });
-  singleFlightCache.set(key, promise);
+  }
+
+  const promise = fetcher()
+    .then((result) => {
+      singleFlightCache.set(key, { result, settledAt: Date.now() });
+      return result;
+    })
+    .catch((error) => {
+      singleFlightCache.delete(key);
+      throw error;
+    });
+
+  singleFlightCache.set(key, { promise });
   return promise;
+}
+
+/** Yorum gönderimi sonrası güncel liste için önbelleği temizler. */
+export function invalidateEducationReviewsCache({ educationId, calendarId } = {}) {
+  const params = new URLSearchParams();
+  if (educationId) params.set("educationId", String(educationId));
+  if (calendarId) params.set("calendarId", String(calendarId));
+  const query = params.toString();
+  if (query) singleFlightCache.delete(`education-reviews:${query}`);
 }
 
 export const publicApi = {
@@ -36,7 +58,10 @@ export const publicApi = {
   getCategories: () => singleFlight("categories", () => request("/public/categories")),
   getUpcomingCourses: () => singleFlight("upcoming-courses", () => request("/public/upcoming-courses")),
   getTopRatedCourses: () => singleFlight("top-rated-courses", () => request("/public/top-rated-courses")),
-  getEducationDetail: (slug) => request(`/public/educations/detail/${encodeURIComponent(slug)}`),
+  getEducationDetail: (slug) => {
+    const key = `education-detail:${encodeURIComponent(String(slug ?? ""))}`;
+    return singleFlight(key, () => request(`/public/educations/detail/${encodeURIComponent(slug)}`));
+  },
   getAllTrainings: ({ page = 1, pageSize = 9, search = "", categories = [], sort = "newest" } = {}) => {
     const params = new URLSearchParams();
     params.set("page", String(page));
@@ -96,7 +121,7 @@ export const publicApi = {
     if (!query) {
       throw new Error("educationId veya calendarId gerekli.");
     }
-    return request(`/public/education-reviews?${query}`);
+    return singleFlight(`education-reviews:${query}`, () => request(`/public/education-reviews?${query}`));
   },
 };
 

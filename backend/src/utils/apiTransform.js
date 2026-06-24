@@ -1,0 +1,71 @@
+const dbToApiMap = {
+  first_name: "firstName",
+  last_name: "lastName",
+  password_hash: "passwordHash",
+  institution_id: "institutionId",
+  role_id: "roleId",
+  category_id: "categoryId",
+  authorized_person: "authorizedPerson",
+  logo_url: "logoUrl",
+  website_url: "websiteUrl",
+  instructor_id: "instructorId",
+  image_url: "imageUrl",
+  education_name: "educationName",
+  instructor_info: "instructorInfo",
+  calendar_date: "calendarDate",
+  full_name: "fullName",
+  is_read: "isRead",
+  question_text: "questionText",
+  option_a: "optionA",
+  option_b: "optionB",
+  option_c: "optionC",
+  option_d: "optionD",
+  correct_answer: "correctAnswer",
+  education_id: "educationId",
+  module_name: "moduleName",
+  can_view: "canView",
+  can_create: "canCreate",
+  can_update: "canUpdate",
+  can_delete: "canDelete",
+  created_at: "createdAt",
+  updated_at: "updatedAt",
+  content_doc_path: "contentDocPath",
+  content_doc_name: "contentDocName",
+  category_code: "categoryCode",
+  category_name: "categoryName",
+  content_html: "contentHtml",
+  topic_doc_path: "topicDocPath",
+  topic_doc_name: "topicDocName",
+  questions_doc_path: "questionsDocPath",
+  questions_doc_name: "questionsDocName",
+  generated_questions: "generatedQuestions",
+  exam_target_difficulty: "examTargetDifficulty",
+  exam_question_count: "examQuestionCount",
+  pool_question_count: "poolQuestionCount",
+  admin_first_name: "adminFirstName",
+  admin_last_name: "adminLastName",
+  admin_email: "adminEmail",
+  portal_url: "portalUrl",
+  education_code: "educationCode",
+  national_id: "nationalId",
+  best_score: "bestScore",
+  best_recorded_at: "bestRecordedAt",
+  last_attempt_at: "lastAttemptAt",
+  last_score: "lastScore",
+  payment_received: "paymentReceived",
+  participant_name: "participantName",
+};
+
+const apiToDbMap = Object.fromEntries(Object.entries(dbToApiMap).map(([k, v]) => [v, k]));
+
+const toApiObject = (row) =>
+  Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [dbToApiMap[key] || key, Buffer.isBuffer(value) ? null : value]),
+  );
+
+const toDbObject = (obj) =>
+  Object.fromEntries(
+    Object.entries(obj).map(([key, value]) => [apiToDbMap[key] || key, value]),
+  );
+
+export { dbToApiMap, apiToDbMap, toApiObject, toDbObject };

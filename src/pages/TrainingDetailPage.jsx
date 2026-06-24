@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { publicApi, resolvePublicImageUrl } from "../api/publicApi";
+import { publicApi, resolvePublicImageUrl, invalidateEducationReviewsCache } from "../api/publicApi";
 import { userApi } from "../api/userApi";
 import { useAuth } from "../context/AuthContext";
 
@@ -143,6 +143,7 @@ function TrainingReviewsSection({ course, onRatingUpdated }) {
         ratingAverage: result.ratingAverage ?? null,
         ratingCount: result.ratingCount ?? 0,
       });
+      invalidateEducationReviewsCache(isCalendar ? { calendarId: targetId } : { educationId: targetId });
       const refreshed = isCalendar
         ? await publicApi.getEducationReviews({ calendarId: targetId })
         : await publicApi.getEducationReviews({ educationId: targetId });
