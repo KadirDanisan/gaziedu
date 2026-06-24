@@ -2501,31 +2501,29 @@ app.post("/api/public/exam-portal/start", async (req, res, next) => {
       return res.status(400).json({ message: "Geçerli sınav bağlantısı (portalToken) gerekli." });
     }
     let educationCode;
-    console.log(educationCode);
+
     let nationalId;
     let participantName = "";
     try {
       const v = verifyExamPortalLink(portalToken);
       educationCode = v.educationCode;
-      console.log(educationCode);
       nationalId = v.nationalId;
       participantName = v.participantName;
     } catch (e) {
       const status = e.statusCode || 401;
       return res.status(status).json({ message: e.message || "Geçersiz bağlantı." });
     }
-    console.log(educationCode);
     const attemptsCheck = await pool.query(
       `SELECT COUNT(*)::int AS c FROM exam_attempts WHERE UPPER(TRIM(education_code)) = $1 AND national_id = $2`,
       [educationCode, nationalId],
     );
-    console.log(educationCode);
+
     if (Number(attemptsCheck.rows[0]?.c || 0) >= EXAM_PORTAL_MAX_STARTS) {
       return res.status(403).json({
         message: `Bu eğitim (${educationCode}) için sınav başlatma hakkınız doldu (en fazla ${EXAM_PORTAL_MAX_STARTS} oturum).`,
       });
     }
-    console.log(educationCode);
+    
     const educationResult = await pool.query(
       `SELECT id, name, code, duration
        FROM educations
@@ -2534,7 +2532,6 @@ app.post("/api/public/exam-portal/start", async (req, res, next) => {
        LIMIT 1`,
       [educationCode],
     );
-    console.log(educationCode);
     const education = educationResult.rows[0];
     if (!education) {
       return res.status(404).json({ message: "Bu eğitim kodu ile eğitim bulunamadı." });
@@ -4311,7 +4308,6 @@ const startServer = async () => {
 
   app.listen(port, () => {
     // eslint-disable-next-line no-console
-    console.log(`API running on http://localhost:${port}`);
   });
   await publishDueEducationCalendarItems();
   setInterval(publishDueEducationCalendarItems, 60 * 1000);

@@ -25,7 +25,6 @@ const startServer = async () => {
 
   app.listen(port, () => {
     // eslint-disable-next-line no-console
-    console.log(`API running on http://localhost:${port}`);
   });
   await publishDueEducationCalendarItems();
   setInterval(publishDueEducationCalendarItems, 60 * 1000);

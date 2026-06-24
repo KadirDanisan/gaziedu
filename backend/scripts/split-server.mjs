@@ -27,7 +27,6 @@ function write(rel, content) {
   const filePath = path.join(SRC, rel);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content.endsWith("\n") ? content : content + "\n");
-  console.log("wrote", rel);
 }
 
 // ─── Infrastructure modules ───────────────────────────────────────────────
@@ -802,7 +801,7 @@ const startServer = async () => {
 
   app.listen(port, () => {
     // eslint-disable-next-line no-console
-    console.log(\`API running on http://localhost:\${port}\`);
+
   });
   await publishDueEducationCalendarItems();
   setInterval(publishDueEducationCalendarItems, 60 * 1000);
@@ -811,5 +810,3 @@ const startServer = async () => {
 startServer();
 `,
 );
-
-console.log("\nSplit complete. Run: node --check src/server.js");
