@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { ADMIN_MODULES, PERMISSION_ACTIONS } from "../modules";
 import { useAdminData } from "../context/AdminDataContext";
 import { useAdminAuth } from "../context/AdminAuthContext";
@@ -11,23 +11,27 @@ const actionLabels = {
 };
 
 export default function RolePermissionPage() {
-  const { roles } = useAdminData();
-  const { permissions } = useAdminAuth();
-  const data = useAdminData();
+  const { roles, loadFormOptions, updatePermission } = useAdminData();
+  const { allPermissions, loadAllPermissions } = useAdminAuth();
+
+  useEffect(() => {
+    loadAllPermissions().catch(() => {});
+    loadFormOptions().catch(() => {});
+  }, [loadAllPermissions, loadFormOptions]);
 
   const grouped = useMemo(
     () =>
       roles.map((role) => ({
         ...role,
-        permissions: permissions.filter((item) => item.roleId === role.id),
+        permissions: allPermissions.filter((item) => item.roleId === role.id),
       })),
-    [roles, permissions],
+    [roles, allPermissions],
   );
 
   const handleToggle = (permissionId, action) => {
-    const permission = permissions.find((item) => item.id === permissionId);
+    const permission = allPermissions.find((item) => item.id === permissionId);
     if (!permission) return;
-    data.updatePermission(permissionId, { [action]: !permission[action] });
+    updatePermission(permissionId, { [action]: !permission[action] }).then(() => loadAllPermissions());
   };
 
   return (
@@ -62,7 +66,11 @@ export default function RolePermissionPage() {
                       {PERMISSION_ACTIONS.map((action) => (
                         <td key={action}>
                           <label className="admin-checkbox">
-                            <input type="checkbox" checked={Boolean(permission[action])} onChange={() => handleToggle(permission.id, action)} />
+                            <input
+                              type="checkbox"
+                              checked={Boolean(permission[action])}
+                              onChange={() => handleToggle(permission.id, action)}
+                            />
                             <span />
                           </label>
                         </td>

@@ -2,6 +2,49 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000
 
 const getToken = () => localStorage.getItem("adminToken");
 
+const adminFlightCache = new Map();
+
+function adminSingleFlight(key, fetcher) {
+  const now = Date.now();
+  const cached = adminFlightCache.get(key);
+  if (cached) {
+    if (cached.promise) return cached.promise;
+    if (cached.result !== undefined && now - cached.settledAt < 5000) {
+      return Promise.resolve(cached.result);
+    }
+    adminFlightCache.delete(key);
+  }
+
+  const promise = fetcher()
+    .then((result) => {
+      adminFlightCache.set(key, { result, settledAt: Date.now() });
+      return result;
+    })
+    .catch((error) => {
+      adminFlightCache.delete(key);
+      throw error;
+    });
+
+  adminFlightCache.set(key, { promise });
+  return promise;
+}
+
+export function invalidateAdminCache(...keys) {
+  keys.forEach((key) => adminFlightCache.delete(key));
+}
+
+export function invalidateAdminCachePrefix(prefix) {
+  for (const key of adminFlightCache.keys()) {
+    if (key.startsWith(prefix)) {
+      adminFlightCache.delete(key);
+    }
+  }
+}
+
+function moduleListKey(moduleName, page, search, readStatus) {
+  return `admin-module:${moduleName}:${page}:${search}:${readStatus}`;
+}
+
 /** 502/503/504 veya yanlış URL: gövde HTML olur; response.json() SyntaxError verir. */
 async function readJsonBody(response) {
   if (response.status === 204) return null;
@@ -42,15 +85,36 @@ async function request(path, options = {}) {
 export const adminApi = {
   login: (email, password) => request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   patchAdminProfile: (payload) => request("/auth/admin/me", { method: "PATCH", body: JSON.stringify(payload) }),
-  getBootstrap: () => request("/admin/bootstrap"),
-  getDashboard: () => request("/admin/dashboard"),
-  getActivityLogs: (page = 1, pageSize = 100) => request(`/admin/activity-logs?page=${page}&pageSize=${pageSize}`),
-  getModule: (moduleName, page = 1, search = "", readStatus = "all") =>
-    request(`/admin/${moduleName}?page=${page}&search=${encodeURIComponent(search)}&readStatus=${encodeURIComponent(readStatus)}`),
-  createItem: (moduleName, payload) => request(`/admin/${moduleName}`, { method: "POST", body: JSON.stringify(payload) }),
-  updateItem: (moduleName, id, payload) => request(`/admin/${moduleName}/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
-  deleteItem: (moduleName, id) => request(`/admin/${moduleName}/${id}`, { method: "DELETE" }),
-  updatePermission: (id, payload) => request(`/admin-role-permissions/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  getMyPermissions: () => adminSingleFlight("admin-my-permissions", () => request("/admin/my-permissions")),
+  getAllPermissions: () => adminSingleFlight("admin-all-permissions", () => request("/admin/permissions")),
+  getFormOptions: () => adminSingleFlight("admin-form-options", () => request("/admin/form-options")),
+  getDashboard: () => adminSingleFlight("admin-dashboard", () => request("/admin/dashboard")),
+  getActivityLogs: (page = 1, pageSize = 100) => {
+    const key = `admin-activity-logs:${page}:${pageSize}`;
+    return adminSingleFlight(key, () => request(`/admin/activity-logs?page=${page}&pageSize=${pageSize}`));
+  },
+  getModule: (moduleName, page = 1, search = "", readStatus = "all") => {
+    const key = moduleListKey(moduleName, page, search, readStatus);
+    return adminSingleFlight(key, () =>
+      request(`/admin/${moduleName}?page=${page}&search=${encodeURIComponent(search)}&readStatus=${encodeURIComponent(readStatus)}`),
+    );
+  },
+  createItem: (moduleName, payload) => {
+    invalidateAdminCachePrefix(`admin-module:${moduleName}:`);
+    return request(`/admin/${moduleName}`, { method: "POST", body: JSON.stringify(payload) });
+  },
+  updateItem: (moduleName, id, payload) => {
+    invalidateAdminCachePrefix(`admin-module:${moduleName}:`);
+    return request(`/admin/${moduleName}/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+  },
+  deleteItem: (moduleName, id) => {
+    invalidateAdminCachePrefix(`admin-module:${moduleName}:`);
+    return request(`/admin/${moduleName}/${id}`, { method: "DELETE" });
+  },
+  updatePermission: (id, payload) => {
+    invalidateAdminCache("admin-all-permissions", "admin-my-permissions");
+    return request(`/admin-role-permissions/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+  },
   uploadInstitutionLogo: (file) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -79,18 +143,29 @@ export const adminApi = {
     params.set("page", String(page));
     if (search) params.set("search", search);
     if (period && period !== "all") params.set("period", period);
-    return request(`/admin/exam-portal/visits?${params.toString()}`);
+    const query = params.toString();
+    const key = `admin-exam-portal-visits:${query}`;
+    return adminSingleFlight(key, () => request(`/admin/exam-portal/visits?${query}`));
   },
-  deleteExamPortalVisit: (id) => request(`/admin/exam-portal/visits/${id}`, { method: "DELETE" }),
+  deleteExamPortalVisit: (id) => {
+    invalidateAdminCachePrefix("admin-exam-portal-visits:");
+    invalidateAdminCachePrefix("admin-exam-portal-limit:");
+    return request(`/admin/exam-portal/visits/${id}`, { method: "DELETE" });
+  },
   getExamPortalLimitExceeded: ({ page = 1, search = "", period = "all" } = {}) => {
     const params = new URLSearchParams();
     params.set("page", String(page));
     if (search) params.set("search", search);
     if (period && period !== "all") params.set("period", period);
-    return request(`/admin/exam-portal/limit-exceeded?${params.toString()}`);
+    const query = params.toString();
+    const key = `admin-exam-portal-limit:${query}`;
+    return adminSingleFlight(key, () => request(`/admin/exam-portal/limit-exceeded?${query}`));
   },
-  deleteExamPortalLimitExceeded: (payload) =>
-    request("/admin/exam-portal/limit-exceeded", { method: "DELETE", body: JSON.stringify(payload) }),
+  deleteExamPortalLimitExceeded: (payload) => {
+    invalidateAdminCachePrefix("admin-exam-portal-visits:");
+    invalidateAdminCachePrefix("admin-exam-portal-limit:");
+    return request("/admin/exam-portal/limit-exceeded", { method: "DELETE", body: JSON.stringify(payload) });
+  },
   getExamPortalTestToken: (educationCode) =>
     request("/admin/exam-portal/test-token", { method: "POST", body: JSON.stringify({ educationCode }) }),
   getExamResults: ({ page = 1, search = "", educationCode = "", nationalId = "", certificateOnly = false, period = "all" } = {}) => {
@@ -101,14 +176,18 @@ export const adminApi = {
     if (nationalId) params.set("nationalId", nationalId);
     if (certificateOnly) params.set("certificateOnly", "1");
     if (period && period !== "all") params.set("period", period);
-    return request(`/admin/exam-results?${params.toString()}`);
+    const query = params.toString();
+    const key = `admin-exam-results:${query}`;
+    return adminSingleFlight(key, () => request(`/admin/exam-results?${query}`));
   },
   getCertificateList: ({ page = 1, search = "", period = "all" } = {}) => {
     const params = new URLSearchParams();
     params.set("page", String(page));
     if (search) params.set("search", search);
     if (period && period !== "all") params.set("period", period);
-    return request(`/admin/certificate-list?${params.toString()}`);
+    const query = params.toString();
+    const key = `admin-certificate-list:${query}`;
+    return adminSingleFlight(key, () => request(`/admin/certificate-list?${query}`));
   },
   generateCertificatePdf: async (id) => {
     const token = getToken();
@@ -132,15 +211,27 @@ export const adminApi = {
     const fileName = match?.[1] || `sertifika_${id}.pdf`;
     return { blob, fileName };
   },
-  deleteExamResult: (id) => request(`/admin/exam-results/${id}`, { method: "DELETE" }),
-  markExamResultPaymentReceived: (id) =>
-    request(`/admin/exam-results/${id}/payment-received`, {
+  deleteExamResult: (id) => {
+    invalidateAdminCachePrefix("admin-exam-results:");
+    return request(`/admin/exam-results/${id}`, { method: "DELETE" });
+  },
+  markExamResultPaymentReceived: (id) => {
+    invalidateAdminCachePrefix("admin-exam-results:");
+    return request(`/admin/exam-results/${id}/payment-received`, {
       method: "PATCH",
       body: JSON.stringify({ paymentReceived: true }),
-    }),
-  getMessagingAdmins: () => request("/admin/messaging/admins"),
-  getMessagingAnnouncements: (page = 1) => request(`/admin/messaging/announcements?page=${page}`),
-  postMessagingAnnouncement: (payload) => request("/admin/messaging/announcements", { method: "POST", body: JSON.stringify(payload) }),
+    });
+  },
+  getMessagingAdmins: () =>
+    adminSingleFlight("admin-messaging-admins", () => request("/admin/messaging/admins")),
+  getMessagingAnnouncements: (page = 1) => {
+    const key = `admin-messaging-announcements:${page}`;
+    return adminSingleFlight(key, () => request(`/admin/messaging/announcements?page=${page}`));
+  },
+  postMessagingAnnouncement: (payload) => {
+    invalidateAdminCachePrefix("admin-messaging-announcements:");
+    return request("/admin/messaging/announcements", { method: "POST", body: JSON.stringify(payload) });
+  },
   getMessagingDmThreads: () => request("/admin/messaging/dm/threads"),
   getMessagingDmMessages: (peerId) => request(`/admin/messaging/dm/peers/${peerId}/messages`),
   postMessagingDmMessage: (peerId, body) =>

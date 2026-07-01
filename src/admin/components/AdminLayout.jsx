@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { ADMIN_MODULES } from "../modules";
 import { useAdminAuth } from "../context/AdminAuthContext";
-import { useAdminData } from "../context/AdminDataContext";
 import { adminApi } from "../api";
 
 function SidebarLink({ item }) {
@@ -16,7 +15,6 @@ function SidebarLink({ item }) {
 
 export default function AdminLayout() {
   const { session, logout, hasPermission, updateAdminSession } = useAdminAuth();
-  const { loadBootstrap } = useAdminData();
   const location = useLocation();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -28,10 +26,6 @@ export default function AdminLayout() {
   const [newPassword2, setNewPassword2] = useState("");
   const [settingsError, setSettingsError] = useState("");
   const [settingsSaving, setSettingsSaving] = useState(false);
-
-  useEffect(() => {
-    loadBootstrap();
-  }, []);
 
   useEffect(() => {
     if (!settingsOpen || !session?.user) return;

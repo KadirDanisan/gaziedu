@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { adminApi } from "../api";
 
 const AdminAuthContext = createContext(null);
@@ -17,7 +17,20 @@ export function AdminAuthProvider({ children }) {
     return raw ? JSON.parse(raw) : null;
   });
   const [permissions, setPermissions] = useState([]);
+  const [allPermissions, setAllPermissions] = useState([]);
   const [isReady, setIsReady] = useState(false);
+
+  const loadMyPermissions = useCallback(async () => {
+    const result = await adminApi.getMyPermissions();
+    setPermissions(result.permissions || []);
+    return result.permissions || [];
+  }, []);
+
+  const loadAllPermissions = useCallback(async () => {
+    const result = await adminApi.getAllPermissions();
+    setAllPermissions(result.permissions || []);
+    return result.permissions || [];
+  }, []);
 
   const loginAdmin = async (email, password) => {
     try {
@@ -25,8 +38,7 @@ export function AdminAuthProvider({ children }) {
       localStorage.setItem("adminToken", result.token);
       localStorage.setItem("adminSession", JSON.stringify({ userType: "admin", user: result.user }));
       setSession({ userType: "admin", user: result.user });
-      const bootstrap = await adminApi.getBootstrap();
-      setPermissions(bootstrap.permissions);
+      await loadMyPermissions();
       return { ok: true };
     } catch (error) {
       return { ok: false, message: error.message };
@@ -36,15 +48,13 @@ export function AdminAuthProvider({ children }) {
   const hydrateSession = async () => {
     if (!localStorage.getItem("adminToken")) return;
     try {
-      const bootstrap = await adminApi.getBootstrap();
-      setPermissions(bootstrap.permissions);
+      await loadMyPermissions();
     } catch {
       localStorage.removeItem("adminToken");
       localStorage.removeItem("adminSession");
       setSession(null);
       setPermissions([]);
     }
-    setIsReady(true);
   };
 
   const logout = () => {
@@ -83,7 +93,10 @@ export function AdminAuthProvider({ children }) {
         hasPermission,
         permissionMap,
         permissions,
+        allPermissions,
         setPermissions,
+        loadMyPermissions,
+        loadAllPermissions,
         hydrateSession,
         isReady,
       }}

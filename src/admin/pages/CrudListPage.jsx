@@ -337,8 +337,8 @@ export default function CrudListPage({ moduleKey }) {
   }, [moduleKey, page, search, readStatusFilter]);
 
   useEffect(() => {
-    data.loadBootstrap().catch(() => {});
-  }, []);
+    data.loadFormOptionsForModule(moduleKey).catch(() => {});
+  }, [moduleKey, data.loadFormOptionsForModule]);
 
   const openExamPortalForRow = async (row) => {
     const educationCode = String(educationsById?.[row.educationId]?.code || "").trim().toUpperCase();
@@ -420,7 +420,7 @@ export default function CrudListPage({ moduleKey }) {
     setEditing(null);
     await loadRows();
     if (moduleKey === "approvedEducations" || moduleKey === "educations") {
-      await data.loadBootstrap().catch(() => {});
+      await data.loadFormOptions({ force: true }).catch(() => {});
     }
   };
 
@@ -616,7 +616,7 @@ export default function CrudListPage({ moduleKey }) {
         await waitMs(150);
       }
 
-      await data.loadBootstrap().catch(() => {});
+      await data.loadFormOptions({ force: true }).catch(() => {});
       await loadRows();
       setExcelImportProgress({ status: "done", current: rows.length, total: rows.length, fileName: file.name });
       window.setTimeout(() => setExcelImportProgress(null), 2800);
@@ -1254,7 +1254,7 @@ export default function CrudListPage({ moduleKey }) {
                       .then(loadRows)
                       .then(() => {
                         if (moduleKey === "approvedEducations" || moduleKey === "educations") {
-                          return data.loadBootstrap().catch(() => {});
+                          return data.loadFormOptions({ force: true }).catch(() => {});
                         }
                         return undefined;
                       });

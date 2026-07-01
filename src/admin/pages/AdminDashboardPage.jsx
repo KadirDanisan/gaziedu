@@ -14,17 +14,46 @@ function StatCard({ label, value, icon }) {
 }
 
 export default function AdminDashboardPage() {
-  const data = useAdminData();
+  const { getDashboard } = useAdminData();
   const [dashboard, setDashboard] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    data.getDashboard().then(setDashboard).catch(() => setDashboard(null));
-  }, []);
+    let active = true;
+    setLoading(true);
+    getDashboard()
+      .then((data) => {
+        if (!active) return;
+        setDashboard(data);
+      })
+      .catch(() => {
+        if (!active) return;
+        setDashboard(null);
+      })
+      .finally(() => {
+        if (!active) return;
+        setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [getDashboard]);
 
   const monthlyUsers = useMemo(() => {
     const total = dashboard?.stats?.normalUsers || 0;
     return [10, 14, 20, 19, 23, 25, 27, total];
   }, [dashboard?.stats?.normalUsers]);
+
+  if (loading && !dashboard) {
+    return (
+      <section className="admin-page">
+        <div className="admin-page-head">
+          <h2>Dashboard</h2>
+          <p>Yükleniyor…</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="admin-page">

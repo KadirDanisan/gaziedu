@@ -7,43 +7,84 @@ import { ensurePermissionRows } from "../../services/permissions.js";
 
 const router = Router();
 
-router.get("/api/admin/bootstrap", auth, async (req, res, next) => {
-  try {
-    await ensurePermissionRows();
-    const [permissions, roles, institutions, educationCategories, approvedEducations, instructors, educationInstructors, educations] =
-      await Promise.all([
-        pool.query(`SELECT * FROM permissions`),
-        pool.query(`SELECT * FROM roles ORDER BY created_at DESC`),
-        pool.query(`SELECT * FROM institutions ORDER BY created_at DESC`),
-        pool.query(`SELECT * FROM education_categories ORDER BY created_at DESC`),
-        pool.query(`SELECT * FROM approved_educations ORDER BY code ASC`),
-        pool.query(
-          `SELECT a.id, a.first_name, a.last_name, a.email
+async function queryFormOptions() {
+  const [roles, institutions, educationCategories, approvedEducations, instructors, educationInstructors, educations] =
+    await Promise.all([
+      pool.query(`SELECT * FROM roles ORDER BY created_at DESC`),
+      pool.query(`SELECT * FROM institutions ORDER BY created_at DESC`),
+      pool.query(`SELECT * FROM education_categories ORDER BY created_at DESC`),
+      pool.query(`SELECT * FROM approved_educations ORDER BY code ASC`),
+      pool.query(
+        `SELECT a.id, a.first_name, a.last_name, a.email
          FROM admin_users a
          INNER JOIN roles r ON r.id = a.role_id
          WHERE r.code = 'egitmen'
          ORDER BY a.first_name ASC, a.last_name ASC`,
-        ),
-        pool.query(
-          `SELECT i.id, i.admin_user_id, a.first_name, a.last_name, a.email
+      ),
+      pool.query(
+        `SELECT i.id, i.admin_user_id, a.first_name, a.last_name, a.email
          FROM instructors i
          INNER JOIN admin_users a ON a.id = i.admin_user_id
          INNER JOIN roles r ON r.id = a.role_id
          WHERE r.code = 'egitmen'
          ORDER BY a.first_name ASC, a.last_name ASC`,
-        ),
-        pool.query(`SELECT id, name, code FROM educations ORDER BY created_at DESC`),
-      ]);
+      ),
+      pool.query(`SELECT id, name, code FROM educations ORDER BY created_at DESC`),
+    ]);
+  return {
+    roles: roles.rows.map(toApiObject),
+    institutions: institutions.rows.map(toApiObject),
+    educationCategories: educationCategories.rows.map(toApiObject),
+    approvedEducations: approvedEducations.rows.map(toApiObject),
+    instructors: instructors.rows.map(toApiObject),
+    educationInstructors: educationInstructors.rows.map(toApiObject),
+    educations: educations.rows.map(toApiObject),
+    pageSize: 20,
+  };
+}
+
+/** Oturumdaki yöneticinin menü yetkileri (hafif). */
+router.get("/api/admin/my-permissions", auth, async (req, res, next) => {
+  try {
+    await ensurePermissionRows();
+    const result = await pool.query(`SELECT * FROM permissions WHERE role_id = $1`, [req.user.roleId]);
+    res.json({ permissions: result.rows.map(toApiObject) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Rol/yetki sayfası için tüm izin kayıtları. */
+router.get("/api/admin/permissions", auth, checkPermission("roles", "can_view"), async (req, res, next) => {
+  try {
+    await ensurePermissionRows();
+    const result = await pool.query(`SELECT * FROM permissions ORDER BY role_id, module_name`);
+    res.json({ permissions: result.rows.map(toApiObject) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Form select alanları için referans veriler (bootstrap'ın ağır kısmı, izinler hariç). */
+router.get("/api/admin/form-options", auth, async (req, res, next) => {
+  try {
+    res.json(await queryFormOptions());
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** @deprecated — form-options + permissions kullanın */
+router.get("/api/admin/bootstrap", auth, async (req, res, next) => {
+  try {
+    await ensurePermissionRows();
+    const [permissions, formOptions] = await Promise.all([
+      pool.query(`SELECT * FROM permissions`),
+      queryFormOptions(),
+    ]);
     res.json({
       permissions: permissions.rows.map(toApiObject),
-      roles: roles.rows.map(toApiObject),
-      institutions: institutions.rows.map(toApiObject),
-      educationCategories: educationCategories.rows.map(toApiObject),
-      approvedEducations: approvedEducations.rows.map(toApiObject),
-      instructors: instructors.rows.map(toApiObject),
-      educationInstructors: educationInstructors.rows.map(toApiObject),
-      educations: educations.rows.map(toApiObject),
-      pageSize: 20,
+      ...formOptions,
     });
   } catch (error) {
     next(error);
