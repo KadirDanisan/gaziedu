@@ -14,6 +14,22 @@ function normalizeExternalUrl(raw) {
   return `https://${s}`;
 }
 
+/** Kurum kurs sayfası + eğitim kodu (örn. https://alfaanit.com/kurs/GZM-01-01-01). */
+function buildInstitutionCourseUrl(rawWebsite, educationCode) {
+  const base = normalizeExternalUrl(rawWebsite);
+  if (!base) return "";
+  const code = String(educationCode ?? "").trim();
+  if (!code) return base;
+  try {
+    const url = new URL(base);
+    const path = url.pathname.replace(/\/+$/, "");
+    url.pathname = `${path}/${code}`;
+    return url.href;
+  } catch {
+    return `${base.replace(/\/+$/, "")}/${code}`;
+  }
+}
+
 const defaultHighlights = [
   "Proje yönetiminin temel kavramları ve süreç grupları",
   "PMI metodolojisine uygun planlama, yürütme ve kontrol teknikleri",
@@ -373,7 +389,7 @@ function TrainingDetailPage() {
     c.institutionLogo && String(c.institutionLogo).trim().length > 0
       ? resolvePublicImageUrl(c.institutionLogo)
       : null;
-  const institutionSiteHref = normalizeExternalUrl(c.institutionWebsite);
+  const institutionSiteHref = buildInstitutionCourseUrl(c.institutionWebsite, c.code);
 
   return (
     <>
