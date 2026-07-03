@@ -414,6 +414,14 @@ export default function CrudListPage({ moduleKey }) {
       payload.examQuestionCount = eq;
       payload.poolQuestionCount = pq;
       payload.examTargetDifficulty = ["easy", "medium", "hard"].includes(d) ? d : "medium";
+      if (
+        payload.generatedQuestions === "" ||
+        payload.generatedQuestions == null ||
+        (typeof payload.generatedQuestions === "object" &&
+          !["easy", "medium", "hard"].some((key) => (payload.generatedQuestions[key] || []).length))
+      ) {
+        delete payload.generatedQuestions;
+      }
     }
     if (editing === "new") await data.createItem(moduleKey, payload);
     else await data.updateItem(moduleKey, editing, payload);
@@ -866,8 +874,8 @@ export default function CrudListPage({ moduleKey }) {
                         onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
                       />
                       <small style={{ opacity: 0.85 }}>
-                        Word dosyasından AI ile üretilecek veya sınıflandırılacak toplam havuz soru sayısı. Konu veya hazır soru
-                        dosyasını yüklemeden önce bu değeri ayarlayın.
+                        Word dosyasından okunacak veya AI ile üretilecek toplam havuz soru sayısı. Dosyayı yüklemeden
+                        önce bu değeri ayarlayın.
                       </small>
                     </div>
                   ) : isExamQuestionsModule && field === "topicDocPath" ? (
@@ -889,13 +897,21 @@ export default function CrudListPage({ moduleKey }) {
                         disabled={Boolean(examDocUploading)}
                       />
                       <input value={form[field] ?? ""} readOnly placeholder="Hazır sorular dosya yolu (.docx)" />
+                      <small style={{ opacity: 0.85 }}>
+                        Sorular Word dosyasından doğrudan okunur (AI kullanılmaz). Her soru numaralı; seçenekler A–E
+                        satırlarında olmalıdır.
+                      </small>
                     </div>
                   ) : isExamQuestionsModule && field === "generatedQuestions" ? (
                     <>
                       {examDocUploading ? (
                         <div className="exam-ai-loading">
-                          <strong>{examDocUploading === "generate" ? "Sorular oluşturuluyor..." : "Sorular ayrıştırılıyor..."}</strong>
-                          <span>Word dosyası okunuyor ve yapay zeka sonucu hazırlanıyor. Lütfen bu pencereyi kapatmayın.</span>
+                          <strong>{examDocUploading === "generate" ? "Sorular oluşturuluyor..." : "Sorular okunuyor..."}</strong>
+                          <span>
+                            {examDocUploading === "generate"
+                              ? "Word dosyası okunuyor ve yapay zeka sonucu hazırlanıyor. Lütfen bu pencereyi kapatmayın."
+                              : "Word dosyası okunuyor ve sorular ayrıştırılıyor. Lütfen bu pencereyi kapatmayın."}
+                          </span>
                         </div>
                       ) : null}
                       {renderExamQuestionPreview(form.generatedQuestions, 20)}

@@ -1,5 +1,20 @@
 import pool from "../db/pool.js";
 
+function serializeErrorPayload(body) {
+  if (!body || typeof body !== "object") return null;
+  try {
+    const safe = {};
+    for (const [key, value] of Object.entries(body)) {
+      if (value instanceof Buffer) continue;
+      if (typeof value === "object" && value !== null) safe[key] = "[skipped]";
+      else safe[key] = value;
+    }
+    return safe;
+  } catch {
+    return null;
+  }
+}
+
 export default async function errorHandler(error, req, res, next) {
   try {
     await pool.query(
@@ -11,7 +26,7 @@ export default async function errorHandler(error, req, res, next) {
         req.method,
         error.message || "Unknown error",
         error.stack || null,
-        req.body ? JSON.stringify(req.body) : null,
+        serializeErrorPayload(req.body),
       ],
     );
   } catch {

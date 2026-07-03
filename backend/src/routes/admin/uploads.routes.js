@@ -3,7 +3,7 @@ import path from "path";
 import { auth } from "../../middleware/auth.js";
 import { upload, uploadDoc } from "../../middleware/upload.js";
 import { extractDocxText } from "../../services/education/content.js";
-import { buildExamQuestionsWithAi } from "../../services/exam/ai.js";
+import { buildExamQuestionsWithAi, fallbackQuestionsFromText } from "../../services/exam/ai.js";
 
 const router = Router();
 
@@ -62,7 +62,13 @@ router.post("/api/admin/uploads/exam-doc", auth, uploadDoc.single("file"), async
     const poolQuestionCount = Math.min(300, Math.max(5, parseInt(req.body?.poolQuestionCount ?? "60", 10) || 60));
     const docPath = `/uploads/${req.file.filename}`;
     const text = await extractDocxText(docPath);
-    const questions = await buildExamQuestionsWithAi({ text, mode, targetDifficulty, poolQuestionCount });
+    if (!String(text || "").trim()) {
+      return res.status(400).json({ message: "Word dosyasından metin okunamadı. Dosyanın geçerli bir .docx olduğundan emin olun." });
+    }
+    const questions =
+      mode === "classify"
+        ? fallbackQuestionsFromText(text, mode, targetDifficulty, poolQuestionCount)
+        : await buildExamQuestionsWithAi({ text, mode, targetDifficulty, poolQuestionCount });
     return res.status(201).json({
       fileName: req.file.originalname,
       path: docPath,

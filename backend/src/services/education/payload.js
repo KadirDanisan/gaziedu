@@ -41,8 +41,24 @@ const prepareEducationPayload = (payload) => {
 const prepareExamQuestionPayload = (payload) => {
   if (typeof payload.topic_doc_path === "string") payload.topic_doc_path = normalizeUploadPath(payload.topic_doc_path);
   if (typeof payload.questions_doc_path === "string") payload.questions_doc_path = normalizeUploadPath(payload.questions_doc_path);
-  if (payload.generated_questions && typeof payload.generated_questions === "object") {
-    payload.generated_questions = JSON.stringify(payload.generated_questions);
+  if (payload.generated_questions !== undefined) {
+    const gq = payload.generated_questions;
+    if (gq === null || gq === "") {
+      payload.generated_questions = null;
+    } else if (typeof gq === "string") {
+      const trimmed = gq.trim();
+      if (!trimmed) {
+        payload.generated_questions = null;
+      } else {
+        try {
+          payload.generated_questions = JSON.parse(trimmed);
+        } catch {
+          throw new Error("Hazırlanan sorular geçerli JSON formatında değil.");
+        }
+      }
+    } else if (typeof gq === "object") {
+      payload.generated_questions = gq;
+    }
   }
   if (payload.exam_target_difficulty !== undefined) {
     const d = String(payload.exam_target_difficulty || "medium").toLowerCase();

@@ -4,12 +4,12 @@ import { normalizeQuestions } from "./engine.js";
 
 const parseQuestionsFromText = (text) => {
   const chunks = text
-    .split(/\n(?=\s*(?:\d+[\).:-]|Soru\s+\d+))/i)
+    .split(/\n(?=\s*(?:\d+[\).:.\-]|Soru\s+\d+))/i)
     .map((chunk) => chunk.trim())
     .filter(Boolean);
   return chunks.map((chunk, index) => {
     const lines = chunk.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    const questionLine = lines[0]?.replace(/^(?:Soru\s*)?\d+[\).:-]?\s*/i, "") || `Soru ${index + 1}`;
+    const questionLine = lines[0]?.replace(/^(?:Soru\s*)?\d+[\).:.\-]?\s*/i, "") || `Soru ${index + 1}`;
     const options = lines
       .slice(1)
       .filter((line) => /^[A-E][\).:-]\s*/i.test(line))
@@ -32,7 +32,7 @@ const fallbackQuestionsFromText = (text, mode, targetDifficulty = "medium", pool
   if (mode === "classify") {
     const parsedQuestions = parseQuestionsFromText(text);
     const src =
-      parsedQuestions.length >= 3
+      parsedQuestions.length >= 1
         ? parsedQuestions
         : text
             .split(/\r?\n/)
