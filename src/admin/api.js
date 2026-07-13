@@ -125,6 +125,10 @@ export const adminApi = {
     formData.append("file", file);
     return request("/admin/uploads/education-image", { method: "POST", body: formData });
   },
+  getEducationModules: (educationId) => {
+    const key = `admin-education-modules:${educationId}`;
+    return adminSingleFlight(key, () => request(`/admin/education-modules?educationId=${encodeURIComponent(educationId)}`));
+  },
   uploadEducationContentDoc: (file) => {
     const formData = new FormData();
     formData.append("file", file);

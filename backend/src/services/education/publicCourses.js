@@ -1,6 +1,7 @@
 import pool from "../../db/pool.js";
 import { escapeIlikePattern } from "../../utils/sqlHelpers.js";
 import { sqlTitleSlugTrimmed } from "../../utils/slug.js";
+import { loadEducationModules, normalizeTopicHeadings } from "./modules.js";
 
 const formatRatingAggregateFields = (row) => {
   const ratingCount = Number(row.rating_count ?? 0) || 0;
@@ -46,8 +47,11 @@ const formatPublicCourse = (row) => ({
   attendees: row.attendees || "Kontenjan Sınırı Yoktur ",
   image: row.image_url || "https://istanbulinstitute.com/thumb.php?src=site/images/no_image.jpg&size=526x282",
   description: row.description || "",
+  content: row.content || "",
   contentDocPath: row.content_doc_path || "",
-  contentHtml: row.content_html || "",
+  topicHeadings: normalizeTopicHeadings(row.topic_headings),
+  modules: Array.isArray(row.modules) ? row.modules : [],
+  contentHtml: "",
   code: row.code || "",
   sourceType: row.source_type || "education",
   institutionId: row.institution_id || null,
@@ -66,11 +70,11 @@ const loadPublicCategoryOptions = async () => {
   ];
 };
 
-const EDUCATION_DETAIL_SELECT = `e.id, e.name, e.description, e.image_url, e.code, e.duration, e.content_doc_path, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
+const EDUCATION_DETAIL_SELECT = `e.id, e.name, e.description, e.content, e.image_url, e.code, e.duration, e.topic_headings, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
           ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email,
           NULL::text AS instructor_info, NULL::timestamptz AS calendar_date`;
 
-const CALENDAR_DETAIL_SELECT = `ec.id, ec.education_name, ec.description, ec.image_url, ec.code, ec.duration, ec.content_doc_path, ec.calendar_date, ec.category_id, ec.institution_id, ec.instructor_id, ec.instructor_info, ec.rating_average, ec.rating_count, c.category_name, 'calendar'::text AS source_type, inst.name AS institution_name, inst.logo_url AS institution_logo_url, inst.website_url AS institution_website_url,
+const CALENDAR_DETAIL_SELECT = `ec.id, ec.education_name, ec.description, ec.content, ec.image_url, ec.code, ec.duration, ec.topic_headings, ec.content_doc_path, ec.calendar_date, ec.category_id, ec.institution_id, ec.instructor_id, ec.instructor_info, ec.rating_average, ec.rating_count, c.category_name, 'calendar'::text AS source_type, inst.name AS institution_name, inst.logo_url AS institution_logo_url, inst.website_url AS institution_website_url,
                      ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email`;
 
 const buildEducationCalendarQuery = (query) => {

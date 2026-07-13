@@ -25,6 +25,33 @@ const isValidEducationCode = (value) => {
   return EDUCATION_CODE_RE.test(code);
 };
 
+const normalizeJsonbStringArray = (value) => {
+  if (value === null || value === undefined) return [];
+  if (value === "") return [];
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item) => String(item ?? "").trim()).filter(Boolean);
+        }
+      } catch {
+        /* satır satır madde olarak oku */
+      }
+    }
+    return trimmed
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^\*\s*/, "").trim())
+      .filter(Boolean);
+  }
+  return [];
+};
+
 const prepareEducationPayload = (payload) => {
   if (typeof payload.content_doc_path === "string") {
     payload.content_doc_path = normalizeUploadPath(payload.content_doc_path);
@@ -32,6 +59,11 @@ const prepareEducationPayload = (payload) => {
   delete payload.content_doc;
   delete payload.content_blocks;
   delete payload.content_html;
+  delete payload.modules;
+
+  if (Object.hasOwn(payload, "topic_headings")) {
+    payload.topic_headings = normalizeJsonbStringArray(payload.topic_headings);
+  }
 
   if (Object.hasOwn(payload, "code")) {
     payload.code = normalizeEducationCodeValue(payload.code);

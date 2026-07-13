@@ -38,11 +38,26 @@ const defaultHighlights = [
 
 const sectionTabs = [
   { id: "genel-bilgi", label: "Genel Bilgi" },
-  { id: "egitim-icerigi", label: "Egitim Icerigi" },
-  { id: "egitmen", label: "Egitmen" },
-  { id: "kayit-bilgileri", label: "Kayit Bilgileri" },
+  { id: "egitim-icerigi", label: "Eğitim İçeriği" },
+  { id: "egitmen", label: "Eğitmen" },
+  { id: "kayit-bilgileri", label: "Kayıt Bilgileri" },
   { id: "yorumlar", label: "Yorumlar" },
 ];
+
+function buildVisibleSectionTabs(course) {
+  if (!course) return sectionTabs;
+  return [
+    { id: "genel-bilgi", label: "Genel Bilgi" },
+    { id: "egitim-icerigi", label: "Eğitim İçeriği" },
+    ...(Array.isArray(course.topicHeadings) && course.topicHeadings.length
+      ? [{ id: "konu-basliklari", label: "Konu Başlıkları" }]
+      : []),
+    ...(Array.isArray(course.modules) && course.modules.length ? [{ id: "moduller", label: "Modüller" }] : []),
+    { id: "egitmen", label: "Eğitmen" },
+    { id: "kayit-bilgileri", label: "Kayıt Bilgileri" },
+    { id: "yorumlar", label: "Yorumlar" },
+  ];
+}
 
 function getSiteHeaderScrollOffsetPx() {
   const raw = getComputedStyle(document.documentElement).getPropertyValue("--site-header-scroll-offset").trim();
@@ -173,7 +188,7 @@ function TrainingReviewsSection({ course, onRatingUpdated }) {
 
   return (
     <>
-      <h3>Katılımcı yorumları</h3>
+      <h3>Katılımcı Yorumları</h3>
       {!canSync && (
         <p className="training-review-unavailable">
           Bu eğitim kaydı için değerlendirme listesi şu an kullanılamıyor. Lütfen listeden sayfayı yeniden açın.
@@ -362,18 +377,19 @@ function TrainingDetailPage() {
     setRatingLive(null);
   }, [course?.id]);
 
-  useEffect(() => {
-    if (!course?.id) return;
-    const hash = (window.location.hash || "").replace(/^#/, "").trim();
-    if (!hash || !sectionTabs.some((t) => t.id === hash)) return;
-    const timer = window.setTimeout(() => scrollTrainingDetailSectionIntoView(hash), 120);
-    return () => window.clearTimeout(timer);
-  }, [course?.id, slug]);
-
   const displayCourse = useMemo(() => {
     if (!course) return null;
     return ratingLive ? { ...course, ...ratingLive } : course;
   }, [course, ratingLive]);
+
+  useEffect(() => {
+    if (!course?.id) return;
+    const hash = (window.location.hash || "").replace(/^#/, "").trim();
+    const tabs = buildVisibleSectionTabs(displayCourse || course);
+    if (!hash || !tabs.some((t) => t.id === hash)) return;
+    const timer = window.setTimeout(() => scrollTrainingDetailSectionIntoView(hash), 120);
+    return () => window.clearTimeout(timer);
+  }, [course?.id, slug, course, displayCourse]);
 
   if (isLoading && !course) {
     return <section className="section"><h2>Yükleniyor...</h2></section>;
@@ -384,6 +400,7 @@ function TrainingDetailPage() {
   }
 
   const c = displayCourse || course;
+  const visibleSectionTabs = buildVisibleSectionTabs(c);
 
   const institutionLogoSrc =
     c.institutionLogo && String(c.institutionLogo).trim().length > 0
@@ -424,11 +441,8 @@ function TrainingDetailPage() {
             )}
           </div>
           <p className="training-detail-description">
-            Gazi Universitesi surekli egitim vizyonu ile hazirlanan bu programda teorik altyapi,
-            uygulamali icerik ve guncel sektor deneyimi birlikte sunulur.
-          </p>
-          <p className="training-detail-linkline">
-            ATP Onay linki: <strong>Authorized Training Partner - Credly</strong>
+            Gazi Üniversitesi Sürekli Eğitim Vizyonu ile hazirlanan bu programda teorik altyapi,
+            uygulamali içerik ve güncel sektör deneyimi birlikte sunulur.
           </p>
           <ul className="rbt-meta training-detail-meta">
             <li>
@@ -448,8 +462,7 @@ function TrainingDetailPage() {
             <strong>Eğitim Kodu:</strong> {c.code || "Belirtilmedi"}
           </p>
           <div className="training-detail-badges">
-            <div className="training-badge">PMI</div>
-            <div className="training-badge">ATP</div>
+            <div className="training-badge">GUZEM</div>
           </div>
         </div>
       </section>
@@ -461,7 +474,7 @@ function TrainingDetailPage() {
           </div>
 
           <nav className="training-detail-tabs" aria-label="Eğitim bölümleri">
-            {sectionTabs.map((tab) => (
+            {visibleSectionTabs.map((tab) => (
               <a
                 key={tab.id}
                 href={`#${tab.id}`}
@@ -477,8 +490,8 @@ function TrainingDetailPage() {
           </nav>
 
           <div id="genel-bilgi" className="training-detail-box rbt-shadow-box">
-            <h3>Egitimin Amaci ve Katilim Sartlari</h3>
-            <div className="training-detail-inline-title">Egitimin Amaci</div>
+            <h3>Eğitimin Amacı ve Katılım Şartları</h3>
+            <div className="training-detail-inline-title">Eğitimin Amacı</div>
             <p>
               {c.description || "Bu eğitim için açıklama henüz eklenmedi."}
             </p>
@@ -490,15 +503,46 @@ function TrainingDetailPage() {
           </div>
 
           <div id="egitim-icerigi" className="training-detail-box rbt-shadow-box">
-            <h3>Egitim Icerigi</h3>
-            {c.contentHtml ? (
-              <div dangerouslySetInnerHTML={{ __html: c.contentHtml }} />
+            <h3>Eğitim İçeriği</h3>
+            {c.content ? (
+              <div className="training-detail-plain-content">{c.content}</div>
             ) : (
-              <p>
-                Eğitim içeriği henüz eklenmedi.
-              </p>
+              <p>Eğitim içeriği henüz eklenmedi.</p>
             )}
           </div>
+
+          {Array.isArray(c.topicHeadings) && c.topicHeadings.length ? (
+            <div id="konu-basliklari" className="training-detail-box rbt-shadow-box">
+              <h3>Konu Başlıkları</h3>
+              <ul className="training-detail-bullets">
+                {c.topicHeadings.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {Array.isArray(c.modules) && c.modules.length ? (
+            <div id="moduller" className="training-detail-modules-stack">
+              {c.modules.map((moduleRow, index) => (
+                <article
+                  key={moduleRow.id || `module-${index}`}
+                  className="training-detail-box rbt-shadow-box training-detail-module-card"
+                >
+                  <h3>{moduleRow.title || `Modül ${index + 1}`}</h3>
+                  {Array.isArray(moduleRow.items) && moduleRow.items.length ? (
+                    <ul className="training-detail-bullets">
+                      {moduleRow.items.map((item) => (
+                        <li key={`${moduleRow.id || index}-${item}`}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="training-detail-empty-note">Bu modülde madde yok.</p>
+                  )}
+                </article>
+              ))}
+            </div>
+          ) : null}
 
           <div id="egitmen" className="training-detail-box rbt-shadow-box">
             <h3>Eğitmen</h3>
@@ -506,7 +550,7 @@ function TrainingDetailPage() {
           </div>
 
           <div id="kayit-bilgileri" className="training-detail-box rbt-shadow-box">
-            <h3>Kayit Bilgileri</h3>
+            <h3>Kayıt Bilgileri</h3>
             <p>
               Anlaşmalı olduğumuz kurumlar içerisinde eğitimlere ulaşıp sertifika için gerekli materyallerin tamamladıktan sonra Gazi Üniversitesi tarafından sertifika alabilirsiniz.
             </p>
@@ -549,11 +593,11 @@ function TrainingDetailPage() {
           ) : null}
           <ul className="training-detail-side-list">
             <li>
-              <span>Egitim Tarihi</span>
+              <span>Eğitim Tarihi</span>
               <strong>{c.date}</strong>
             </li>
             <li>
-              <span>Egitim Suresi</span>
+              <span>Eğitim Süresi</span>
               <strong>{c.duration}</strong>
             </li>
             <li>
@@ -561,7 +605,7 @@ function TrainingDetailPage() {
               <strong>{c.attendees}</strong>
             </li>
             <li>
-              <span>Egitim Turu</span>
+              <span>Eğitim Türü</span>
               <strong>{c.mode}</strong>
             </li>
           </ul>
@@ -571,8 +615,8 @@ function TrainingDetailPage() {
             <i className="fa-brands fa-instagram" />
           </div>
           <div className="training-detail-contact">
-            <p>Egitimle ilgili detaylar icin</p>
-            <a href="tel:+902122832402">0 212 283 24 02</a>
+            <p>Eğitimle ilgili detaylar için</p>
+            <a href="tel:+903122028201">0 312 202 82 01</a>
           </div>
         </aside>
       </section>

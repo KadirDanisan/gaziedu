@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAdminAuth } from "../context/AdminAuthContext";
 import { useAdminData } from "../context/AdminDataContext";
 import { adminApi } from "../api";
+import { BulletListEditor, EducationModulesEditor, renderBulletPreview } from "../components/EducationContentFields";
 import { normalizeEducationCode, parseEducationCode } from "../utils/educationCode";
 import { lookupCodeMatches, normalizeLookupCode, parseApprovedEducationExcelBuffer } from "../utils/parseApprovedEducationExcel";
 
@@ -51,7 +52,7 @@ const moduleConfig = {
   },
   educations: {
     title: "Eğitim Listesi",
-    fields: ["code", "name", "categoryId", "institutionId", "instructorId", "description", "imageUrl", "duration", "contentDocPath"],
+    fields: ["code", "name", "categoryId", "institutionId", "instructorId", "description", "content", "topicHeadings", "imageUrl", "duration"],
     labels: {
       code: "Eğitim Kodu (onaylı listeden)",
       name: "Eğitim Adı",
@@ -59,9 +60,10 @@ const moduleConfig = {
       institutionId: "Kurum",
       instructorId: "Eğitmen",
       description: "Açıklama",
+      content: "Eğitim İçeriği",
+      topicHeadings: "Konu Başlıkları",
       imageUrl: "Görsel URL",
       duration: "Eğitim Saati",
-      contentDocPath: "İçerik Dosyası",
     },
   },
   instructors: {
@@ -71,7 +73,7 @@ const moduleConfig = {
   },
   educationCalendar: {
     title: "Eğitim Takvimi Listesi",
-    fields: ["educationName", "categoryId", "institutionId", "instructorId", "description", "imageUrl", "code", "duration", "contentDocPath", "calendarDate"],
+    fields: ["educationName", "categoryId", "institutionId", "instructorId", "description", "content", "topicHeadings", "imageUrl", "code", "duration", "calendarDate"],
     labels: {
       educationName: "Eğitim Adı",
       categoryId: "Eğitim Kategorisi",
@@ -79,9 +81,10 @@ const moduleConfig = {
       instructorId: "Eğitmen",
       imageUrl: "Görsel URL",
       description: "Açıklama",
+      content: "Eğitim İçeriği",
+      topicHeadings: "Konu Başlıkları",
       code: "Eğitim Kodu",
       duration: "Eğitim Saati",
-      contentDocPath: "İçerik Dosyası",
       calendarDate: "Yayın Tarihi/Saati",
     },
   },
@@ -176,6 +179,15 @@ const renderTableCellValue = (field, value, maps = {}) => {
     return instructor.fullName || `${instructor.firstName || ""} ${instructor.lastName || ""}`.trim() || value || "-";
   }
   if (field === "educationId") return maps.educationsById?.[value]?.name || value || "-";
+  if (field === "content") {
+    const text = String(value || "").trim();
+    if (!text) return "-";
+    return text.length > 80 ? `${text.slice(0, 80)}…` : text;
+  }
+  if (field === "topicHeadings") {
+    const count = Array.isArray(value) ? value.length : 0;
+    return count ? `${count} madde` : "-";
+  }
   if (field === "examTargetDifficulty") {
     const map = { easy: "Kolay", medium: "Orta", hard: "Zor" };
     return map[value] || value || "-";
@@ -273,11 +285,11 @@ export default function CrudListPage({ moduleKey }) {
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [detailModules, setDetailModules] = useState([]);
   const [deleting, setDeleting] = useState(null);
   const [form, setForm] = useState({});
   const [logoUploading, setLogoUploading] = useState(false);
   const [educationImageUploading, setEducationImageUploading] = useState(false);
-  const [educationDocUploading, setEducationDocUploading] = useState(false);
   const [examDocUploading, setExamDocUploading] = useState("");
   const [excelImportProgress, setExcelImportProgress] = useState(null);
   const [excelImportConflict, setExcelImportConflict] = useState(null);
@@ -356,11 +368,29 @@ export default function CrudListPage({ moduleKey }) {
     }
   };
 
+  const openDetail = async (row) => {
+    setDetail(row);
+    if (isEducationsModule && row?.id) {
+      try {
+        const res = await adminApi.getEducationModules(row.id);
+        setDetailModules(res.data || []);
+      } catch {
+        setDetailModules([]);
+      }
+    } else {
+      setDetailModules([]);
+    }
+  };
+
+  const closeDetail = () => {
+    setDetail(null);
+    setDetailModules([]);
+  };
+
   const openCreate = () => {
     setEditing("new");
     setLogoUploading(false);
     setEducationImageUploading(false);
-    setEducationDocUploading(false);
     setExamDocUploading("");
     const initialForm = formFields.reduce((acc, key) => ({ ...acc, [key]: "" }), {});
     if (isContactFormsModule) {
@@ -368,6 +398,11 @@ export default function CrudListPage({ moduleKey }) {
     }
     if (isEducationsModule) {
       initialForm._approvedEducationId = "";
+      initialForm.topicHeadings = [];
+      initialForm.modules = [];
+    }
+    if (isEducationCalendarModule) {
+      initialForm.topicHeadings = [];
     }
     if (isExamQuestionsModule) {
       initialForm.examTargetDifficulty = "medium";
@@ -377,19 +412,29 @@ export default function CrudListPage({ moduleKey }) {
     setForm(initialForm);
   };
 
-  const openEdit = (row) => {
+  const openEdit = async (row) => {
     setEditing(row.id);
     setLogoUploading(false);
     setEducationImageUploading(false);
-    setEducationDocUploading(false);
     setExamDocUploading("");
     const initial = config.fields.reduce((acc, key) => ({ ...acc, [key]: row[key] ?? "" }), {});
     if (isUserPasswordModule) initial.password = "";
-    if (moduleKey === "educations") {
+    if (isEducationsModule) {
       const match = (data.approvedEducations || []).find(
         (a) => String(a.code || "").trim().toUpperCase() === String(row.code || "").trim().toUpperCase(),
       );
       initial._approvedEducationId = match?.id || "";
+      initial.topicHeadings = Array.isArray(row.topicHeadings) ? row.topicHeadings : [];
+      initial.modules = [];
+      try {
+        const res = await adminApi.getEducationModules(row.id);
+        initial.modules = res.data || [];
+      } catch {
+        initial.modules = [];
+      }
+    }
+    if (isEducationCalendarModule) {
+      initial.topicHeadings = Array.isArray(row.topicHeadings) ? row.topicHeadings : [];
     }
     setForm(initial);
   };
@@ -401,6 +446,15 @@ export default function CrudListPage({ moduleKey }) {
       delete payload.password;
     }
     delete payload._approvedEducationId;
+    if (isEducationsModule) {
+      payload.modules = Array.isArray(form.modules) ? form.modules : [];
+      payload.topicHeadings = Array.isArray(form.topicHeadings) ? form.topicHeadings : [];
+    } else {
+      delete payload.modules;
+    }
+    if (isEducationCalendarModule) {
+      payload.topicHeadings = Array.isArray(form.topicHeadings) ? form.topicHeadings : [];
+    }
     if (isContactFormsModule) {
       delete payload.createdAt;
       if (editing === "new") {
@@ -470,24 +524,6 @@ export default function CrudListPage({ moduleKey }) {
       setError(err.message);
     } finally {
       setEducationImageUploading(false);
-    }
-  };
-
-  const handleEducationContentDocUpload = async (file) => {
-    if (!file) return;
-    setEducationDocUploading(true);
-    setError("");
-    try {
-      const result = await data.uploadEducationContentDoc(file);
-      setForm((prev) => ({
-        ...prev,
-        contentDocPath: result.path || "",
-        contentDocName: result.fileName || file.name,
-      }));
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setEducationDocUploading(false);
     }
   };
 
@@ -725,7 +761,7 @@ export default function CrudListPage({ moduleKey }) {
                   ))}
                   <td>
                     <div className="admin-actions">
-                      <button type="button" onClick={() => setDetail(row)}>
+                      <button type="button" onClick={() => openDetail(row)}>
                         Detay
                       </button>
                       {hasPermission(moduleKey, "canUpdate") && (
@@ -782,7 +818,7 @@ export default function CrudListPage({ moduleKey }) {
           className="admin-modal-backdrop"
           role="presentation"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget && !examDocUploading && !logoUploading && !educationImageUploading && !educationDocUploading) setEditing(null);
+            if (e.target === e.currentTarget && !examDocUploading && !logoUploading && !educationImageUploading) setEditing(null);
           }}
         >
           <form
@@ -803,7 +839,7 @@ export default function CrudListPage({ moduleKey }) {
                 className="admin-modal__close"
                 onClick={() => setEditing(null)}
                 disabled={
-                  Boolean(examDocUploading) || logoUploading || educationImageUploading || educationDocUploading
+                  Boolean(examDocUploading) || logoUploading || educationImageUploading
                 }
                 aria-label="Kapat"
               >
@@ -1016,21 +1052,20 @@ export default function CrudListPage({ moduleKey }) {
                           </option>
                         ))}
                       </select>
-                    ) : isEducationLikeModule && field === "contentDocPath" ? (
-                      <div className="admin-field-stack">
-                        <input
-                          type="file"
-                          accept=".docx"
-                          onChange={(event) => handleEducationContentDocUpload(event.target.files?.[0])}
-                          disabled={educationDocUploading}
-                        />
-                        <input
-                          value={form[field] ?? ""}
-                          onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
-                          placeholder="Yüklenen dosya yolu"
-                          required
-                        />
-                      </div>
+                    ) : isEducationLikeModule && field === "content" ? (
+                      <textarea
+                        rows={10}
+                        value={form[field] ?? ""}
+                        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+                        placeholder="Eğitim içeriği metnini buraya yazın. Uzun açıklamalar girebilirsiniz."
+                      />
+                    ) : isEducationLikeModule && field === "topicHeadings" ? (
+                      <BulletListEditor
+                        hint="Her satır sitede madde işareti olarak gösterilir."
+                        value={Array.isArray(form.topicHeadings) ? form.topicHeadings : []}
+                        onChange={(items) => setForm((prev) => ({ ...prev, topicHeadings: items }))}
+                        rows={8}
+                      />
                     ) : isEducationsModule && field === "name" ? (
                       <input
                         type="text"
@@ -1146,6 +1181,12 @@ export default function CrudListPage({ moduleKey }) {
                   )}
                 </label>
               ))}
+              {isEducationsModule ? (
+                <EducationModulesEditor
+                  modules={Array.isArray(form.modules) ? form.modules : []}
+                  onChange={(modules) => setForm((prev) => ({ ...prev, modules }))}
+                />
+              ) : null}
               </div>
             </div>
 
@@ -1158,7 +1199,7 @@ export default function CrudListPage({ moduleKey }) {
                   type="submit"
                   className="btn btn--modal-primary"
                   disabled={
-                    logoUploading || educationImageUploading || educationDocUploading || Boolean(examDocUploading)
+                    logoUploading || educationImageUploading || Boolean(examDocUploading)
                   }
                 >
                   Kaydet
@@ -1170,7 +1211,7 @@ export default function CrudListPage({ moduleKey }) {
       )}
 
       {detail && (
-        <div className="admin-modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && setDetail(null)}>
+        <div className="admin-modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && closeDetail()}>
           <div className="admin-modal admin-modal--detail" role="dialog" aria-modal="true" aria-labelledby="admin-detail-title" onMouseDown={(e) => e.stopPropagation()}>
             <header className="admin-modal__header admin-modal__header--detail">
               <div className="admin-modal__header-text">
@@ -1178,9 +1219,9 @@ export default function CrudListPage({ moduleKey }) {
                 <h3 id="admin-detail-title" className="admin-modal__title">
                   Kayıt detayı
                 </h3>
-                <p className="admin-modal__subtitle">Salt okunur görünüm. Word içeriği varsa aşağıda listelenir.</p>
+                <p className="admin-modal__subtitle">Salt okunur görünüm. Eğitim içeriği, konu başlıkları ve modüller aşağıda listelenir.</p>
               </div>
-              <button type="button" className="admin-modal__close" onClick={() => setDetail(null)} aria-label="Kapat">
+              <button type="button" className="admin-modal__close" onClick={closeDetail} aria-label="Kapat">
                 <svg viewBox="0 0 24 24" aria-hidden="true" width={20} height={20}>
                   <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.42 1.42L10.59 13.4 4.29 19.7 2.87 18.28 9.17 12 2.87 5.71 4.29 4.29l6.3 6.31 6.29-6.3 1.42 1.41z" />
                 </svg>
@@ -1213,21 +1254,40 @@ export default function CrudListPage({ moduleKey }) {
               ) : null}
 
               {isEducationLikeModule ? (
-                <div className="admin-modal-panel">
-                  <h4 className="admin-modal-panel__title">Word içeriği</h4>
-                  {detail.contentHtml ? (
-                    <div className="education-content-render" dangerouslySetInnerHTML={{ __html: detail.contentHtml }} />
-                  ) : (
-                    <p className="admin-modal-panel__empty">
-                      İçerik bulunamadı. Dosya yolu kaydedildi ancak dosya okunamadı.
-                    </p>
-                  )}
-                </div>
+                <>
+                  <div className="admin-modal-panel">
+                    <h4 className="admin-modal-panel__title">Eğitim içeriği</h4>
+                    {detail.content ? (
+                      <div className="training-detail-plain-content">{detail.content}</div>
+                    ) : (
+                      <p className="admin-modal-panel__empty">Eğitim içeriği henüz eklenmedi.</p>
+                    )}
+                  </div>
+                  <div className="admin-modal-panel">
+                    <h4 className="admin-modal-panel__title">Konu başlıkları</h4>
+                    {renderBulletPreview(detail.topicHeadings)}
+                  </div>
+                  {isEducationsModule ? (
+                    <div className="admin-modal-panel">
+                      <h4 className="admin-modal-panel__title">Modüller</h4>
+                      {!detailModules.length ? (
+                        <p className="admin-modal-panel__empty">Henüz modül eklenmedi.</p>
+                      ) : (
+                        detailModules.map((moduleRow, index) => (
+                          <article key={moduleRow.id || `detail-module-${index}`} className="admin-module-card admin-module-card--readonly">
+                            <h5>{moduleRow.title || `Modül ${index + 1}`}</h5>
+                            {renderBulletPreview(moduleRow.items, "Bu modülde madde yok.")}
+                          </article>
+                        ))
+                      )}
+                    </div>
+                  ) : null}
+                </>
               ) : null}
             </div>
 
             <footer className="admin-modal__footer admin-modal__footer--detail">
-              <button type="button" className="btn btn--modal-primary" onClick={() => setDetail(null)}>
+              <button type="button" className="btn btn--modal-primary" onClick={closeDetail}>
                 Kapat
               </button>
             </footer>

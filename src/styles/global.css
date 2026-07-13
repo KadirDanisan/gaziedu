@@ -1180,6 +1180,93 @@ html {
   max-height: min(42vh, 420px);
 }
 
+.admin-field-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.admin-modules-editor {
+  display: grid;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.admin-modules-editor__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-module-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(215, 226, 248, 0.95);
+  background: rgba(248, 250, 255, 0.92);
+}
+
+.admin-module-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.admin-module-card--readonly h5 {
+  margin: 0 0 8px;
+  font-size: 0.98rem;
+}
+
+.btn--sm {
+  padding: 6px 12px;
+  font-size: 0.82rem;
+}
+
+.training-detail-plain-content {
+  white-space: pre-wrap;
+  line-height: 1.75;
+  color: #475064;
+}
+
+.training-detail-modules-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.training-detail-module-card h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  color: #1a2233;
+}
+
+.training-detail-bullets {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 8px;
+  color: #2f384d;
+}
+
+.training-detail-modules {
+  display: grid;
+  gap: 16px;
+}
+
+.training-detail-module h5 {
+  margin: 0 0 10px;
+  font-size: 0.98rem;
+  color: #1a2233;
+}
+
+.training-detail-empty-note {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.92rem;
+}
+
 .admin-modal--detail .exam-question-preview {
   max-height: min(44vh, 440px);
   border-radius: 14px;
@@ -5592,6 +5679,8 @@ textarea {
   margin-top: -190px;
   position: relative;
   z-index: 3;
+  /* Breadcrumb hizası: hero yüksekliği − overlap (~410px); daha yukarı çıkmaz */
+  --training-detail-sidebar-lift: 410px;
 }
 
 .training-detail-main {
@@ -5946,8 +6035,9 @@ textarea {
 
 .training-detail-sidebar {
   position: sticky;
-  top: 24px;
-  margin-top: -500px;
+  top: calc(var(--site-header-scroll-offset, 84px) + 12px);
+  align-self: start;
+  margin-top: calc(-1 * var(--training-detail-sidebar-lift, 410px));
   background: #fff;
   border: 1px solid #e6eaf4;
   border-radius: 12px;
@@ -6128,10 +6218,7 @@ textarea {
   .training-detail-content {
     grid-template-columns: minmax(0, 1fr) 300px;
     gap: 16px;
-  }
-
-  .training-detail-sidebar {
-    margin-top: -420px;
+    --training-detail-sidebar-lift: 380px;
   }
 }
 

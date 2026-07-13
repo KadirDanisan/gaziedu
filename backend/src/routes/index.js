@@ -10,6 +10,7 @@ import adminExamRoutes from "./admin/exam.routes.js";
 import adminMessagingRoutes from "./admin/messaging.routes.js";
 import adminCrudRoutes from "./admin/crud.routes.js";
 import adminPermissionsRoutes from "./admin/permissions.routes.js";
+import adminEducationModulesRoutes from "./admin/educationModules.routes.js";
 
 /** Routers keep full /api/... paths from the original monolith. */
 export function registerRoutes(app) {
@@ -23,6 +24,7 @@ export function registerRoutes(app) {
   app.use(adminBootstrapRoutes);
   app.use(adminExamRoutes);
   app.use(adminMessagingRoutes);
+  app.use(adminEducationModulesRoutes);
   app.use(adminCrudRoutes);
   app.use(adminPermissionsRoutes);
 }

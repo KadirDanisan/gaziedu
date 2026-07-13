@@ -6,8 +6,9 @@ import { moduleConfig } from "../../config/adminModules.js";
 import { toApiObject, toDbObject } from "../../utils/apiTransform.js";
 import { writeActivityLog } from "../../services/activityLog.js";
 import { getRoleCodeById, upsertInstructorByAdminUser, removeInstructorByAdminUserId } from "../../services/instructors.js";
-import { extractEducationContentHtml } from "../../services/education/content.js";
 import { prepareEducationPayload, prepareExamQuestionPayload } from "../../services/education/payload.js";
+import { syncEducationModules, loadEducationModules, stripNonTableFields } from "../../services/education/modules.js";
+import { buildInsertSql, buildUpdateSql } from "../../utils/jsonbBind.js";
 
 const router = Router();
 
@@ -90,14 +91,7 @@ router.get("/api/admin/:moduleName", auth, async (req, res, next) => {
       pool.query(countSql, params),
       pool.query(listSql, [...params, pageSize, offset]),
     ]);
-    const rows = config.table === "educations" || config.table === "education_calendar"
-      ? await Promise.all(
-          listResult.rows.map(async (row) => ({
-            ...row,
-            content_html: await extractEducationContentHtml(row.content_doc_path),
-          })),
-        )
-      : listResult.rows;
+    const rows = listResult.rows;
 
     res.json({
       data: rows.map(toApiObject),
@@ -172,6 +166,8 @@ router.post("/api/admin/:moduleName", auth, async (req, res, next) => {
   try {
     const p = await pool.query(`SELECT can_create FROM permissions WHERE role_id = $1 AND module_name = $2 LIMIT 1`, [req.user.roleId, moduleName]);
     if (!p.rows[0]?.can_create) return res.status(403).json({ message: "Yetkiniz yok." });
+    const modulesPayload =
+      moduleName === "educations" ? (Array.isArray(req.body?.modules) ? req.body.modules : []) : null;
     const payload = toDbObject(req.body);
     if (config.table === "educations" || config.table === "education_calendar" || config.table === "approved_educations") {
       try {
@@ -189,10 +185,8 @@ router.post("/api/admin/:moduleName", auth, async (req, res, next) => {
         delete payload.password;
       }
     }
-    const keys = Object.keys(payload);
-    const values = Object.values(payload);
-    const placeholders = keys.map((_, i) => `$${i + 1}`).join(", ");
-    const sql = `INSERT INTO ${config.table} (${keys.join(", ")}) VALUES (${placeholders}) RETURNING *`;
+    stripNonTableFields(payload);
+    const { sql, values } = buildInsertSql(config.table, payload);
     const result = await pool.query(sql, values);
     if (config.table === "admin_users") {
       const roleCode = await getRoleCodeById(result.rows[0].role_id);
@@ -200,8 +194,15 @@ router.post("/api/admin/:moduleName", auth, async (req, res, next) => {
         await upsertInstructorByAdminUser(result.rows[0]);
       }
     }
+    if (moduleName === "educations") {
+      await syncEducationModules(result.rows[0].id, modulesPayload);
+    }
     await writeActivityLog({ req, action: "create", moduleName, entityId: result.rows[0].id, newData: result.rows[0] });
-    res.status(201).json(toApiObject(result.rows[0]));
+    const created = toApiObject(result.rows[0]);
+    if (moduleName === "educations") {
+      created.modules = await loadEducationModules(result.rows[0].id);
+    }
+    res.status(201).json(created);
   } catch (error) {
     next(error);
   }
@@ -266,6 +267,12 @@ router.put("/api/admin/:moduleName/:id", auth, async (req, res, next) => {
     const previous = await pool.query(`SELECT * FROM ${config.table} WHERE id = $1 LIMIT 1`, [id]);
     if (!previous.rows[0]) return res.status(404).json({ message: "Kayıt bulunamadı." });
 
+    const modulesPayload =
+      moduleName === "educations" && Object.hasOwn(req.body || {}, "modules")
+        ? Array.isArray(req.body.modules)
+          ? req.body.modules
+          : []
+        : null;
     const payload = toDbObject(req.body);
     if (config.table === "educations" || config.table === "education_calendar" || config.table === "approved_educations") {
       try {
@@ -282,11 +289,9 @@ router.put("/api/admin/:moduleName/:id", auth, async (req, res, next) => {
       delete payload.password;
     }
 
-    const keys = Object.keys(payload).filter((k) => k !== "id");
-    const values = keys.map((k) => payload[k]);
-    const setSql = keys.map((k, i) => `${k} = $${i + 1}`).join(", ");
-    const sql = `UPDATE ${config.table} SET ${setSql}, updated_at = NOW() WHERE id = $${keys.length + 1} RETURNING *`;
-    const result = await pool.query(sql, [...values, id]);
+    stripNonTableFields(payload);
+    const { sql, values } = buildUpdateSql(config.table, payload, id);
+    const result = await pool.query(sql, values);
     if (config.table === "admin_users") {
       const roleCode = await getRoleCodeById(result.rows[0].role_id);
       if (roleCode === "egitmen") {
@@ -295,8 +300,15 @@ router.put("/api/admin/:moduleName/:id", auth, async (req, res, next) => {
         await removeInstructorByAdminUserId(result.rows[0].id);
       }
     }
+    if (moduleName === "educations" && modulesPayload !== null) {
+      await syncEducationModules(result.rows[0].id, modulesPayload);
+    }
     await writeActivityLog({ req, action: "update", moduleName, entityId: id, oldData: previous.rows[0], newData: result.rows[0] });
-    res.json(toApiObject(result.rows[0]));
+    const updated = toApiObject(result.rows[0]);
+    if (moduleName === "educations") {
+      updated.modules = await loadEducationModules(result.rows[0].id);
+    }
+    res.json(updated);
   } catch (error) {
     next(error);
   }

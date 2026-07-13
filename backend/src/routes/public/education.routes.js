@@ -13,7 +13,7 @@ import {
   EDUCATION_DETAIL_SELECT,
   CALENDAR_DETAIL_SELECT,
 } from "../../services/education/publicCourses.js";
-import { extractEducationContentHtml } from "../../services/education/content.js";
+import { loadEducationModules } from "../../services/education/modules.js";
 
 const router = Router();
 
@@ -242,7 +242,7 @@ router.get("/api/public/educations/detail/:slug", async (req, res, next) => {
 
     const withContent = {
       ...row,
-      content_html: await extractEducationContentHtml(row.content_doc_path),
+      modules: row.source_type === "education" ? await loadEducationModules(row.id) : [],
     };
     return res.json({ course: formatPublicCourse(withContent) });
   } catch (error) {
