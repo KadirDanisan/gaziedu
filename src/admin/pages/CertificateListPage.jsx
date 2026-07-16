@@ -72,6 +72,7 @@ export default function CertificateListPage() {
       const { blob, fileName } = await adminApi.generateCertificatePdf(confirmRow.id);
       downloadBlob(blob, fileName);
       setConfirmRow(null);
+      await load();
     } catch (e) {
       setError(e.message || "Sertifika oluşturulamadı.");
     } finally {
@@ -135,6 +136,7 @@ export default function CertificateListPage() {
                   <th>Eğitim adı</th>
                   <th>En yüksek puan</th>
                   <th>En yüksek puan tarihi</th>
+                  <th>Sertifika no</th>
                   <th>Ödeme</th>
                   <th />
                 </tr>
@@ -150,6 +152,7 @@ export default function CertificateListPage() {
                       <strong>{row.bestScore != null ? Number(row.bestScore) : "-"}</strong>
                     </td>
                     <td>{formatIstanbul(row.bestRecordedAt)}</td>
+                    <td>{row.documentNumber || "—"}</td>
                     <td>
                       <span style={{ color: "#15803d", fontWeight: 600 }}>Evet</span>
                     </td>

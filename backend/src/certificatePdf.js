@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -11,6 +10,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_PATH = path.resolve(__dirname, "../assets/certificates/GUZEM_KS_Yeni_son.pdf");
 const SIGNATURE_PATH = path.resolve(__dirname, "../assets/certificates/selami_eryilmaz_imza.png");
 const GREAT_VIBES_FONT_PATH = path.resolve(__dirname, "../assets/fonts/GreatVibes-Regular.ttf");
+const EXTERNAL_CHARM_FONT_PATH = "C:\\Users\\msı\\Downloads\\Document fonts\\Document fonts\\Charm-Regular.ttf";
+const EXTERNAL_HELVETICA_LT_PRO_PATH =
+  "C:\\Users\\msı\\Downloads\\Document fonts\\Document fonts\\Helvetica Neue LT Pro 55 Roman.ttf";
 
 /** Site ana mavisi */
 const BRAND_BLUE = rgb(14 / 255, 56 / 255, 119 / 255);
@@ -22,9 +24,9 @@ const BRAND_BLUE = rgb(14 / 255, 56 / 255, 119 / 255);
 const LAYOUT = {
   /** Sayfa 1: isim + yasal paragraflar */
   page1: {
-    displayName: { y: 295, size: 56 },
+    displayName: { y: 295, size: 53 },
     legalParagraph: {
-      y: 200,
+      y: 225,
       size: 10,
       lineHeight: 12,
       gap: 30,
@@ -65,7 +67,6 @@ const LAYOUT = {
 
 const FONTS_DIR = path.resolve(__dirname, "../assets/fonts");
 const CHARM_REGULAR_PATH = path.resolve(FONTS_DIR, "Charm-Regular.ttf");
-const HELVETICA_LT_COM_PATH = path.resolve(FONTS_DIR, "HelveticaNeueLTCom-Roman.ttf");
 const HELVETICA_LT_PRO_PATH = path.resolve(FONTS_DIR, "HelveticaNeueLTPro55Roman.ttf");
 
 const firstExistingPath = (candidates) => {
@@ -78,36 +79,23 @@ const firstExistingPath = (candidates) => {
 /** displayName — Charm Regular */
 const resolveDisplayNameFontPath = () =>
   firstExistingPath([
+    EXTERNAL_CHARM_FONT_PATH,
     CHARM_REGULAR_PATH,
     path.resolve(FONTS_DIR, "Charm-Regular.otf"),
     path.resolve(process.env.WINDIR || "C:\\Windows", "Fonts/Charm-Regular.ttf"),
     GREAT_VIBES_FONT_PATH,
   ]);
 
-/** legalParagraph — Helvetica Neue LT Com */
-const resolveLegalFontPath = () =>
+/** legalParagraph + trainee + program — Helvetica Neue LT Pro 55 Roman */
+const resolveHelveticaProFontPath = () =>
   firstExistingPath([
-    HELVETICA_LT_COM_PATH,
-    path.resolve(FONTS_DIR, "HelveticaNeueLTCom-Roman.otf"),
-    path.resolve(FONTS_DIR, "Helvetica Neue LT Com 55 Roman.ttf"),
-    path.resolve(FONTS_DIR, "HelveticaNeueLTCom.ttf"),
-    path.resolve(process.env.WINDIR || "C:\\Windows", "Fonts/HelveticaNeueLTCom-Roman.ttf"),
-    path.resolve(process.env.WINDIR || "C:\\Windows", "Fonts/HelveticaNeueLTCom.ttf"),
-    path.resolve(process.env.WINDIR || "C:\\Windows", "Fonts/HelveticaNeueLTStd-Roman.otf"),
-    path.resolve(process.env.WINDIR || "C:\\Windows", "Fonts/arial.ttf"),
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-  ]);
-
-/** trainee + program — Helvetica Neue LT Pro 55 Roman */
-const resolveTableFontPath = () =>
-  firstExistingPath([
+    EXTERNAL_HELVETICA_LT_PRO_PATH,
     HELVETICA_LT_PRO_PATH,
     path.resolve(FONTS_DIR, "HelveticaNeueLTPro55Roman.otf"),
     path.resolve(FONTS_DIR, "HelveticaNeueLTPro-Roman.ttf"),
     path.resolve(FONTS_DIR, "Helvetica Neue LT Pro 55 Roman.ttf"),
     path.resolve(process.env.WINDIR || "C:\\Windows", "Fonts/HelveticaNeueLTPro55Roman.ttf"),
     path.resolve(process.env.WINDIR || "C:\\Windows", "Fonts/HelveticaNeueLTPro-Roman.ttf"),
-    path.resolve(process.env.WINDIR || "C:\\Windows", "Fonts/HelveticaNeueLTCom-Roman.ttf"),
     path.resolve(process.env.WINDIR || "C:\\Windows", "Fonts/arial.ttf"),
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
   ]);
@@ -131,11 +119,6 @@ const subtractDaysIso = (isoDate, days) => {
   date.setDate(date.getDate() - days);
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Istanbul" }).format(date);
 };
-
-export function buildCertificateNumber(seed) {
-  const digest = crypto.createHash("sha256").update(String(seed || "")).digest("hex").slice(0, 10).toUpperCase();
-  return `SRT${digest}`;
-}
 
 const DEFAULT_ISSUE_PLACE = "GUZEM (Gazi Üniversitesi\nUzaktan Eğitim Merkezi)";
 
@@ -321,12 +304,24 @@ const drawLegalParagraphRow = (page, font, paragraphs, layout, color) => {
   });
 };
 
-const buildQrPayload = ({ qrContent, documentNumber, nationalId, educationCode }) => {
+/**
+ * e-Devlet Barkodlu Belge Doğrulama uygulamasının okuduğu QR formatı:
+ * barkodlubelgedogrulama://barkod: {Belge Doğrulama Kodu};tckn:{T.C.}
+ */
+const buildQrPayload = ({ qrContent, documentNumber, nationalId }) => {
   const custom = String(qrContent || "").trim();
   if (custom) return custom;
 
-  // Geçici doğrulama içeriği — e-Devlet QR bağlantısı gelince qrContent ile değiştirilecek.
-  return `GUZEM|${documentNumber}|${nationalId}|${educationCode}`;
+  const barkod = String(documentNumber || "").trim();
+  const tckn = String(nationalId || "").replace(/\D/g, "");
+  if (!barkod) {
+    throw new Error("Belge Doğrulama Kodu oluşturulamadı.");
+  }
+  if (!tckn) {
+    throw new Error("T.C. Kimlik No bulunamadı.");
+  }
+
+  return `barkodlubelgedogrulama://barkod: ${barkod};tckn:${tckn}`;
 };
 
 const drawQr = async (pdfDoc, page, payload, { x, y, size }) => {
@@ -441,15 +436,8 @@ export async function buildCertificatePdf(data) {
     throw new Error("Sertifika için Charm Regular fontu bulunamadı (assets/fonts/Charm-Regular.ttf).");
   }
 
-  const legalFontPath = resolveLegalFontPath();
-  if (!legalFontPath) {
-    throw new Error(
-      "Sertifika için Helvetica Neue LT Com fontu bulunamadı (assets/fonts/HelveticaNeueLTCom-Roman.ttf).",
-    );
-  }
-
-  const tableFontPath = resolveTableFontPath();
-  if (!tableFontPath) {
+  const bodyFontPath = resolveHelveticaProFontPath();
+  if (!bodyFontPath) {
     throw new Error(
       "Sertifika için Helvetica Neue LT Pro 55 Roman fontu bulunamadı (assets/fonts/HelveticaNeueLTPro55Roman.ttf).",
     );
@@ -481,8 +469,9 @@ export async function buildCertificatePdf(data) {
 
   pdfDoc.registerFontkit(fontkit);
   const displayFont = await pdfDoc.embedFont(fs.readFileSync(displayFontPath));
-  const legalFont = await pdfDoc.embedFont(fs.readFileSync(legalFontPath));
-  const tableFont = await pdfDoc.embedFont(fs.readFileSync(tableFontPath));
+  const bodyFont = await pdfDoc.embedFont(fs.readFileSync(bodyFontPath));
+  const legalFont = bodyFont;
+  const tableFont = bodyFont;
 
   const pages = pdfDoc.getPages();
   const page1 = pages[0];
@@ -495,7 +484,7 @@ export async function buildCertificatePdf(data) {
   const educationName = String(data.educationName || "").trim() || "—";
   const educationCategory =
     String(data.educationCategory || data.educationField || "").trim() || "—";
-  const level = String(data.level || "Orta").trim();
+  const level = String(data.level || "ORTA").trim();
   const birthInfo = String(data.birthInfo || "Türkçe").trim();
 
   const programEndDate = formatIsoDate(data.programEndDate || data.controlDate || new Date());
@@ -507,9 +496,10 @@ export async function buildCertificatePdf(data) {
   const controlDate = formatIsoDate(data.controlDate || programEndDate);
 
   const educationCode = String(data.educationCode || "").trim();
-  const documentNumber =
-    String(data.documentNumber || "").trim() ||
-    buildCertificateNumber(`${data.id || ""}:${nationalId}:${educationCode}:${programEndDate}`);
+  const documentNumber = String(data.documentNumber || "").trim();
+  if (!documentNumber) {
+    throw new Error("Belge Doğrulama Kodu (sertifika numarası) gerekli.");
+  }
 
   // —— Sayfa 1 ——
   drawCenteredText(page1, displayFont, fullName, page1Layout.displayName.y, {
@@ -588,7 +578,7 @@ export async function buildCertificatePdf(data) {
   await drawQr(
     pdfDoc,
     page2,
-    buildQrPayload({ qrContent: data.qrContent, documentNumber, nationalId, educationCode }),
+    buildQrPayload({ qrContent: data.qrContent, documentNumber, nationalId }),
     qr,
   );
 

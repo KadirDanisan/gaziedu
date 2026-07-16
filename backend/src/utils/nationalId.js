@@ -24,4 +24,22 @@ const NORMAL_USER_COUNTRY_LABELS = {
   "223": "United States",
 };
 
-export { isValidTurkishNationalId, NORMAL_USER_GENDER_LABELS, NORMAL_USER_TYPE_LABELS, NORMAL_USER_COUNTRY_LABELS };
+/** Sertifika PDF — Eğitim Dili alanı (ülke kodu 215 = Türkiye → Türkçe) */
+const resolveCertificateEducationLanguage = (countryCodeRaw) => {
+  const code = String(countryCodeRaw || "").trim();
+  if (!code || code === "215" || code.toUpperCase() === "TR" || code === "Türkçe") {
+    return "Türkçe";
+  }
+  if (NORMAL_USER_COUNTRY_LABELS[code] === "Türkiye") return "Türkçe";
+  const englishCountries = new Set(["13", "38", "81", "222", "223"]);
+  if (englishCountries.has(code)) return "English";
+  return "Türkçe";
+};
+
+export {
+  isValidTurkishNationalId,
+  NORMAL_USER_GENDER_LABELS,
+  NORMAL_USER_TYPE_LABELS,
+  NORMAL_USER_COUNTRY_LABELS,
+  resolveCertificateEducationLanguage,
+};

@@ -3117,8 +3117,8 @@ app.post("/api/admin/exam-portal/test-token", auth, checkPermission("examQuestio
     }
     const token = signExamPortalLink({
       educationCode,
-      nationalId: "11111111111",
-      participantName: "Gazi Test",
+      nationalId: "34949322398",
+      participantName: "Kadir Danışan",
     });
     const path = `/sinavportali/${encodeURIComponent(token)}`;
     return res.json({ portalToken: token, path });

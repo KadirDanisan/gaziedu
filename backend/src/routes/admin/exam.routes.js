@@ -8,6 +8,8 @@ import { parseDateRangePeriod, buildIstanbulDateFilterSql } from "../../utils/da
 import { normalizeEducationCodeValue, isValidEducationCode } from "../../services/education/payload.js";
 import { signExamPortalLink } from "../../examPortalLinkToken.js";
 import { fetchCertificateRowContext } from "../../services/exam/adminQueries.js";
+import { allocateCertificateDocumentNumber } from "../../services/certificate/serial.js";
+import { resolveCertificateEducationLanguage } from "../../utils/nationalId.js";
 
 const router = Router();
 
@@ -66,8 +68,8 @@ router.post("/api/admin/exam-portal/test-token", auth, checkPermission("examQues
     }
     const token = signExamPortalLink({
       educationCode,
-      nationalId: "11111111111",
-      participantName: "Gazi Test",
+      nationalId: "34949322398",
+      participantName: "Kadir Danışan",
     });
     const path = `/sinavportali/${encodeURIComponent(token)}`;
     return res.json({ portalToken: token, path });
@@ -361,6 +363,7 @@ router.get("/api/admin/certificate-list", auth, checkPermission("certificateList
           ...api,
           participantName: String(row.participant_name || "").trim(),
           educationName: String(row.education_name || "").trim(),
+          documentNumber: String(row.document_number || api.documentNumber || "").trim() || null,
           certificateEligible: true,
         };
       }),
@@ -389,14 +392,15 @@ router.post("/api/admin/certificate-list/:id/generate-pdf", auth, checkPermissio
     const { buildCertificatePdf } = await import("../../certificatePdf.js");
     const { buildCertificateBilingualFields } = await import("../../certificateTranslation.js");
     const participantName = String(row.participant_name || "").trim();
-    const countryCode = String(row.participant_country || "TR").trim().toUpperCase();
-    const birthInfo = countryCode === "TR" || countryCode === "Türkçe" ? "Türkçe" : countryCode;
+    const birthInfo = resolveCertificateEducationLanguage(row.participant_country);
     const educationCategory = String(row.education_category || "").trim() || "—";
     const bilingual = await buildCertificateBilingualFields({
       educationName: row.education_name || row.education_code,
       educationCategory,
       examTargetDifficulty: row.exam_target_difficulty,
     });
+
+    const documentNumber = await allocateCertificateDocumentNumber(row.id);
 
     const { pdfBytes, fileName } = await buildCertificatePdf({
       id: row.id,
@@ -412,6 +416,7 @@ router.post("/api/admin/certificate-list/:id/generate-pdf", auth, checkPermissio
       programStartDate: row.education_created_at,
       programEndDate: row.last_attempt_at,
       duration: row.education_duration,
+      documentNumber,
     });
 
     res.setHeader("Content-Type", "application/pdf");

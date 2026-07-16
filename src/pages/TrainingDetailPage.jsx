@@ -588,7 +588,7 @@ function TrainingDetailPage() {
               target="_blank"
               rel="noopener noreferrer"
             >
-              Eğitime git <i className="fa-solid fa-arrow-up-right-from-square" aria-hidden />
+              Eğitimi Satın Al <i className="fa-solid fa-arrow-up-right-from-square" aria-hidden />
             </a>
           ) : null}
           <ul className="training-detail-side-list">

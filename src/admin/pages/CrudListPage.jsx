@@ -189,7 +189,7 @@ const renderTableCellValue = (field, value, maps = {}) => {
     return count ? `${count} madde` : "-";
   }
   if (field === "examTargetDifficulty") {
-    const map = { easy: "Kolay", medium: "Orta", hard: "Zor" };
+    const map = { easy: "KOLAY", medium: "ORTA", hard: "ZOR" };
     return map[value] || value || "-";
   }
   if (field === "examQuestionCount" || field === "poolQuestionCount") {

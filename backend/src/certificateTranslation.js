@@ -1,15 +1,15 @@
 const translationCache = new Map();
 
 const EXAM_DIFFICULTY_TR = {
-  easy: "Temel",
-  medium: "Orta",
-  hard: "İleri",
+  easy: "TEMEL",
+  medium: "ORTA",
+  hard: "İLERİ",
 };
 
 const EXAM_DIFFICULTY_EN = {
-  easy: "Basic",
-  medium: "Intermediate",
-  hard: "Advanced",
+  easy: "BASIC",
+  medium: "INTERMEDIATE",
+  hard: "ADVANCED",
 };
 
 export function buildBilingualLine(turkish, english) {

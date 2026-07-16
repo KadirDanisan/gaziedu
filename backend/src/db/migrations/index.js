@@ -568,6 +568,27 @@ const migrateAdminMessagingPermissions = async () => {
   `);
 };
 
+const migrateCertificateSerialNumbers = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS certificate_serial_state (
+      id INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      last_serial BIGINT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    INSERT INTO certificate_serial_state (id, last_serial)
+    VALUES (1, 0)
+    ON CONFLICT (id) DO NOTHING
+  `);
+  await pool.query(`ALTER TABLE exam_portal_best_scores ADD COLUMN IF NOT EXISTS document_number TEXT`);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS exam_portal_best_scores_document_number_unique
+      ON exam_portal_best_scores (document_number)
+      WHERE document_number IS NOT NULL
+  `);
+};
+
 export {
   migrateContactFormTimestampsToIstanbul,
   migrateInstitutionCodeColumn,
@@ -597,6 +618,7 @@ export {
   migrateEducationContentModules,
   migrateAdminMessagingTables,
   migrateAdminMessagingPermissions,
+  migrateCertificateSerialNumbers,
 };
 
 export const migrations = [
@@ -626,5 +648,6 @@ export const migrations = [
   migrateEducationContentModules,
   migrateAdminMessagingTables,
   migrateAdminMessagingPermissions,
+  migrateCertificateSerialNumbers,
   migrateContactFormTimestampsToIstanbul,
 ];
