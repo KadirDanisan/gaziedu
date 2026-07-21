@@ -2,8 +2,7 @@ import { Router } from "express";
 import path from "path";
 import { auth } from "../../middleware/auth.js";
 import { upload, uploadDoc } from "../../middleware/upload.js";
-import { extractDocxText } from "../../services/education/content.js";
-import { buildExamQuestionsWithAi, fallbackQuestionsFromText } from "../../services/exam/ai.js";
+import { parseExamQuestionsFromDocx } from "../../services/exam/docxTable.js";
 
 const router = Router();
 
@@ -51,29 +50,17 @@ router.post("/api/admin/uploads/education-content-doc", auth, uploadDoc.single("
 router.post("/api/admin/uploads/exam-doc", auth, uploadDoc.single("file"), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ message: "Yüklenecek dosya bulunamadı." });
-    const { mode } = req.body || {};
     const extension = path.extname(req.file.originalname || "").toLowerCase();
     if (extension !== ".docx") return res.status(400).json({ message: "Sadece .docx dosyası yüklenebilir." });
-    if (mode !== "generate" && mode !== "classify") return res.status(400).json({ message: "Geçersiz işlem tipi." });
-    const targetDifficulty = String(req.body?.targetDifficulty || "medium").toLowerCase();
-    if (!["easy", "medium", "hard"].includes(targetDifficulty)) {
-      return res.status(400).json({ message: "Zorluk kolay, orta veya zor olmalıdır." });
-    }
-    const poolQuestionCount = Math.min(300, Math.max(5, parseInt(req.body?.poolQuestionCount ?? "60", 10) || 60));
     const docPath = `/uploads/${req.file.filename}`;
-    const text = await extractDocxText(docPath);
-    if (!String(text || "").trim()) {
-      return res.status(400).json({ message: "Word dosyasından metin okunamadı. Dosyanın geçerli bir .docx olduğundan emin olun." });
-    }
-    const questions =
-      mode === "classify"
-        ? fallbackQuestionsFromText(text, mode, targetDifficulty, poolQuestionCount)
-        : await buildExamQuestionsWithAi({ text, mode, targetDifficulty, poolQuestionCount });
+    const questions = await parseExamQuestionsFromDocx(docPath);
+    const questionCount = questions.medium.length;
     return res.status(201).json({
       fileName: req.file.originalname,
       path: docPath,
       url: `${req.protocol}://${req.get("host")}${docPath}`,
       questions,
+      questionCount,
     });
   } catch (error) {
     return next(error);

@@ -1513,7 +1513,7 @@ html {
   font-weight: 700;
 }
 
-.exam-ai-loading {
+.exam-doc-loading {
   display: grid;
   gap: 6px;
   padding: 12px;
@@ -1524,7 +1524,7 @@ html {
   color: #23406d;
 }
 
-.exam-ai-loading span {
+.exam-doc-loading span {
   font-size: 0.9rem;
 }
 

@@ -103,22 +103,14 @@ const moduleConfig = {
     fields: [
       "educationId",
       "instructorId",
-      "examTargetDifficulty",
-      "examQuestionCount",
-      "poolQuestionCount",
-      "topicDocPath",
       "questionsDocPath",
       "generatedQuestions",
     ],
     labels: {
       educationId: "Eğitim",
       instructorId: "Eğitmen",
-      examTargetDifficulty: "Sınav zorluğu (havuz)",
-      examQuestionCount: "Sınavdaki soru sayısı",
-      poolQuestionCount: "Havuza alınacak soru sayısı (Word / AI)",
-      topicDocPath: "Konu başlıklı Word (.docx)",
-      questionsDocPath: "Hazır sorular Word (.docx)",
-      generatedQuestions: "Hazırlanan sorular (5 şık: A–E)",
+      questionsDocPath: "Soru tablosu Word (.docx)",
+      generatedQuestions: "Word dosyasından okunan sorular",
     },
   },
 };
@@ -188,21 +180,13 @@ const renderTableCellValue = (field, value, maps = {}) => {
     const count = Array.isArray(value) ? value.length : 0;
     return count ? `${count} madde` : "-";
   }
-  if (field === "examTargetDifficulty") {
-    const map = { easy: "KOLAY", medium: "ORTA", hard: "ZOR" };
-    return map[value] || value || "-";
-  }
-  if (field === "examQuestionCount" || field === "poolQuestionCount") {
-    return value != null && value !== "" ? String(value) : "-";
-  }
   if (field === "generatedQuestions") {
     const groups = value || {};
     const e = groups.easy?.length || 0;
     const m = groups.medium?.length || 0;
     const h = groups.hard?.length || 0;
     const total = e + m + h;
-    if (!total) return "-";
-    return `${total} soru (K:${e} O:${m} Z:${h})`;
+    return total ? `${total} soru` : "-";
   }
   return renderFieldValue(field, value);
 };
@@ -227,49 +211,31 @@ const toDatetimeLocalValue = (value) => {
   return offsetDate.toISOString().slice(0, 16);
 };
 
-const examQuestionGroups = [
-  { key: "easy", label: "Kolay" },
-  { key: "medium", label: "Orta" },
-  { key: "hard", label: "Zor" },
-];
+const getExamQuestions = (groups = {}) =>
+  ["easy", "medium", "hard"].flatMap((key) => (Array.isArray(groups?.[key]) ? groups[key] : []));
 
-const examDifficultySelectOptions = [
-  { value: "easy", label: "Kolay" },
-  { value: "medium", label: "Orta" },
-  { value: "hard", label: "Zor" },
-];
-
-function formatExamPoolDurationHint(examQuestionCount) {
-  const n = Math.min(200, Math.max(1, Number(examQuestionCount) || 20));
-  const sec = n * 90;
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  const part = s ? `${m} dk ${s} sn` : `${m} dakika`;
-  return `${part} (her soru 1 dk 30 sn)`;
-}
-
-const renderExamQuestionPreview = (questions = {}, limit = 20) => (
-  <div className="exam-question-preview">
-    {examQuestionGroups.map((group) => (
-      <div key={group.key}>
-        <h4>{group.label} Seviye ({questions?.[group.key]?.length || 0})</h4>
-        {(questions?.[group.key] || []).slice(0, limit).map((question, index) => (
-          <article className="exam-question-card" key={`${group.key}-${index}`}>
-            <strong>{index + 1}. {question.question}</strong>
-            {Array.isArray(question.options) && question.options.length ? (
-              <ol type="A">
-                {question.options.map((option, optionIndex) => (
-                  <li key={`${group.key}-${index}-${optionIndex}`}>{option}</li>
-                ))}
-              </ol>
-            ) : null}
-            {question.correctAnswer ? <small>Doğru Cevap: {question.correctAnswer}</small> : null}
-          </article>
-        ))}
-      </div>
-    ))}
-  </div>
-);
+const renderExamQuestionPreview = (questions = {}, limit = 20) => {
+  const items = getExamQuestions(questions);
+  return (
+    <div className="exam-question-preview">
+      <h4>Toplam {items.length} soru</h4>
+      {items.slice(0, limit).map((question, index) => (
+        <article className="exam-question-card" key={`q-${index}`}>
+          <strong>{index + 1}. {question.question}</strong>
+          {Array.isArray(question.options) && question.options.length ? (
+            <ol type="A">
+              {question.options.map((option, optionIndex) => (
+                <li key={`${index}-${optionIndex}`}>{option}</li>
+              ))}
+            </ol>
+          ) : null}
+          {question.correctAnswer ? <small>Doğru Cevap: {question.correctAnswer}</small> : null}
+        </article>
+      ))}
+      {items.length > limit ? <small>İlk {limit} soru gösteriliyor.</small> : null}
+    </div>
+  );
+};
 
 export default function CrudListPage({ moduleKey }) {
   const { hasPermission } = useAdminAuth();
@@ -404,11 +370,6 @@ export default function CrudListPage({ moduleKey }) {
     if (isEducationCalendarModule) {
       initialForm.topicHeadings = [];
     }
-    if (isExamQuestionsModule) {
-      initialForm.examTargetDifficulty = "medium";
-      initialForm.examQuestionCount = 20;
-      initialForm.poolQuestionCount = 60;
-    }
     setForm(initialForm);
   };
 
@@ -462,20 +423,14 @@ export default function CrudListPage({ moduleKey }) {
       }
     }
     if (isExamQuestionsModule) {
-      const eq = Math.min(200, Math.max(1, parseInt(String(payload.examQuestionCount ?? "20"), 10) || 20));
-      const pq = Math.min(300, Math.max(5, parseInt(String(payload.poolQuestionCount ?? "60"), 10) || 60));
-      const d = String(payload.examTargetDifficulty || "medium").toLowerCase();
-      payload.examQuestionCount = eq;
-      payload.poolQuestionCount = pq;
-      payload.examTargetDifficulty = ["easy", "medium", "hard"].includes(d) ? d : "medium";
-      if (
-        payload.generatedQuestions === "" ||
-        payload.generatedQuestions == null ||
-        (typeof payload.generatedQuestions === "object" &&
-          !["easy", "medium", "hard"].some((key) => (payload.generatedQuestions[key] || []).length))
-      ) {
-        delete payload.generatedQuestions;
+      const questionCount = getExamQuestions(payload.generatedQuestions).length;
+      if (!questionCount) {
+        setError("Kaydetmeden önce geçerli soru tablosu içeren bir Word dosyası yükleyin.");
+        return;
       }
+      payload.examTargetDifficulty = "medium";
+      payload.examQuestionCount = questionCount;
+      payload.poolQuestionCount = questionCount;
     }
     if (editing === "new") await data.createItem(moduleKey, payload);
     else await data.updateItem(moduleKey, editing, payload);
@@ -527,21 +482,20 @@ export default function CrudListPage({ moduleKey }) {
     }
   };
 
-  const handleExamDocUpload = async (file, mode) => {
+  const handleExamDocUpload = async (file) => {
     if (!file) return;
-    setExamDocUploading(mode);
+    setExamDocUploading("table");
     setError("");
     try {
-      const result = await data.uploadExamDoc(file, mode, {
-        targetDifficulty: String(form.examTargetDifficulty || "medium").toLowerCase(),
-        poolQuestionCount: Math.min(300, Math.max(5, parseInt(String(form.poolQuestionCount ?? "60"), 10) || 60)),
-      });
+      const result = await data.uploadExamDoc(file);
       setForm((prev) => ({
         ...prev,
-        ...(mode === "generate"
-          ? { topicDocPath: result.path || "", topicDocName: result.fileName || file.name }
-          : { questionsDocPath: result.path || "", questionsDocName: result.fileName || file.name }),
+        questionsDocPath: result.path || "",
+        questionsDocName: result.fileName || file.name,
         generatedQuestions: result.questions || prev.generatedQuestions || {},
+        examTargetDifficulty: "medium",
+        examQuestionCount: result.questionCount || 0,
+        poolQuestionCount: result.questionCount || 0,
       }));
     } catch (err) {
       setError(err.message);
@@ -876,78 +830,26 @@ export default function CrudListPage({ moduleKey }) {
                         </option>
                       ))}
                     </select>
-                  ) : isExamQuestionsModule && field === "examTargetDifficulty" ? (
-                    <select
-                      value={form[field] ?? "medium"}
-                      onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
-                    >
-                      {examDifficultySelectOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : isExamQuestionsModule && field === "examQuestionCount" ? (
-                    <div className="admin-field-stack">
-                      <input
-                        type="number"
-                        min={1}
-                        max={200}
-                        value={form[field] ?? ""}
-                        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
-                      />
-                      <small style={{ opacity: 0.85 }}>
-                        Öğrenci sınavında gösterilecek soru sayısı. Tahmini süre: {formatExamPoolDurationHint(form.examQuestionCount)}
-                      </small>
-                    </div>
-                  ) : isExamQuestionsModule && field === "poolQuestionCount" ? (
-                    <div className="admin-field-stack">
-                      <input
-                        type="number"
-                        min={5}
-                        max={300}
-                        value={form[field] ?? ""}
-                        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
-                      />
-                      <small style={{ opacity: 0.85 }}>
-                        Word dosyasından okunacak veya AI ile üretilecek toplam havuz soru sayısı. Dosyayı yüklemeden
-                        önce bu değeri ayarlayın.
-                      </small>
-                    </div>
-                  ) : isExamQuestionsModule && field === "topicDocPath" ? (
-                    <div className="admin-field-stack">
-                      <input
-                        type="file"
-                        accept=".docx"
-                        onChange={(event) => handleExamDocUpload(event.target.files?.[0], "generate")}
-                        disabled={Boolean(examDocUploading)}
-                      />
-                      <input value={form[field] ?? ""} readOnly placeholder="Konu dosyası yolu (.docx)" />
-                    </div>
                   ) : isExamQuestionsModule && field === "questionsDocPath" ? (
                     <div className="admin-field-stack">
                       <input
                         type="file"
                         accept=".docx"
-                        onChange={(event) => handleExamDocUpload(event.target.files?.[0], "classify")}
+                        onChange={(event) => handleExamDocUpload(event.target.files?.[0])}
                         disabled={Boolean(examDocUploading)}
                       />
-                      <input value={form[field] ?? ""} readOnly placeholder="Hazır sorular dosya yolu (.docx)" />
+                      <input value={form[field] ?? ""} readOnly placeholder="Soru tablosu dosya yolu (.docx)" />
                       <small style={{ opacity: 0.85 }}>
-                        Sorular Word dosyasından doğrudan okunur (AI kullanılmaz). Her soru numaralı; seçenekler A–E
-                        satırlarında olmalıdır.
+                        Word tablosu 8 sütun olmalıdır (Modül, Soru Kökü, A–E şıkları, Doğru Cevap).
+                        Modül sütunu yok sayılır; her satırdan yalnızca soru kökü, şıklar ve doğru cevap okunur.
                       </small>
                     </div>
                   ) : isExamQuestionsModule && field === "generatedQuestions" ? (
                     <>
                       {examDocUploading ? (
-                        <div className="exam-ai-loading">
-                          <strong>{examDocUploading === "generate" ? "Sorular oluşturuluyor..." : "Sorular okunuyor..."}</strong>
-                          <span>
-                            {examDocUploading === "generate"
-                              ? "Word dosyası okunuyor ve yapay zeka sonucu hazırlanıyor. Lütfen bu pencereyi kapatmayın."
-                              : "Word dosyası okunuyor ve sorular ayrıştırılıyor. Lütfen bu pencereyi kapatmayın."}
-                          </span>
+                        <div className="exam-doc-loading">
+                          <strong>Sorular okunuyor...</strong>
+                          <span>Word tablosundaki satırlar ve sütunlar doğrulanıyor.</span>
                         </div>
                       ) : null}
                       {renderExamQuestionPreview(form.generatedQuestions, 20)}

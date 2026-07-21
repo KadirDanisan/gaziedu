@@ -134,12 +134,9 @@ export const adminApi = {
     formData.append("file", file);
     return request("/admin/uploads/education-content-doc", { method: "POST", body: formData });
   },
-  uploadExamDoc: (file, mode, { targetDifficulty = "medium", poolQuestionCount = 60 } = {}) => {
+  uploadExamDoc: (file) => {
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("mode", mode);
-    formData.append("targetDifficulty", targetDifficulty);
-    formData.append("poolQuestionCount", String(poolQuestionCount));
     return request("/admin/uploads/exam-doc", { method: "POST", body: formData });
   },
   getExamPortalVisits: ({ page = 1, search = "", period = "all" } = {}) => {
