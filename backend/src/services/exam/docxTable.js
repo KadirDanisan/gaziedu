@@ -119,6 +119,9 @@ export const parseExamTableHtml = (html) => {
   if (!questions.length) {
     throw new Error("Word tablosunda başlık satırından sonra geçerli soru bulunamadı.");
   }
+  if (questions.length < 20) {
+    throw new Error(`Sınav havuzunda en az 20 soru olmalıdır. Dosyada ${questions.length} geçerli soru bulundu.`);
+  }
   if (questions.length > 300) {
     throw new Error("Bir Word dosyasında en fazla 300 soru yüklenebilir.");
   }

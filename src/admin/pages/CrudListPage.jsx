@@ -429,7 +429,7 @@ export default function CrudListPage({ moduleKey }) {
         return;
       }
       payload.examTargetDifficulty = "medium";
-      payload.examQuestionCount = questionCount;
+      payload.examQuestionCount = 20;
       payload.poolQuestionCount = questionCount;
     }
     if (editing === "new") await data.createItem(moduleKey, payload);
@@ -494,7 +494,7 @@ export default function CrudListPage({ moduleKey }) {
         questionsDocName: result.fileName || file.name,
         generatedQuestions: result.questions || prev.generatedQuestions || {},
         examTargetDifficulty: "medium",
-        examQuestionCount: result.questionCount || 0,
+        examQuestionCount: 20,
         poolQuestionCount: result.questionCount || 0,
       }));
     } catch (err) {

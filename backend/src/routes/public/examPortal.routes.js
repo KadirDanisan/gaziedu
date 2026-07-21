@@ -132,11 +132,11 @@ router.post("/api/public/exam-portal/start", async (req, res, next) => {
     const poolQuestions = normalizeExamQuestionPool(questionSet.generated_questions);
     const targetDifficulty = String(questionSet.exam_target_difficulty || "medium").toLowerCase();
     const difficultyKey = ["easy", "medium", "hard"].includes(targetDifficulty) ? targetDifficulty : "medium";
-    const examQuestionCount = Math.min(200, Math.max(1, parseInt(questionSet.exam_question_count, 10) || 20));
+    const examQuestionCount = 20;
     const bucket = poolQuestions[difficultyKey] || [];
     if (bucket.length < examQuestionCount) {
       return res.status(400).json({
-        message: `Bu zorluk seviyesi (${difficultyKey}) için havuzda yeterli soru yok (${bucket.length}/${examQuestionCount}).`,
+        message: `Sınavı başlatmak için havuzda en az 20 soru olmalıdır (${bucket.length}/20).`,
       });
     }
 
