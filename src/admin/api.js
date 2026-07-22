@@ -190,6 +190,13 @@ export const adminApi = {
     const key = `admin-certificate-list:${query}`;
     return adminSingleFlight(key, () => request(`/admin/certificate-list?${query}`));
   },
+  getCertificateListEdevletExport: ({ search = "", period = "all" } = {}) => {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (period && period !== "all") params.set("period", period);
+    const query = params.toString();
+    return request(`/admin/certificate-list/edevlet-export?${query}`);
+  },
   generateCertificatePdf: async (id) => {
     const token = getToken();
     const response = await fetch(`${API_BASE_URL}/admin/certificate-list/${id}/generate-pdf`, {

@@ -7,7 +7,7 @@ import { EXAM_PORTAL_MAX_STARTS } from "../../db/migrations/index.js";
 import { parseDateRangePeriod, buildIstanbulDateFilterSql } from "../../utils/dateRange.js";
 import { normalizeEducationCodeValue, isValidEducationCode } from "../../services/education/payload.js";
 import { signExamPortalLink } from "../../examPortalLinkToken.js";
-import { fetchCertificateRowContext } from "../../services/exam/adminQueries.js";
+import { fetchCertificateRowContext, fetchCertificateListRows } from "../../services/exam/adminQueries.js";
 import { allocateCertificateDocumentNumber } from "../../services/certificate/serial.js";
 import { resolveCertificateEducationLanguage } from "../../utils/nationalId.js";
 
@@ -308,70 +308,31 @@ router.get("/api/admin/exam-results", auth, checkPermission("examResults", "can_
   }
 });
 
+router.get("/api/admin/certificate-list/edevlet-export", auth, checkPermission("certificateList", "can_view"), async (req, res, next) => {
+  try {
+    const searchRaw = String(req.query.search || "").trim();
+    const period = parseDateRangePeriod(req.query.period);
+    const { total, rows } = await fetchCertificateListRows({ search: searchRaw, period });
+    return res.json({ data: rows, total });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get("/api/admin/certificate-list", auth, checkPermission("certificateList", "can_view"), async (req, res, next) => {
   try {
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = 20;
-    const offset = (page - 1) * pageSize;
     const searchRaw = String(req.query.search || "").trim();
     const period = parseDateRangePeriod(req.query.period);
-
-    const params = [];
-    const conditions = ["b.payment_received = TRUE", "b.best_score >= 60"];
-
-    if (searchRaw) {
-      params.push(`%${searchRaw.toLowerCase()}%`);
-      conditions.push(
-        `LOWER(CONCAT(COALESCE(b.education_code,''), ' ', COALESCE(b.national_id,''), ' ', COALESCE(b.participant_name,''), ' ', COALESCE(latest_attempt.participant_name,''), ' ', COALESCE(ae.name,''))) LIKE $${params.length}`,
-      );
-    }
-
-    const dateFilter = buildIstanbulDateFilterSql("b.best_recorded_at", period);
-    const joinSql = `
-      FROM exam_portal_best_scores b
-      LEFT JOIN normal_user_details d ON d.national_id = b.national_id
-      LEFT JOIN approved_educations ae ON UPPER(TRIM(ae.code)) = UPPER(TRIM(b.education_code))
-      LEFT JOIN LATERAL (
-        SELECT TRIM(participant_name) AS participant_name
-        FROM exam_attempts ea
-        WHERE UPPER(TRIM(ea.education_code)) = UPPER(TRIM(b.education_code))
-          AND ea.national_id = b.national_id
-          AND ea.status = 'completed'
-          AND ea.participant_name IS NOT NULL
-          AND TRIM(ea.participant_name) <> ''
-        ORDER BY ea.submitted_at DESC NULLS LAST, ea.started_at DESC
-        LIMIT 1
-      ) latest_attempt ON TRUE
-    `;
-    const whereSql = `WHERE ${conditions.join(" AND ")}${dateFilter}`;
-    const countSql = `SELECT COUNT(*)::int AS total ${joinSql} ${whereSql}`;
-    const listSql = `SELECT b.*,
-            COALESCE(NULLIF(TRIM(b.participant_name), ''), NULLIF(TRIM(latest_attempt.participant_name), ''), '') AS participant_name,
-            COALESCE(ae.name, '') AS education_name
-     ${joinSql}
-     ${whereSql}
-     ORDER BY b.best_recorded_at DESC
-     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-    const [countResult, listResult] = await Promise.all([
-      pool.query(countSql, params),
-      pool.query(listSql, [...params, pageSize, offset]),
-    ]);
+    const { total, rows } = await fetchCertificateListRows({ search: searchRaw, period, page, pageSize });
     return res.json({
-      data: listResult.rows.map((row) => {
-        const api = toApiObject(row);
-        return {
-          ...api,
-          participantName: String(row.participant_name || "").trim(),
-          educationName: String(row.education_name || "").trim(),
-          documentNumber: String(row.document_number || api.documentNumber || "").trim() || null,
-          certificateEligible: true,
-        };
-      }),
+      data: rows,
       pagination: {
         page,
         pageSize,
-        total: countResult.rows[0].total,
-        totalPages: Math.max(1, Math.ceil(countResult.rows[0].total / pageSize)),
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
       },
     });
   } catch (error) {

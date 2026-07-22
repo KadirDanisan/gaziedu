@@ -1,4 +1,83 @@
 import pool from "../../db/pool.js";
+import { parseDateRangePeriod, buildIstanbulDateFilterSql } from "../../utils/dateRange.js";
+import { toApiObject } from "../../utils/apiTransform.js";
+
+const certificateListJoinSql = `
+  FROM exam_portal_best_scores b
+  LEFT JOIN normal_user_details d ON d.national_id = b.national_id
+  LEFT JOIN approved_educations ae ON UPPER(TRIM(ae.code)) = UPPER(TRIM(b.education_code))
+  LEFT JOIN LATERAL (
+    SELECT TRIM(participant_name) AS participant_name
+    FROM exam_attempts ea
+    WHERE UPPER(TRIM(ea.education_code)) = UPPER(TRIM(b.education_code))
+      AND ea.national_id = b.national_id
+      AND ea.status = 'completed'
+      AND ea.participant_name IS NOT NULL
+      AND TRIM(ea.participant_name) <> ''
+    ORDER BY ea.submitted_at DESC NULLS LAST, ea.started_at DESC
+    LIMIT 1
+  ) latest_attempt ON TRUE
+`;
+
+const buildCertificateListFilters = (searchRaw, period) => {
+  const params = [];
+  const conditions = ["b.payment_received = TRUE", "b.best_score >= 60"];
+
+  if (searchRaw) {
+    params.push(`%${searchRaw.toLowerCase()}%`);
+    conditions.push(
+      `LOWER(CONCAT(COALESCE(b.education_code,''), ' ', COALESCE(b.national_id,''), ' ', COALESCE(b.participant_name,''), ' ', COALESCE(latest_attempt.participant_name,''), ' ', COALESCE(ae.name,''))) LIKE $${params.length}`,
+    );
+  }
+
+  const dateFilter = buildIstanbulDateFilterSql("b.best_recorded_at", parseDateRangePeriod(period));
+  return {
+    params,
+    whereSql: `WHERE ${conditions.join(" AND ")}${dateFilter}`,
+  };
+};
+
+const mapCertificateListRow = (row) => {
+  const api = toApiObject(row);
+  return {
+    ...api,
+    participantName: String(row.participant_name || "").trim(),
+    educationName: String(row.education_name || "").trim(),
+    documentNumber: String(row.document_number || api.documentNumber || "").trim() || null,
+    certificateEligible: true,
+  };
+};
+
+const fetchCertificateListRows = async ({ search = "", period = "all", page, pageSize }) => {
+  const searchRaw = String(search || "").trim();
+  const { params, whereSql } = buildCertificateListFilters(searchRaw, period);
+
+  const countSql = `SELECT COUNT(*)::int AS total ${certificateListJoinSql} ${whereSql}`;
+  const countResult = await pool.query(countSql, params);
+  const total = countResult.rows[0]?.total || 0;
+
+  let listSql = `SELECT b.*,
+            COALESCE(NULLIF(TRIM(b.participant_name), ''), NULLIF(TRIM(latest_attempt.participant_name), ''), '') AS participant_name,
+            COALESCE(ae.name, '') AS education_name
+     ${certificateListJoinSql}
+     ${whereSql}
+     ORDER BY b.best_recorded_at DESC, b.education_code ASC, b.national_id ASC`;
+
+  const listParams = [...params];
+  if (page != null && pageSize != null) {
+    const safePage = Math.max(1, Number(page) || 1);
+    const safePageSize = Math.max(1, Number(pageSize) || 20);
+    const offset = (safePage - 1) * safePageSize;
+    listSql += ` LIMIT $${listParams.length + 1} OFFSET $${listParams.length + 2}`;
+    listParams.push(safePageSize, offset);
+  }
+
+  const listResult = await pool.query(listSql, listParams);
+  return {
+    total,
+    rows: listResult.rows.map(mapCertificateListRow),
+  };
+};
 
 const fetchCertificateRowContext = async (id) => {
   const result = await pool.query(
@@ -51,4 +130,4 @@ const fetchCertificateRowContext = async (id) => {
   return result.rows[0] || null;
 };
 
-export { fetchCertificateRowContext };
+export { fetchCertificateRowContext, fetchCertificateListRows };
