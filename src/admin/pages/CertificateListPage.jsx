@@ -19,11 +19,59 @@ const formatIstanbul = (value) => {
   }).format(date);
 };
 
+function EdevletProcessedPill({ processed, interactive, busy, onRequestConfirm }) {
+  const track = (
+    <span
+      className={`exam-results-payment-pill__track ${
+        processed ? "exam-results-payment-pill__track--evet" : "exam-results-payment-pill__track--hayir"
+      }`}
+    >
+      <span className="exam-results-payment-pill__halo" aria-hidden="true">
+        <span>Hayır</span>
+        <span>Evet</span>
+      </span>
+      <span
+        className={`exam-results-payment-pill__thumb ${
+          processed ? "exam-results-payment-pill__thumb--yes" : "exam-results-payment-pill__thumb--no"
+        }`}
+      >
+        {processed ? "Evet" : "Hayır"}
+      </span>
+    </span>
+  );
+
+  if (interactive) {
+    return (
+      <button
+        type="button"
+        className="exam-results-payment-pill"
+        disabled={busy}
+        onClick={onRequestConfirm}
+        aria-label="E-devlete işlendi bilgisini güncelle"
+        aria-busy={busy}
+      >
+        {track}
+      </button>
+    );
+  }
+
+  return (
+    <span
+      className="exam-results-payment-pill exam-results-payment-pill--static"
+      role="status"
+      aria-label={processed ? "E-devlete işlendi: Evet" : "E-devlete işlendi: Hayır"}
+    >
+      {track}
+    </span>
+  );
+}
+
 export default function CertificateListPage() {
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [period, setPeriod] = useState(DEFAULT_DATE_RANGE_PERIOD);
+  const [completion, setCompletion] = useState("all");
   const [rows, setRows] = useState([]);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -34,6 +82,10 @@ export default function CertificateListPage() {
   const [exportingEdevlet, setExportingEdevlet] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [selectingAll, setSelectingAll] = useState(false);
+  const [busyEdevletId, setBusyEdevletId] = useState("");
+  const [edevletConfirmId, setEdevletConfirmId] = useState(null);
+  const [excelExportConfirm, setExcelExportConfirm] = useState(null);
+  const [bulkPdfProgress, setBulkPdfProgress] = useState(null);
 
   const runSearch = () => {
     setSearch(searchInput.trim());
@@ -45,7 +97,7 @@ export default function CertificateListPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await adminApi.getCertificateList({ page, search, period });
+      const res = await adminApi.getCertificateList({ page, search, period, completion });
       setRows(res.data || []);
       setTotalPages(res.pagination?.totalPages || 1);
       setTotal(res.pagination?.total || 0);
@@ -54,7 +106,7 @@ export default function CertificateListPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, period]);
+  }, [page, search, period, completion]);
 
   useEffect(() => {
     load();
@@ -96,7 +148,7 @@ export default function CertificateListPage() {
     setSelectingAll(true);
     setError("");
     try {
-      const res = await adminApi.getCertificateListEdevletExport({ search, period });
+      const res = await adminApi.getCertificateListEdevletExport({ search, period, completion });
       const exportRows = res.data || [];
       setSelectedIds(new Set(exportRows.map((row) => String(row.id))));
       if (!exportRows.length) {
@@ -125,13 +177,43 @@ export default function CertificateListPage() {
       setError("Excel için en az bir kayıt seçin.");
       return;
     }
+    setError("");
+    try {
+      const res = await adminApi.getCertificateListEdevletExport({ search, period, completion });
+      const selectedRows = (res.data || []).filter((row) => selectedIds.has(String(row.id)));
+      if (!selectedRows.length) {
+        setError("Seçili kayıtlardan dışa aktarılacak veri bulunamadı. Filtreyi veya seçimi kontrol edin.");
+        return;
+      }
+      const alreadyExported = selectedRows.filter((row) => row.edevletExcelExported);
+      const pendingRows = selectedRows.filter((row) => !row.edevletExcelExported);
+      if (!pendingRows.length) {
+        setError("Seçili kayıtların tümü daha önce Excel raporuna alınmış. Yeni satır oluşturulmaz.");
+        return;
+      }
+      setExcelExportConfirm({
+        pendingIds: pendingRows.map((row) => String(row.id)),
+        skippedCount: alreadyExported.length,
+        pendingCount: pendingRows.length,
+      });
+    } catch (e) {
+      setError(e.message || "E-devlet Excel dosyası oluşturulamadı.");
+    }
+  };
+
+  const confirmExportEdevletExcel = async () => {
+    if (!excelExportConfirm?.pendingIds?.length) {
+      setExcelExportConfirm(null);
+      return;
+    }
     setExportingEdevlet(true);
     setError("");
     try {
-      const res = await adminApi.getCertificateListEdevletExport({ search, period });
-      const exportRows = (res.data || []).filter((row) => selectedIds.has(String(row.id)));
+      const prepared = await adminApi.prepareCertificateListEdevletExport(excelExportConfirm.pendingIds);
+      const exportRows = prepared.rows || [];
       if (!exportRows.length) {
-        setError("Seçili kayıtlardan dışa aktarılacak veri bulunamadı. Filtreyi veya seçimi kontrol edin.");
+        setError("Dışa aktarılacak yeni kayıt kalmadı (daha önce Excel raporu oluşturulmuş olabilir).");
+        setExcelExportConfirm(null);
         return;
       }
       const stamp = new Intl.DateTimeFormat("en-CA", {
@@ -141,6 +223,9 @@ export default function CertificateListPage() {
         day: "2-digit",
       }).format(new Date());
       downloadEdevletCertificateExcel(exportRows, `edevlet-sertifika-${stamp}.xlsx`);
+      setExcelExportConfirm(null);
+      setSelectedIds(new Set());
+      await load();
     } catch (e) {
       setError(e.message || "E-devlet Excel dosyası oluşturulamadı.");
     } finally {
@@ -150,6 +235,11 @@ export default function CertificateListPage() {
 
   const handleGenerateCertificate = async () => {
     if (!confirmRow?.id) return;
+    if (confirmRow.edevletProcessed) {
+      setError("Bu sertifika E-devlete işlenmiş. Tekrar hazırlanamaz.");
+      setConfirmRow(null);
+      return;
+    }
     setGeneratingId(confirmRow.id);
     setError("");
     try {
@@ -164,29 +254,106 @@ export default function CertificateListPage() {
     }
   };
 
+  const handleBulkDownloadCertificates = async () => {
+    if (!selectedCount) {
+      setError("Toplu sertifika için en az bir kayıt seçin.");
+      return;
+    }
+    setError("");
+    const ids = [...selectedIds];
+    setBulkPdfProgress({ current: 0, total: ids.length, label: "Sunucuda PDF’ler hazırlanıyor…" });
+    try {
+      const { blob, fileName, successCount, failedCount, skippedCount, summary } =
+        await adminApi.downloadCertificateBulkZip(ids);
+      downloadBlob(blob, fileName || "24-07.zip");
+      await load();
+
+      const notes = [];
+      if (skippedCount) notes.push(`${skippedCount} kayıt E-devlete işlendiği için atlandı`);
+      if (failedCount) {
+        const detail = (summary?.failures || [])
+          .slice(0, 2)
+          .map((item) => item.message)
+          .filter(Boolean)
+          .join(" · ");
+        notes.push(detail ? `${failedCount} kayıtta hata: ${detail}` : `${failedCount} kayıtta hata oluştu`);
+      }
+      if (notes.length) {
+        setError(`Toplu indirme tamamlandı (${successCount} PDF). ${notes.join("; ")}.`);
+      }
+    } catch (e) {
+      setError(e.message || "Toplu sertifika indirilemedi.");
+    } finally {
+      setBulkPdfProgress(null);
+    }
+  };
+
+  const submitEdevletProcessed = async () => {
+    const id = edevletConfirmId;
+    if (!id) return;
+    setBusyEdevletId(id);
+    setError("");
+    try {
+      await adminApi.markCertificateEdevletProcessed(id);
+      setEdevletConfirmId(null);
+      await load();
+    } catch (e) {
+      setError(e.message || "E-devlet durumu güncellenemedi.");
+    } finally {
+      setBusyEdevletId("");
+    }
+  };
+
   return (
     <section className="admin-page">
       <div className="admin-page-head">
         <div>
           <h2>Sertifika Çıkartma Sistemi</h2>
           <p>
-            Ödemesi alınmış ve sınavdan en az 60 puan almış katılımcılar. Her satır için{" "}
-            <strong>Sertifika Hazırla</strong> ile GUZEM başarı sertifikası PDF olarak oluşturulur (ad, T.C.,
-            eğitim bilgileri, belge numarası ve tamamlama metni).
+            Ödemesi alınmış ve sınavdan en az 60 puan almış katılımcılar. E-devlete işlenen kayıtlar için{" "}
+            <strong>Sertifika Hazırla</strong> kilitlenir.
           </p>
         </div>
-        <button
-          type="button"
-          className="btn btn-outline"
-          onClick={handleExportEdevletExcel}
-          disabled={loading || exportingEdevlet || selectingAll || Boolean(generatingId) || !selectedCount}
-        >
-          {exportingEdevlet
-            ? "Excel hazırlanıyor…"
-            : selectedCount
-              ? `E-devlet işlem excel çıkart (${selectedCount})`
-              : "E-devlet işlem excel çıkart"}
-        </button>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}>
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={handleBulkDownloadCertificates}
+            disabled={
+              loading ||
+              exportingEdevlet ||
+              selectingAll ||
+              Boolean(generatingId) ||
+              Boolean(bulkPdfProgress) ||
+              !selectedCount
+            }
+          >
+            {bulkPdfProgress
+              ? "Toplu sertifika hazırlanıyor…"
+              : selectedCount
+                ? `Toplu sertifika indir (${selectedCount})`
+                : "Toplu sertifika indir"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={handleExportEdevletExcel}
+            disabled={
+              loading ||
+              exportingEdevlet ||
+              selectingAll ||
+              Boolean(generatingId) ||
+              Boolean(bulkPdfProgress) ||
+              !selectedCount
+            }
+          >
+            {exportingEdevlet
+              ? "Excel hazırlanıyor…"
+              : selectedCount
+                ? `E-devlet işlem excel çıkart (${selectedCount})`
+                : "E-devlet işlem excel çıkart"}
+          </button>
+        </div>
       </div>
 
       <div className="admin-table-tools admin-table-tools--stacked">
@@ -209,17 +376,27 @@ export default function CertificateListPage() {
           <button type="button" className="btn btn-outline" onClick={runSearch}>
             Ara
           </button>
+          <select
+            value={completion}
+            disabled={loading}
+            onChange={(e) => {
+              setCompletion(e.target.value);
+              setPage(1);
+              setSelectedIds(new Set());
+            }}
+            aria-label="Sertifika tamamlanma filtresi"
+          >
+            <option value="all">Tümü</option>
+            <option value="completed">Tamamlanan sertifikalar</option>
+            <option value="incomplete">Tamamlanmamış sertifikalar</option>
+          </select>
           <button
             type="button"
             className="btn btn-outline"
             onClick={handleSelectAllFiltered}
             disabled={loading || selectingAll || Boolean(generatingId) || total === 0}
           >
-            {selectingAll
-              ? "Seçiliyor…"
-              : allFilteredSelected
-                ? "Seçimi kaldır"
-                : "Tümünü seç"}
+            {selectingAll ? "Seçiliyor…" : allFilteredSelected ? "Seçimi kaldır" : "Tümünü seç"}
           </button>
           {selectedCount ? (
             <span style={{ fontSize: 13, color: "#475569" }}>
@@ -237,7 +414,7 @@ export default function CertificateListPage() {
         <div className="admin-empty-state">
           <i className="fa-solid fa-certificate" />
           <h3>Kayıt bulunamadı</h3>
-          <p>Seçili tarih aralığında veya arama kriterinde sertifikaya hak kazanan ödenmiş kayıt yok.</p>
+          <p>Seçili tarih aralığında, arama veya tamamlanma filtresinde kayıt yok.</p>
         </div>
       ) : !loading ? (
         <>
@@ -265,6 +442,7 @@ export default function CertificateListPage() {
                   <th>En yüksek puan tarihi</th>
                   <th>Sertifika no</th>
                   <th>Ödeme</th>
+                  <th>E-devlete işlendi</th>
                   <th />
                 </tr>
               </thead>
@@ -272,6 +450,7 @@ export default function CertificateListPage() {
                 {rows.map((row) => {
                   const id = String(row.id);
                   const checked = selectedIds.has(id);
+                  const processed = Boolean(row.edevletProcessed);
                   return (
                     <tr key={id}>
                       <td>
@@ -295,13 +474,22 @@ export default function CertificateListPage() {
                         <span style={{ color: "#15803d", fontWeight: 600 }}>Evet</span>
                       </td>
                       <td>
+                        <EdevletProcessedPill
+                          processed={processed}
+                          interactive={!processed}
+                          busy={busyEdevletId === row.id}
+                          onRequestConfirm={() => setEdevletConfirmId(row.id)}
+                        />
+                      </td>
+                      <td>
                         <button
                           type="button"
                           className="btn btn-outline"
-                          disabled={Boolean(generatingId)}
+                          disabled={Boolean(generatingId) || processed}
+                          title={processed ? "E-devlete işlenmiş; tekrar hazırlanamaz" : "Sertifika PDF hazırla"}
                           onClick={() => setConfirmRow(row)}
                         >
-                          Sertifika Hazırla
+                          {processed ? "Tamamlandı" : "Sertifika Hazırla"}
                         </button>
                       </td>
                     </tr>
@@ -318,7 +506,12 @@ export default function CertificateListPage() {
               <span>
                 Sayfa {page} / {totalPages}
               </span>
-              <button type="button" className="btn btn-outline" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
                 Sonraki
               </button>
             </div>
@@ -377,6 +570,122 @@ export default function CertificateListPage() {
                   disabled={Boolean(generatingId)}
                 >
                   {generatingId ? "Oluşturuluyor…" : "Evet, oluştur"}
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      ) : null}
+
+      {edevletConfirmId ? (
+        <div
+          className="admin-modal-backdrop"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !busyEdevletId) setEdevletConfirmId(null);
+          }}
+        >
+          <div
+            className="admin-modal admin-modal--confirm"
+            style={{ maxWidth: 420, width: "min(420px, 94vw)" }}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="certificate-edevlet-confirm-title"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <header className="admin-modal__header admin-modal__header--confirm">
+              <div className="admin-modal__confirm-icon" aria-hidden="true">
+                <i className="fa-solid fa-building-columns" style={{ fontSize: "1.5rem", color: "#0d47a1" }} />
+              </div>
+              <div className="admin-modal__header-text">
+                <h3 id="certificate-edevlet-confirm-title" className="admin-modal__title">
+                  E-devlet onayı
+                </h3>
+                <p className="admin-modal__subtitle admin-modal__subtitle--dense">
+                  Sertifika E-devlete işlendi olarak işaretlensin mi? Onayladığınızda kayıt tamamlanır ve sertifika
+                  tekrar hazırlanamaz.
+                </p>
+              </div>
+            </header>
+            <footer className="admin-modal__footer">
+              <div className="admin-modal-actions admin-modal-actions--stretch">
+                <button
+                  type="button"
+                  className="btn btn-outline btn--modal-secondary"
+                  onClick={() => setEdevletConfirmId(null)}
+                  disabled={Boolean(busyEdevletId)}
+                >
+                  Hayır
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--success-fill"
+                  onClick={submitEdevletProcessed}
+                  disabled={Boolean(busyEdevletId)}
+                >
+                  {busyEdevletId ? "…" : "Evet"}
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      ) : null}
+
+      {excelExportConfirm ? (
+        <div
+          className="admin-modal-backdrop"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !exportingEdevlet) setExcelExportConfirm(null);
+          }}
+        >
+          <div
+            className="admin-modal admin-modal--confirm"
+            style={{ maxWidth: 480, width: "min(480px, 94vw)" }}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="certificate-excel-export-title"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <header className="admin-modal__header admin-modal__header--confirm">
+              <div className="admin-modal__confirm-icon" aria-hidden="true">
+                <i className="fa-solid fa-file-excel" style={{ fontSize: "1.5rem", color: "#0d47a1" }} />
+              </div>
+              <div className="admin-modal__header-text">
+                <h3 id="certificate-excel-export-title" className="admin-modal__title">
+                  E-devlet Excel çıkart
+                </h3>
+                <p className="admin-modal__subtitle admin-modal__subtitle--dense">
+                  {excelExportConfirm.skippedCount > 0 ? (
+                    <>
+                      Daha önce Excel raporu oluşturduğunuz <strong>{excelExportConfirm.skippedCount}</strong> kayıt
+                      listenizden çıkartılacak; yeni ID verilmeyecek.
+                      <br />
+                      <br />
+                    </>
+                  ) : null}
+                  Excel&apos;e <strong>{excelExportConfirm.pendingCount}</strong> yeni kayıt eklenecek. Devam etmek
+                  istiyor musunuz?
+                </p>
+              </div>
+            </header>
+            <footer className="admin-modal__footer">
+              <div className="admin-modal-actions admin-modal-actions--stretch">
+                <button
+                  type="button"
+                  className="btn btn-outline btn--modal-secondary"
+                  onClick={() => setExcelExportConfirm(null)}
+                  disabled={exportingEdevlet}
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--modal-primary"
+                  onClick={confirmExportEdevletExcel}
+                  disabled={exportingEdevlet}
+                >
+                  {exportingEdevlet ? "Excel hazırlanıyor…" : "Evet, Excel çıkart"}
                 </button>
               </div>
             </footer>

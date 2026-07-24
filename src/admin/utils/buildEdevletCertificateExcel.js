@@ -1,5 +1,14 @@
 import * as XLSX from "xlsx";
 
+const NULL_CELL = "NULL";
+
+const cell = (value) => {
+  const safe = value == null ? "" : String(value).trim();
+  return safe === "" ? NULL_CELL : safe;
+};
+
+const toTrUpper = (value) => String(value || "").trim().toLocaleUpperCase("tr-TR");
+
 const splitParticipantName = (fullName) => {
   const safe = String(fullName || "").trim();
   if (!safe) return { firstName: "", lastName: "" };
@@ -30,15 +39,15 @@ const formatEdevletDate = (value) => {
   return `${parts.year}-${parts.month}-${parts.day} 00:00:00.000`;
 };
 
-/** Excel indirme tarihinden: GZM-26 (yıl) ve GZMS-22-07 (gün-ay) */
+/** Excel indirme tarihinden: GZM-26 ve 24-07 */
 const buildExportDateCodes = (exportDate = new Date()) => {
   const parts = getIstanbulDateParts(exportDate);
   if (!parts?.year || !parts?.month || !parts?.day) {
-    return { gzmYearCode: "", gzmsDayMonthCode: "" };
+    return { gzmYearCode: "", dayMonthCode: "" };
   }
   return {
     gzmYearCode: `GZM-${parts.year.slice(-2)}`,
-    gzmsDayMonthCode: `GZMS-${parts.day}-${parts.month}`,
+    dayMonthCode: `${parts.day}-${parts.month}`,
   };
 };
 
@@ -49,51 +58,58 @@ const buildBarcodePayload = (documentNumber, nationalId) => {
   return `barkodlubelgedogrulama://barkod: ${barkod};tckn:${tckn}`;
 };
 
-const NULL_CELL = "NULL";
+/** UN_041243C00006 → 00006 */
+const extractDocumentSerialAfterC = (documentNumber) => {
+  const match = String(documentNumber || "").trim().match(/C(\d+)\s*$/i);
+  return match?.[1] || "";
+};
 
-const cell = (value) => {
-  const safe = value == null ? "" : String(value).trim();
-  return safe === "" ? NULL_CELL : safe;
+/** GZM-1-27-02 + 00006 → GZM-1-27-02-00006 */
+const buildEducationSerialCode = (educationCode, documentNumber) => {
+  const code = String(educationCode || "").trim();
+  const serial = extractDocumentSerialAfterC(documentNumber);
+  if (!code || !serial) return "";
+  return `${code}-${serial}`;
 };
 
 export const buildEdevletCertificateRows = (rows = [], exportDate = new Date()) => {
-  const { gzmYearCode, gzmsDayMonthCode } = buildExportDateCodes(exportDate);
+  const { gzmYearCode, dayMonthCode } = buildExportDateCodes(exportDate);
 
-  return rows.map((row, index) => {
+  return rows.map((row) => {
     const educationCode = String(row.educationCode || "").trim();
     const { firstName, lastName } = splitParticipantName(row.participantName);
     const documentNumber = String(row.documentNumber || "").trim();
     const nationalId = String(row.nationalId || "").replace(/\D/g, "");
-    const sequence = index + 1;
-    // örn: GZM-26/GZMS-22-07/GZMS-22-07_1
+    const excelRowId = row.edevletExcelRowId != null ? String(row.edevletExcelRowId) : "";
+    const excelUuid = String(row.edevletExcelUuid || "").trim().toUpperCase();
+    const educationSerialCode = buildEducationSerialCode(educationCode, documentNumber);
+    // T: GZM-26/24-07/32344884916
     const filePath =
-      gzmYearCode && gzmsDayMonthCode
-        ? `${gzmYearCode}/${gzmsDayMonthCode}/${gzmsDayMonthCode}_${sequence}`
-        : "";
+      gzmYearCode && dayMonthCode && nationalId ? `${gzmYearCode}/${dayMonthCode}/${nationalId}` : "";
 
     return [
-      NULL_CELL,
-      "C",
-      NULL_CELL,
-      NULL_CELL,
-      cell(row.educationName),
-      cell(gzmYearCode),
-      NULL_CELL,
-      NULL_CELL,
-      cell(firstName),
-      cell(lastName),
-      NULL_CELL,
-      cell(nationalId),
-      cell(formatEdevletDate(row.bestRecordedAt)),
-      NULL_CELL,
-      cell(educationCode),
-      NULL_CELL,
-      cell(documentNumber),
-      cell(buildBarcodePayload(documentNumber, nationalId)),
-      cell(gzmsDayMonthCode),
-      cell(filePath),
-      NULL_CELL,
-      "True",
+      cell(excelRowId), // A
+      "C", // B
+      cell(excelUuid), // C
+      NULL_CELL, // D
+      cell(row.educationName), // E
+      cell(educationCode), // F — eğitim kodu
+      NULL_CELL, // G
+      NULL_CELL, // H
+      cell(toTrUpper(firstName)), // I
+      cell(toTrUpper(lastName)), // J
+      NULL_CELL, // K
+      cell(nationalId), // L
+      cell(formatEdevletDate(row.bestRecordedAt)), // M
+      cell(educationSerialCode), // N — GZM-1-27-02-00006
+      NULL_CELL, // O
+      NULL_CELL, // P
+      cell(documentNumber), // Q
+      cell(buildBarcodePayload(documentNumber, nationalId)), // R
+      cell(dayMonthCode), // S — 24-07
+      cell(filePath), // T — GZM-26/24-07/TC
+      NULL_CELL, // U
+      "True", // V
     ];
   });
 };

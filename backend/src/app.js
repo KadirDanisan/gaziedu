@@ -7,7 +7,17 @@ import errorHandler from "./middleware/errorHandler.js";
 
 const app = express();
 
-app.use(cors());
+app.use(
+  cors({
+    exposedHeaders: [
+      "Content-Disposition",
+      "X-Bulk-Success-Count",
+      "X-Bulk-Failed-Count",
+      "X-Bulk-Skipped-Count",
+      "X-Bulk-Summary",
+    ],
+  }),
+);
 app.use(express.json());
 app.use("/uploads", express.static(uploadsDir));
 

@@ -12,7 +12,9 @@ async function request(path, options = {}) {
 
   const data = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(data?.message || "Bir hata oluştu.");
+    const error = new Error(data?.message || "Bir hata oluştu.");
+    if (data?.code) error.code = data.code;
+    throw error;
   }
   return data;
 }

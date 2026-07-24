@@ -467,6 +467,16 @@ const migrateCertificateListPermissions = async () => {
   `);
 };
 
+const migrateExamSuccessPaymentsPermissions = async () => {
+  await pool.query(`
+    INSERT INTO permissions (role_id, module_name, can_view, can_create, can_update, can_delete)
+    SELECT r.id, 'examSuccessPayments', p.can_view, FALSE, p.can_update, FALSE
+    FROM roles r
+    INNER JOIN permissions p ON p.role_id = r.id AND p.module_name = 'examResults'
+    ON CONFLICT (role_id, module_name) DO NOTHING
+  `);
+};
+
 const migrateExamQuestionSettingsColumns = async () => {
   await pool.query(`ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS exam_target_difficulty TEXT NOT NULL DEFAULT 'medium'`);
   await pool.query(`ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS exam_question_count INT NOT NULL DEFAULT 20`);
@@ -589,6 +599,55 @@ const migrateCertificateSerialNumbers = async () => {
   `);
 };
 
+const migrateCertificateEdevletProcessed = async () => {
+  await pool.query(
+    `ALTER TABLE exam_portal_best_scores ADD COLUMN IF NOT EXISTS edevlet_processed BOOLEAN NOT NULL DEFAULT FALSE`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS exam_portal_best_scores_edevlet_processed_idx
+     ON exam_portal_best_scores (edevlet_processed)`,
+  );
+};
+
+/** A kolonu ID sayacı (4000000…); seed=4000003 → sonraki export 4000004 */
+const migrateEdevletExcelExportState = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS edevlet_excel_serial_state (
+      id INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      last_serial BIGINT NOT NULL DEFAULT 4000003,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    INSERT INTO edevlet_excel_serial_state (id, last_serial)
+    VALUES (1, 4000003)
+    ON CONFLICT (id) DO NOTHING
+  `);
+  await pool.query(
+    `ALTER TABLE exam_portal_best_scores ADD COLUMN IF NOT EXISTS edevlet_excel_exported BOOLEAN NOT NULL DEFAULT FALSE`,
+  );
+  await pool.query(
+    `ALTER TABLE exam_portal_best_scores ADD COLUMN IF NOT EXISTS edevlet_excel_row_id BIGINT`,
+  );
+  await pool.query(
+    `ALTER TABLE exam_portal_best_scores ADD COLUMN IF NOT EXISTS edevlet_excel_uuid TEXT`,
+  );
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS exam_portal_best_scores_edevlet_excel_row_id_unique
+      ON exam_portal_best_scores (edevlet_excel_row_id)
+      WHERE edevlet_excel_row_id IS NOT NULL
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS exam_portal_best_scores_edevlet_excel_uuid_unique
+      ON exam_portal_best_scores (edevlet_excel_uuid)
+      WHERE edevlet_excel_uuid IS NOT NULL
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS exam_portal_best_scores_edevlet_excel_exported_idx
+      ON exam_portal_best_scores (edevlet_excel_exported)
+  `);
+};
+
 export {
   migrateContactFormTimestampsToIstanbul,
   migrateInstitutionCodeColumn,
@@ -614,11 +673,14 @@ export {
   migrateExamPortalAccessPermissions,
   migrateExamResultsPermissions,
   migrateCertificateListPermissions,
+  migrateExamSuccessPaymentsPermissions,
   migrateExamQuestionSettingsColumns,
   migrateEducationContentModules,
   migrateAdminMessagingTables,
   migrateAdminMessagingPermissions,
   migrateCertificateSerialNumbers,
+  migrateCertificateEdevletProcessed,
+  migrateEdevletExcelExportState,
 };
 
 export const migrations = [
@@ -644,10 +706,13 @@ export const migrations = [
   migrateExamPortalAccessPermissions,
   migrateExamResultsPermissions,
   migrateCertificateListPermissions,
+  migrateExamSuccessPaymentsPermissions,
   migrateExamQuestionSettingsColumns,
   migrateEducationContentModules,
   migrateAdminMessagingTables,
   migrateAdminMessagingPermissions,
   migrateCertificateSerialNumbers,
+  migrateCertificateEdevletProcessed,
+  migrateEdevletExcelExportState,
   migrateContactFormTimestampsToIstanbul,
 ];

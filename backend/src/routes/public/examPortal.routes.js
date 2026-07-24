@@ -2,7 +2,6 @@ import { Router } from "express";
 import pool from "../../db/pool.js";
 import { verifyExamPortalLink } from "../../examPortalLinkToken.js";
 import { toApiObject } from "../../utils/apiTransform.js";
-import { EXAM_PORTAL_MAX_STARTS } from "../../db/migrations/index.js";
 import {
   normalizeExamQuestionPool,
   pickExamQuestions,
@@ -10,18 +9,25 @@ import {
   gradeExamAttempt,
 } from "../../services/exam/engine.js";
 import { EXAM_SECONDS_PER_QUESTION } from "../../services/exam/constants.js";
-import { upsertExamPortalBestScore } from "../../services/exam/portal.js";
+import { upsertExamPortalBestScore, getExamPortalAccessState } from "../../services/exam/portal.js";
 
 const router = Router();
+
+const LIMIT_EXCEEDED_MESSAGE =
+  "5 oturum hakkınız dolmuştur. Kurumla iletişime geçiniz.";
+const ALREADY_PASSED_MESSAGE =
+  "Bu eğitim için sınavdan başarıyla geçtiniz. Tekrar girmenize gerek yoktur.";
 
 router.post("/api/public/exam-portal/validate-token", async (req, res, next) => {
   try {
     const portalToken = String(req.body?.portalToken || "").trim();
     const out = verifyExamPortalLink(portalToken);
+    const access = await getExamPortalAccessState(out.educationCode, out.nationalId);
     return res.json({
       educationCode: out.educationCode,
       nationalId: out.nationalId,
       participantName: out.participantName,
+      ...access,
     });
   } catch (error) {
     const status = error.statusCode || 400;
@@ -83,14 +89,19 @@ router.post("/api/public/exam-portal/start", async (req, res, next) => {
       return res.status(status).json({ message: e.message || "Geçersiz bağlantı." });
     }
 
-    const attemptsCheck = await pool.query(
-      `SELECT COUNT(*)::int AS c FROM exam_attempts WHERE UPPER(TRIM(education_code)) = $1 AND national_id = $2`,
-      [educationCode, nationalId],
-    );
-
-    if (Number(attemptsCheck.rows[0]?.c || 0) >= EXAM_PORTAL_MAX_STARTS) {
+    const access = await getExamPortalAccessState(educationCode, nationalId);
+    if (access.alreadyPassed) {
       return res.status(403).json({
-        message: `Bu eğitim (${educationCode}) için sınav başlatma hakkınız doldu (en fazla ${EXAM_PORTAL_MAX_STARTS} oturum).`,
+        code: "ALREADY_PASSED",
+        message: ALREADY_PASSED_MESSAGE,
+        ...access,
+      });
+    }
+    if (access.limitExceeded) {
+      return res.status(403).json({
+        code: "LIMIT_EXCEEDED",
+        message: LIMIT_EXCEEDED_MESSAGE,
+        ...access,
       });
     }
 
@@ -157,6 +168,7 @@ router.post("/api/public/exam-portal/start", async (req, res, next) => {
       ],
     );
     const attempt = attemptResult.rows[0];
+    const afterStart = await getExamPortalAccessState(educationCode, nationalId);
 
     return res.status(201).json({
       attemptId: attempt.id,
@@ -170,6 +182,7 @@ router.post("/api/public/exam-portal/start", async (req, res, next) => {
       },
       questionCount: selectedQuestions.length,
       questions: selectedQuestions.map(publicExamQuestion),
+      ...afterStart,
     });
   } catch (error) {
     next(error);
@@ -191,6 +204,7 @@ router.post("/api/public/exam-portal/:attemptId/submit", async (req, res, next) 
     const previous = previousResult.rows[0];
     if (!previous) return res.status(404).json({ message: "Sınav oturumu bulunamadı." });
     if (previous.status === "completed") {
+      const access = await getExamPortalAccessState(previous.education_code, previous.national_id);
       return res.json({
         attemptId: previous.id,
         status: previous.status,
@@ -199,6 +213,8 @@ router.post("/api/public/exam-portal/:attemptId/submit", async (req, res, next) 
         blankCount: previous.blank_count,
         score: Number(previous.score),
         durationSeconds: previous.duration_seconds,
+        passed: Number(previous.score) >= 60,
+        ...access,
       });
     }
 
@@ -243,6 +259,7 @@ router.post("/api/public/exam-portal/:attemptId/submit", async (req, res, next) 
       attemptScore: graded.score,
       participantName: previous.participant_name,
     });
+    const access = await getExamPortalAccessState(previous.education_code, previous.national_id);
     return res.json({
       attemptId: row.id,
       status: row.status,
@@ -252,6 +269,8 @@ router.post("/api/public/exam-portal/:attemptId/submit", async (req, res, next) 
       score: Number(row.score),
       durationSeconds: row.duration_seconds,
       submittedAt: row.submitted_at,
+      passed: Number(row.score) >= 60,
+      ...access,
     });
   } catch (error) {
     next(error);

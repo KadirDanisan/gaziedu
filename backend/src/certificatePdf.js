@@ -49,8 +49,8 @@ const LAYOUT = {
       valueX: 464,
       trSize: 8,
       enSize: 6,
-      trCharLimit: 50,
-      enCharLimit: 65,
+      trCharLimit: 75,
+      enCharLimit: 90,
       lineHeight: 11,
       enLineHeight: 9,
       enGap: 2,
@@ -583,9 +583,8 @@ export async function buildCertificatePdf(data) {
   );
 
   const pdfBytes = await pdfDoc.save({ useObjectStreams: false });
-  const safeCode = (educationCode || documentNumber).replace(/[^A-Za-z0-9-]+/g, "_") || "sertifika";
   const safeTc = nationalId.replace(/\D/g, "") || "kursiyer";
-  const fileName = `sertifika_${safeCode}_${safeTc}.pdf`;
+  const fileName = `${safeTc}.pdf`;
 
   return { pdfBytes, fileName, documentNumber };
 }

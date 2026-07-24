@@ -13,6 +13,7 @@ export const ADMIN_MODULES = [
   { key: "examQuestions", label: "Sınav Soruları", icon: "fa-solid fa-file-pen", route: "/admin/sinav-sorulari" },
   { key: "examPortalAccess", label: "Sınav Portalı Girişleri", icon: "fa-solid fa-door-open", route: "/admin/sinav-portali-girisleri" },
   { key: "examResults", label: "Sınav Sonuçları", icon: "fa-solid fa-clipboard-check", route: "/admin/sinav-sonuclari" },
+  { key: "examSuccessPayments", label: "Sınav Başarılı Ödemeler", icon: "fa-solid fa-wallet", route: "/admin/sinav-basarili-odemeler" },
   { key: "certificateList", label: "Sertifika Çıkartma", icon: "fa-solid fa-certificate", route: "/admin/sertifika-listesi" },
   { key: "adminMessaging", label: "Yönetici sohbeti", icon: "fa-solid fa-comments", route: "/admin/yonetici-sohbeti" },
   { key: "activityLogs", label: "Aktivite Listesi", icon: "fa-solid fa-clock-rotate-left", route: "/admin/aktivite-listesi" },

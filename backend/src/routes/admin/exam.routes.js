@@ -7,8 +7,11 @@ import { EXAM_PORTAL_MAX_STARTS } from "../../db/migrations/index.js";
 import { parseDateRangePeriod, buildIstanbulDateFilterSql } from "../../utils/dateRange.js";
 import { normalizeEducationCodeValue, isValidEducationCode } from "../../services/education/payload.js";
 import { signExamPortalLink } from "../../examPortalLinkToken.js";
-import { fetchCertificateRowContext, fetchCertificateListRows } from "../../services/exam/adminQueries.js";
+import { fetchCertificateRowContext, fetchCertificateListRows, normalizeCompletionFilter } from "../../services/exam/adminQueries.js";
+import { fetchExamSuccessPaymentRows } from "../../services/exam/successPayments.js";
 import { allocateCertificateDocumentNumber } from "../../services/certificate/serial.js";
+import { prepareEdevletExcelExport } from "../../services/certificate/edevletExcel.js";
+import { buildCertificateBulkZip } from "../../services/certificate/bulkPdf.js";
 import { resolveCertificateEducationLanguage } from "../../utils/nationalId.js";
 
 const router = Router();
@@ -187,6 +190,70 @@ router.delete("/api/admin/exam-portal/limit-exceeded", auth, checkPermission("ex
   }
 });
 
+router.patch("/api/admin/exam-success-payments/:id/payment-received", auth, checkPermission("examSuccessPayments", "can_update"), async (req, res, next) => {
+  try {
+    const id = String(req.params.id || "").trim();
+    const markPaid = req.body?.paymentReceived === true || req.body?.paymentReceived === "true";
+    if (!markPaid) {
+      return res.status(400).json({ message: "Yalnızca ödeme alındı olarak işaretlenebilir (paymentReceived: true)." });
+    }
+    const previousResult = await pool.query(`SELECT * FROM exam_portal_best_scores WHERE id = $1 LIMIT 1`, [id]);
+    const previous = previousResult.rows[0];
+    if (!previous) return res.status(404).json({ message: "Kayıt bulunamadı." });
+    if (Number(previous.best_score) < 60) {
+      return res.status(400).json({ message: "Ödeme yalnızca sınavdan ≥60 alan kayıtlar için işaretlenebilir." });
+    }
+    if (previous.payment_received === true) {
+      const api = toApiObject(previous);
+      return res.json({
+        ...api,
+        certificateEligible: true,
+      });
+    }
+    const result = await pool.query(
+      `UPDATE exam_portal_best_scores SET payment_received = TRUE, updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [id],
+    );
+    const row = result.rows[0];
+    await writeActivityLog({
+      req,
+      action: "update",
+      moduleName: "examSuccessPayments",
+      entityId: id,
+      oldData: previous,
+      newData: row,
+    });
+    const api = toApiObject(row);
+    return res.json({
+      ...api,
+      certificateEligible: true,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/api/admin/exam-success-payments", auth, checkPermission("examSuccessPayments", "can_view"), async (req, res, next) => {
+  try {
+    const page = Math.max(1, Number(req.query.page || 1));
+    const pageSize = 20;
+    const searchRaw = String(req.query.search || "").trim();
+    const period = parseDateRangePeriod(req.query.period);
+    const { total, rows } = await fetchExamSuccessPaymentRows({ search: searchRaw, period, page, pageSize });
+    return res.json({
+      data: rows,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.patch("/api/admin/exam-results/:id/payment-received", auth, checkPermission("examResults", "can_update"), async (req, res, next) => {
   try {
     const id = String(req.params.id || "").trim();
@@ -312,9 +379,49 @@ router.get("/api/admin/certificate-list/edevlet-export", auth, checkPermission("
   try {
     const searchRaw = String(req.query.search || "").trim();
     const period = parseDateRangePeriod(req.query.period);
-    const { total, rows } = await fetchCertificateListRows({ search: searchRaw, period });
+    const completion = normalizeCompletionFilter(req.query.completion);
+    const { total, rows } = await fetchCertificateListRows({ search: searchRaw, period, completion });
     return res.json({ data: rows, total });
   } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/api/admin/certificate-list/edevlet-export/prepare", auth, checkPermission("certificateList", "can_view"), async (req, res, next) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const result = await prepareEdevletExcelExport(ids);
+    return res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/api/admin/certificate-list/bulk-pdf", auth, checkPermission("certificateList", "can_view"), async (req, res, next) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const result = await buildCertificateBulkZip(ids);
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${result.fileName}"`);
+    res.setHeader("X-Bulk-Success-Count", String(result.successCount));
+    res.setHeader("X-Bulk-Failed-Count", String(result.failures.length));
+    res.setHeader("X-Bulk-Skipped-Count", String(result.skipped.length));
+    if (result.failures.length || result.skipped.length) {
+      const summary = {
+        failures: result.failures.slice(0, 20),
+        skipped: result.skipped.slice(0, 20),
+      };
+      res.setHeader("X-Bulk-Summary", encodeURIComponent(JSON.stringify(summary)));
+    }
+    return res.send(result.zipBytes);
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        message: error.message || "Toplu sertifika oluşturulamadı.",
+        failures: error.failures || [],
+        skipped: error.skipped || [],
+      });
+    }
     next(error);
   }
 });
@@ -325,7 +432,8 @@ router.get("/api/admin/certificate-list", auth, checkPermission("certificateList
     const pageSize = 20;
     const searchRaw = String(req.query.search || "").trim();
     const period = parseDateRangePeriod(req.query.period);
-    const { total, rows } = await fetchCertificateListRows({ search: searchRaw, period, page, pageSize });
+    const completion = normalizeCompletionFilter(req.query.completion);
+    const { total, rows } = await fetchCertificateListRows({ search: searchRaw, period, completion, page, pageSize });
     return res.json({
       data: rows,
       pagination: {
@@ -340,6 +448,48 @@ router.get("/api/admin/certificate-list", auth, checkPermission("certificateList
   }
 });
 
+router.patch("/api/admin/certificate-list/:id/edevlet-processed", auth, checkPermission("certificateList", "can_view"), async (req, res, next) => {
+  try {
+    const id = String(req.params.id || "").trim();
+    const markProcessed = req.body?.edevletProcessed === true || req.body?.edevletProcessed === "true";
+    if (!markProcessed) {
+      return res.status(400).json({ message: "Yalnızca E-devlete işlendi olarak işaretlenebilir (edevletProcessed: true)." });
+    }
+    const previousResult = await pool.query(
+      `SELECT * FROM exam_portal_best_scores
+       WHERE id = $1 AND payment_received = TRUE AND best_score >= 60
+       LIMIT 1`,
+      [id],
+    );
+    const previous = previousResult.rows[0];
+    if (!previous) {
+      return res.status(404).json({ message: "Kayıt bulunamadı veya sertifika için uygun değil." });
+    }
+    if (previous.edevlet_processed === true) {
+      return res.json(toApiObject(previous));
+    }
+    const result = await pool.query(
+      `UPDATE exam_portal_best_scores
+       SET edevlet_processed = TRUE, updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id],
+    );
+    const row = result.rows[0];
+    await writeActivityLog({
+      req,
+      action: "update",
+      moduleName: "certificateList",
+      entityId: id,
+      oldData: previous,
+      newData: row,
+    });
+    return res.json(toApiObject(row));
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post("/api/admin/certificate-list/:id/generate-pdf", auth, checkPermission("certificateList", "can_view"), async (req, res, next) => {
   try {
     const id = String(req.params.id || "").trim();
@@ -347,6 +497,11 @@ router.post("/api/admin/certificate-list/:id/generate-pdf", auth, checkPermissio
     if (!row) {
       return res.status(404).json({
         message: "Kayıt bulunamadı veya sertifika için uygun değil (ödeme alınmış ve ≥60 puan gerekir).",
+      });
+    }
+    if (row.edevlet_processed === true) {
+      return res.status(400).json({
+        message: "Bu sertifika E-devlete işlenmiş. Tekrar hazırlanamaz.",
       });
     }
 

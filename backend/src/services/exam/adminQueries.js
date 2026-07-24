@@ -19,9 +19,25 @@ const certificateListJoinSql = `
   ) latest_attempt ON TRUE
 `;
 
-const buildCertificateListFilters = (searchRaw, period) => {
+const normalizeCompletionFilter = (value) => {
+  const raw = String(value || "all").trim().toLowerCase();
+  if (raw === "completed" || raw === "done" || raw === "tamamlanan") return "completed";
+  if (raw === "incomplete" || raw === "pending" || raw === "tamamlanmamis" || raw === "tamamlanmamış") {
+    return "incomplete";
+  }
+  return "all";
+};
+
+const buildCertificateListFilters = (searchRaw, period, completion = "all") => {
   const params = [];
   const conditions = ["b.payment_received = TRUE", "b.best_score >= 60"];
+  const completionKey = normalizeCompletionFilter(completion);
+
+  if (completionKey === "completed") {
+    conditions.push("b.edevlet_processed = TRUE");
+  } else if (completionKey === "incomplete") {
+    conditions.push("b.edevlet_processed = FALSE");
+  }
 
   if (searchRaw) {
     params.push(`%${searchRaw.toLowerCase()}%`);
@@ -44,13 +60,17 @@ const mapCertificateListRow = (row) => {
     participantName: String(row.participant_name || "").trim(),
     educationName: String(row.education_name || "").trim(),
     documentNumber: String(row.document_number || api.documentNumber || "").trim() || null,
+    edevletProcessed: Boolean(row.edevlet_processed ?? api.edevletProcessed),
+    edevletExcelExported: Boolean(row.edevlet_excel_exported ?? api.edevletExcelExported),
+    edevletExcelRowId: row.edevlet_excel_row_id != null ? Number(row.edevlet_excel_row_id) : api.edevletExcelRowId ?? null,
+    edevletExcelUuid: String(row.edevlet_excel_uuid || api.edevletExcelUuid || "").trim() || null,
     certificateEligible: true,
   };
 };
 
-const fetchCertificateListRows = async ({ search = "", period = "all", page, pageSize }) => {
+const fetchCertificateListRows = async ({ search = "", period = "all", completion = "all", page, pageSize } = {}) => {
   const searchRaw = String(search || "").trim();
-  const { params, whereSql } = buildCertificateListFilters(searchRaw, period);
+  const { params, whereSql } = buildCertificateListFilters(searchRaw, period, completion);
 
   const countSql = `SELECT COUNT(*)::int AS total ${certificateListJoinSql} ${whereSql}`;
   const countResult = await pool.query(countSql, params);
@@ -130,4 +150,4 @@ const fetchCertificateRowContext = async (id) => {
   return result.rows[0] || null;
 };
 
-export { fetchCertificateRowContext, fetchCertificateListRows };
+export { fetchCertificateRowContext, fetchCertificateListRows, normalizeCompletionFilter };

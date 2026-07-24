@@ -181,21 +181,46 @@ export const adminApi = {
     const key = `admin-exam-results:${query}`;
     return adminSingleFlight(key, () => request(`/admin/exam-results?${query}`));
   },
-  getCertificateList: ({ page = 1, search = "", period = "all" } = {}) => {
+  getExamSuccessPayments: ({ page = 1, search = "", period = "all" } = {}) => {
     const params = new URLSearchParams();
     params.set("page", String(page));
     if (search) params.set("search", search);
     if (period && period !== "all") params.set("period", period);
     const query = params.toString();
+    const key = `admin-exam-success-payments:${query}`;
+    return adminSingleFlight(key, () => request(`/admin/exam-success-payments?${query}`));
+  },
+  getCertificateList: ({ page = 1, search = "", period = "all", completion = "all" } = {}) => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    if (search) params.set("search", search);
+    if (period && period !== "all") params.set("period", period);
+    if (completion && completion !== "all") params.set("completion", completion);
+    const query = params.toString();
     const key = `admin-certificate-list:${query}`;
     return adminSingleFlight(key, () => request(`/admin/certificate-list?${query}`));
   },
-  getCertificateListEdevletExport: ({ search = "", period = "all" } = {}) => {
+  getCertificateListEdevletExport: ({ search = "", period = "all", completion = "all" } = {}) => {
     const params = new URLSearchParams();
     if (search) params.set("search", search);
     if (period && period !== "all") params.set("period", period);
+    if (completion && completion !== "all") params.set("completion", completion);
     const query = params.toString();
     return request(`/admin/certificate-list/edevlet-export?${query}`);
+  },
+  prepareCertificateListEdevletExport: (ids = []) => {
+    invalidateAdminCachePrefix("admin-certificate-list:");
+    return request("/admin/certificate-list/edevlet-export/prepare", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    });
+  },
+  markCertificateEdevletProcessed: (id) => {
+    invalidateAdminCachePrefix("admin-certificate-list:");
+    return request(`/admin/certificate-list/${id}/edevlet-processed`, {
+      method: "PATCH",
+      body: JSON.stringify({ edevletProcessed: true }),
+    });
   },
   generateCertificatePdf: async (id) => {
     const token = getToken();
@@ -219,13 +244,55 @@ export const adminApi = {
     const fileName = match?.[1] || `sertifika_${id}.pdf`;
     return { blob, fileName };
   },
+  downloadCertificateBulkZip: async (ids = []) => {
+    const token = getToken();
+    const response = await fetch(`${API_BASE_URL}/admin/certificate-list/bulk-pdf`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ ids }),
+    });
+    if (!response.ok) {
+      let message = "Toplu sertifika indirilemedi.";
+      try {
+        const data = await response.json();
+        if (data?.message) message = data.message;
+      } catch {
+        /* boş gövde */
+      }
+      throw new Error(message);
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    const fileName = match?.[1] || "sertifikalar.zip";
+    const successCount = Number(response.headers.get("X-Bulk-Success-Count") || 0);
+    const failedCount = Number(response.headers.get("X-Bulk-Failed-Count") || 0);
+    const skippedCount = Number(response.headers.get("X-Bulk-Skipped-Count") || 0);
+    let summary = null;
+    const rawSummary = response.headers.get("X-Bulk-Summary");
+    if (rawSummary) {
+      try {
+        summary = JSON.parse(decodeURIComponent(rawSummary));
+      } catch {
+        summary = null;
+      }
+    }
+    invalidateAdminCachePrefix("admin-certificate-list:");
+    return { blob, fileName, successCount, failedCount, skippedCount, summary };
+  },
   deleteExamResult: (id) => {
     invalidateAdminCachePrefix("admin-exam-results:");
+    invalidateAdminCachePrefix("admin-exam-success-payments:");
     return request(`/admin/exam-results/${id}`, { method: "DELETE" });
   },
-  markExamResultPaymentReceived: (id) => {
+  markExamSuccessPaymentReceived: (id) => {
+    invalidateAdminCachePrefix("admin-exam-success-payments:");
     invalidateAdminCachePrefix("admin-exam-results:");
-    return request(`/admin/exam-results/${id}/payment-received`, {
+    invalidateAdminCachePrefix("admin-certificate-list:");
+    return request(`/admin/exam-success-payments/${id}/payment-received`, {
       method: "PATCH",
       body: JSON.stringify({ paymentReceived: true }),
     });

@@ -55,6 +55,10 @@ const dbToApiMap = {
   last_attempt_at: "lastAttemptAt",
   last_score: "lastScore",
   payment_received: "paymentReceived",
+  edevlet_processed: "edevletProcessed",
+  edevlet_excel_exported: "edevletExcelExported",
+  edevlet_excel_row_id: "edevletExcelRowId",
+  edevlet_excel_uuid: "edevletExcelUuid",
   participant_name: "participantName",
 };
 

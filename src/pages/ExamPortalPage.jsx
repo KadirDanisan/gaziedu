@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { publicApi } from "../api/publicApi";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 const EXAM_FALLBACK_DURATION_SECONDS = 30 * 60;
 const examStartCache = new Map();
 const EXAM_PORTAL_TITLE = "Gazi Üniversitesi Sertifika Sınavı";
+const LIMIT_EXCEEDED_MESSAGE = "5 oturum hakkınız dolmuştur. Kurumla iletişime geçiniz.";
+const ALREADY_PASSED_MESSAGE = "Bu eğitim için sınavdan başarıyla geçtiniz. Tekrar girmenize gerek yoktur.";
 
 function decodePortalTokenParam(raw) {
   const s = String(raw ?? "").trim();
@@ -37,6 +39,26 @@ function answerLetter(index) {
   return String.fromCharCode(65 + index);
 }
 
+function AccessBlockedCard({ title, eyebrow, message, detail }) {
+  return (
+    <main className="exam-portal">
+      <section className="exam-portal-card exam-portal-card--center exam-portal-card--error">
+        <img src="/Guzem-05.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
+        {eyebrow ? <p className="exam-portal-eyebrow">{eyebrow}</p> : null}
+        <h1>{title}</h1>
+        <div className="exam-portal-error-message" role="alert">
+          <i className="fa-solid fa-circle-exclamation" aria-hidden />
+          <p>{message}</p>
+        </div>
+        {detail ? <small>{detail}</small> : null}
+        <p className="exam-result-note" style={{ marginTop: 8 }}>
+          Bu sekmeyi kapatabilirsiniz.
+        </p>
+      </section>
+    </main>
+  );
+}
+
 export default function ExamPortalPage() {
   const { portalToken: portalParam } = useParams();
   const portalToken = useMemo(() => decodePortalTokenParam(portalParam), [portalParam]);
@@ -47,6 +69,7 @@ export default function ExamPortalPage() {
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [loadErrorCode, setLoadErrorCode] = useState("");
   const [exam, setExam] = useState(null);
   const [answers, setAnswers] = useState({});
   const [remaining, setRemaining] = useState(0);
@@ -72,6 +95,7 @@ export default function ExamPortalPage() {
     setFlowStarted(false);
     setExam(null);
     setLoadError("");
+    setLoadErrorCode("");
     setStarted(false);
     setResult(null);
     setAnswers({});
@@ -97,6 +121,12 @@ export default function ExamPortalPage() {
           educationCode: data.educationCode,
           nationalId: data.nationalId,
           participantName: data.participantName || "—",
+          alreadyPassed: Boolean(data.alreadyPassed),
+          bestScore: data.bestScore == null ? null : Number(data.bestScore),
+          attemptsUsed: Number(data.attemptsUsed || 0),
+          attemptsRemaining: Number(data.attemptsRemaining ?? 0),
+          maxAttempts: Number(data.maxAttempts || 5),
+          limitExceeded: Boolean(data.limitExceeded),
         });
       })
       .catch((err) => {
@@ -115,10 +145,15 @@ export default function ExamPortalPage() {
 
   useEffect(() => {
     if (!flowStarted || startRequestedRef.current || !portalToken || !identity) return;
+    if (identity.alreadyPassed || identity.limitExceeded) {
+      setFlowStarted(false);
+      return;
+    }
     startRequestedRef.current = true;
     let active = true;
     setLoading(true);
     setLoadError("");
+    setLoadErrorCode("");
     let startPromise = examStartCache.get(portalToken);
     if (!startPromise) {
       startPromise = publicApi.startExamPortal({ portalToken });
@@ -144,7 +179,19 @@ export default function ExamPortalPage() {
         examStartCache.delete(portalToken);
         startRequestedRef.current = false;
         setFlowStarted(false);
+        setLoadErrorCode(err?.code || "");
         setLoadError(err?.message || "Sınav başlatılamadı.");
+        if (err?.code === "ALREADY_PASSED" || err?.code === "LIMIT_EXCEEDED") {
+          setIdentity((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  alreadyPassed: err.code === "ALREADY_PASSED" ? true : prev.alreadyPassed,
+                  limitExceeded: err.code === "LIMIT_EXCEEDED" ? true : prev.limitExceeded,
+                }
+              : prev,
+          );
+        }
       })
       .finally(() => {
         if (!active) return;
@@ -155,31 +202,28 @@ export default function ExamPortalPage() {
     };
   }, [flowStarted, portalToken, identity]);
 
-  const submitExam = useCallback(
-    async (reason = "manual") => {
-      const currentExam = examRef.current;
-      if (!currentExam?.attemptId || submittedRef.current) return null;
-      submittedRef.current = true;
-      setSubmitting(true);
-      try {
-        const data = await publicApi.submitExamPortal({
-          attemptId: currentExam.attemptId,
-          answers: answersRef.current,
-          reason,
-        });
-        setResult(data);
-        setStarted(false);
-        return data;
-      } catch (err) {
-        submittedRef.current = false;
-        setLoadError(err?.message || "Sınav sonucu kaydedilemedi.");
-        return null;
-      } finally {
-        setSubmitting(false);
-      }
-    },
-    [],
-  );
+  const submitExam = useCallback(async (reason = "manual") => {
+    const currentExam = examRef.current;
+    if (!currentExam?.attemptId || submittedRef.current) return null;
+    submittedRef.current = true;
+    setSubmitting(true);
+    try {
+      const data = await publicApi.submitExamPortal({
+        attemptId: currentExam.attemptId,
+        answers: answersRef.current,
+        reason,
+      });
+      setResult(data);
+      setStarted(false);
+      return data;
+    } catch (err) {
+      submittedRef.current = false;
+      setLoadError(err?.message || "Sınav sonucu kaydedilemedi.");
+      return null;
+    } finally {
+      setSubmitting(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!started || result) return undefined;
@@ -262,11 +306,34 @@ export default function ExamPortalPage() {
           <h1>Sınav bağlantısı geçersiz</h1>
           <p>{tokenError || "Bu adres ile sınav açılamaz."}</p>
           <small>İmzalı bağlantı bozulmuş, süresi dolmuş veya bu ortamda çözülemiyor.</small>
-          <Link to="/" className="btn exam-start-btn" style={{ marginTop: 16 }}>
-            Ana sayfaya git
-          </Link>
         </section>
       </main>
+    );
+  }
+
+  if (identity.alreadyPassed) {
+    return (
+      <AccessBlockedCard
+        eyebrow="Sınav tamamlandı"
+        title="Sınavdan başarıyla geçtiniz"
+        message={
+          identity.bestScore != null
+            ? `${ALREADY_PASSED_MESSAGE} En yüksek puanınız: ${Math.round(identity.bestScore)}.`
+            : ALREADY_PASSED_MESSAGE
+        }
+        detail="Sisteme yeniden yönlendirilmeyeceksiniz; yeni bir sınav oturumu açılmaz."
+      />
+    );
+  }
+
+  if (identity.limitExceeded) {
+    return (
+      <AccessBlockedCard
+        eyebrow="Oturum hakkı doldu"
+        title="Sınav başlatılamaz"
+        message={LIMIT_EXCEEDED_MESSAGE}
+        detail={`Bu eğitim için en fazla ${identity.maxAttempts || 5} oturum hakkınız bulunmaktadır.`}
+      />
     );
   }
 
@@ -295,8 +362,10 @@ export default function ExamPortalPage() {
               <strong>{identity.nationalId}</strong>
             </div>
             <div>
-              <span>Süre ve soru sayısı</span>
-              <strong>Sınavı başlattığınızda eğitim ayarlarından yüklenir</strong>
+              <span>Kalan oturum hakkı</span>
+              <strong>
+                {identity.attemptsRemaining} / {identity.maxAttempts}
+              </strong>
             </div>
           </div>
           <div className="exam-ready-warning">
@@ -327,26 +396,40 @@ export default function ExamPortalPage() {
   }
 
   if (loadError && !exam) {
+    if (loadErrorCode === "ALREADY_PASSED") {
+      return (
+        <AccessBlockedCard
+          eyebrow="Sınav tamamlandı"
+          title="Sınavdan başarıyla geçtiniz"
+          message={loadError || ALREADY_PASSED_MESSAGE}
+        />
+      );
+    }
+    if (loadErrorCode === "LIMIT_EXCEEDED") {
+      return (
+        <AccessBlockedCard
+          eyebrow="Oturum hakkı doldu"
+          title="Sınav başlatılamaz"
+          message={loadError || LIMIT_EXCEEDED_MESSAGE}
+        />
+      );
+    }
     return (
-      <main className="exam-portal">
-        <section className="exam-portal-card exam-portal-card--center exam-portal-card--error">
-          <img src="/Guzem-05.png" alt="Gazi Üniversitesi" className="exam-portal-logo" />
-          <p className="exam-portal-eyebrow">Sınav başlatılamadı</p>
-          <h1>Sınav açılamadı</h1>
-          <div className="exam-portal-error-message" role="alert">
-            <i className="fa-solid fa-circle-exclamation" aria-hidden />
-            <p>{loadError}</p>
-          </div>
-          <small>Güvenli bağlantı doğrulandı; sınav oturumu başlatılamadı.</small>
-          <Link to="/" className="btn exam-start-btn" style={{ marginTop: 8 }}>
-            Ana sayfaya git
-          </Link>
-        </section>
-      </main>
+      <AccessBlockedCard
+        eyebrow="Sınav başlatılamadı"
+        title="Sınav açılamadı"
+        message={loadError}
+        detail="Güvenli bağlantı doğrulandı; sınav oturumu başlatılamadı."
+      />
     );
   }
 
   if (result) {
+    const passed = Number(result.score) >= 60 || Boolean(result.passed);
+    const remainingAttempts =
+      result.attemptsRemaining != null ? Number(result.attemptsRemaining) : null;
+    const maxAttempts = result.maxAttempts != null ? Number(result.maxAttempts) : 5;
+
     return (
       <main className="exam-portal">
         <section className="exam-portal-card exam-result-card">
@@ -369,17 +452,33 @@ export default function ExamPortalPage() {
               Süre <strong>{formatTimer(result.durationSeconds)}</strong>
             </span>
           </div>
-          {Number(result.score) >= 60 ? (
+          {passed ? (
             <p className="exam-result-note">
-              <strong>Sertifika almaya hak kazandınız.</strong>
+              <strong>
+                Sertifika almaya hak kazandınız. Sertifikanız E-devlete işlenmek üzere sisteme kaydedilmiştir;
+                sertifikalar ilk Pazartesi günü E-devlet&apos;te görüntülenebilir.
+              </strong>
             </p>
           ) : (
-            <p className="exam-result-note">Sertifika almak için en az 60 puan gereklidir.</p>
+            <>
+              <p className="exam-result-note">Sertifika almak için en az 60 puan gereklidir.</p>
+              {remainingAttempts != null ? (
+                <p className="exam-result-note">
+                  {remainingAttempts > 0 ? (
+                    <>
+                      Kalan oturum hakkınız: <strong>{remainingAttempts}</strong> / {maxAttempts}. Tekrar sınav
+                      portalını başlatabilirsiniz.
+                    </>
+                  ) : (
+                    <strong>{LIMIT_EXCEEDED_MESSAGE}</strong>
+                  )}
+                </p>
+              ) : null}
+            </>
           )}
-          <p className="exam-result-note">Sonucunuz eğitim kodu ve T.C. kimlik numaranız ile kaydedildi.</p>
-          <Link to="/" className="btn exam-start-btn">
-            Ana sayfaya git
-          </Link>
+          <p className="exam-result-note">
+            Sonucunuz eğitim kodu ve T.C. kimlik numaranız ile kaydedildi. Sekmeyi kapatabilirsiniz.
+          </p>
         </section>
       </main>
     );
@@ -416,6 +515,13 @@ export default function ExamPortalPage() {
             <div>
               <span>Süre</span>
               <strong>{formatDurationHumanTr(exam.durationSeconds ?? 0)}</strong>
+            </div>
+            <div>
+              <span>Kalan oturum hakkı</span>
+              <strong>
+                {Number(exam.attemptsRemaining ?? identity.attemptsRemaining)} /{" "}
+                {exam.maxAttempts ?? identity.maxAttempts}
+              </strong>
             </div>
           </div>
           <div className="exam-ready-warning">

@@ -32,6 +32,7 @@ const permissionModules = [
   "examQuestions",
   "examPortalAccess",
   "examResults",
+  "examSuccessPayments",
   "certificateList",
   "activityLogs",
   "roles",
