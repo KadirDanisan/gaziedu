@@ -3,6 +3,7 @@ import { adminApi } from "../api";
 import AdminDateRangeFilter from "../components/AdminDateRangeFilter";
 import { DEFAULT_DATE_RANGE_PERIOD } from "../utils/dateRangePeriod";
 import { downloadEdevletCertificateExcel } from "../utils/buildEdevletCertificateExcel";
+import { downloadCertificateAcquisitionReportExcel } from "../utils/buildCertificateAcquisitionReportExcel";
 
 const formatIstanbul = (value) => {
   if (!value) return "-";
@@ -86,6 +87,7 @@ export default function CertificateListPage() {
   const [edevletConfirmId, setEdevletConfirmId] = useState(null);
   const [excelExportConfirm, setExcelExportConfirm] = useState(null);
   const [bulkPdfProgress, setBulkPdfProgress] = useState(null);
+  const [exportingAcquisitionReport, setExportingAcquisitionReport] = useState(false);
 
   const runSearch = () => {
     setSearch(searchInput.trim());
@@ -288,6 +290,34 @@ export default function CertificateListPage() {
     }
   };
 
+  const handleExportAcquisitionReport = async () => {
+    if (!selectedCount) {
+      setError("Sertifika alım raporu için en az bir kayıt seçin.");
+      return;
+    }
+    setExportingAcquisitionReport(true);
+    setError("");
+    try {
+      const res = await adminApi.getCertificateListEdevletExport({ search, period, completion });
+      const exportRows = (res.data || []).filter((row) => selectedIds.has(String(row.id)));
+      if (!exportRows.length) {
+        setError("Seçili kayıtlardan rapora aktarılacak veri bulunamadı.");
+        return;
+      }
+      const stamp = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Europe/Istanbul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+      downloadCertificateAcquisitionReportExcel(exportRows, `sertifika-alim-raporu-${stamp}.xlsx`);
+    } catch (e) {
+      setError(e.message || "Sertifika alım raporu oluşturulamadı.");
+    } finally {
+      setExportingAcquisitionReport(false);
+    }
+  };
+
   const submitEdevletProcessed = async () => {
     const id = edevletConfirmId;
     if (!id) return;
@@ -322,6 +352,7 @@ export default function CertificateListPage() {
             disabled={
               loading ||
               exportingEdevlet ||
+              exportingAcquisitionReport ||
               selectingAll ||
               Boolean(generatingId) ||
               Boolean(bulkPdfProgress) ||
@@ -337,10 +368,31 @@ export default function CertificateListPage() {
           <button
             type="button"
             className="btn btn-outline"
+            onClick={handleExportAcquisitionReport}
+            disabled={
+              loading ||
+              exportingEdevlet ||
+              exportingAcquisitionReport ||
+              selectingAll ||
+              Boolean(generatingId) ||
+              Boolean(bulkPdfProgress) ||
+              !selectedCount
+            }
+          >
+            {exportingAcquisitionReport
+              ? "Rapor hazırlanıyor…"
+              : selectedCount
+                ? `Sertifika Alım Raporu (${selectedCount})`
+                : "Sertifika Alım Raporu"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline"
             onClick={handleExportEdevletExcel}
             disabled={
               loading ||
               exportingEdevlet ||
+              exportingAcquisitionReport ||
               selectingAll ||
               Boolean(generatingId) ||
               Boolean(bulkPdfProgress) ||
