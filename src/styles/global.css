@@ -6471,7 +6471,7 @@ textarea {
   display: block;
 }
 
-.curriculum-player__error {
+.curriculum-player__notice {
   position: absolute;
   inset: 0;
   display: flex;
@@ -6484,12 +6484,12 @@ textarea {
   color: #e2e8f5;
 }
 
-.curriculum-player__error p {
+.curriculum-player__notice p {
   margin: 0;
   font-size: 0.95rem;
 }
 
-.curriculum-player__error a {
+.curriculum-player__notice a {
   color: #fff;
   font-weight: 600;
   text-decoration: underline;

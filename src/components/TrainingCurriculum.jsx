@@ -1,10 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   countResourcesByKind,
   describeVideoSource,
   formatFileSize,
   resolveAssetUrl,
 } from "../utils/moduleResources";
+
+/**
+ * Bazı vekil sunucular Range isteklerini reddediyor (416), bu da <video> etiketini çalışmaz kılıyor.
+ * Böyle durumlarda dosyayı aralıksız tek istekte indirip blob olarak oynatıyoruz; bellek şişmesin
+ * diye yalnızca bu sınırın altındaki dosyalarda deniyoruz.
+ */
+const MAX_INLINE_FETCH_BYTES = 300 * 1024 * 1024;
 
 /** Eski kayıtlarda içerik modül üstündeki `items` alanındaydı; onu da bir metin bloğu gibi göster. */
 function moduleBlocks(moduleRow) {
@@ -16,9 +23,33 @@ function moduleBlocks(moduleRow) {
 
 function VideoBlock({ resource }) {
   const [open, setOpen] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [fallback, setFallback] = useState({ status: "idle", src: "" });
+  const objectUrlRef = useRef("");
   const source = useMemo(() => describeVideoSource(resource), [resource]);
   const title = resource.title || "Video ders";
+
+  useEffect(
+    () => () => {
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    },
+    [],
+  );
+
+  const loadWithoutRanges = async () => {
+    if (fallback.status !== "idle") return;
+    setFallback({ status: "loading", src: "" });
+    try {
+      const response = await fetch(source.src);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const declared = Number(response.headers.get("content-length"));
+      if (Number.isFinite(declared) && declared > MAX_INLINE_FETCH_BYTES) throw new Error("too-large");
+      const objectUrl = URL.createObjectURL(await response.blob());
+      objectUrlRef.current = objectUrl;
+      setFallback({ status: "ready", src: objectUrl });
+    } catch {
+      setFallback({ status: "failed", src: "" });
+    }
+  };
 
   if (source.type === "none") return null;
 
@@ -71,16 +102,28 @@ function VideoBlock({ resource }) {
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
             />
-          ) : failed ? (
-            <div className="curriculum-player__error">
-              <p>Video bu tarayıcıda oynatılamadı. Dosya biçimi desteklenmiyor olabilir.</p>
+          ) : fallback.status === "loading" ? (
+            <div className="curriculum-player__notice">
+              <i className="fa-solid fa-spinner fa-spin" aria-hidden />
+              <p>Video hazırlanıyor, dosya indiriliyor...</p>
+            </div>
+          ) : fallback.status === "failed" ? (
+            <div className="curriculum-player__notice">
+              <p>Video bu tarayıcıda oynatılamadı.</p>
               <a href={source.src} target="_blank" rel="noopener noreferrer" download={resource.fileName || undefined}>
                 Videoyu indir
               </a>
             </div>
           ) : (
             // eslint-disable-next-line jsx-a11y/media-has-caption
-            <video src={source.src} controls playsInline preload="metadata" onError={() => setFailed(true)} />
+            <video
+              key={fallback.status}
+              src={fallback.src || source.src}
+              controls
+              playsInline
+              preload="metadata"
+              onError={fallback.status === "idle" ? loadWithoutRanges : undefined}
+            />
           )}
         </div>
       ) : null}
