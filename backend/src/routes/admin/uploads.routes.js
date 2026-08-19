@@ -67,11 +67,19 @@ router.post("/api/admin/uploads/exam-doc", auth, uploadDoc.single("file"), async
   }
 });
 
+/** Multer, multipart alan adlarını latin1 olarak çözer; Türkçe karakterler bozulmasın diye utf8'e çeviriyoruz. */
+const decodeOriginalName = (name) => {
+  const raw = String(name || "");
+  if (!raw) return "";
+  const decoded = Buffer.from(raw, "latin1").toString("utf8");
+  return decoded.includes("\uFFFD") ? raw : decoded;
+};
+
 const respondWithModuleAsset = (req, res) => {
   if (!req.file) return res.status(400).json({ message: "Yüklenecek dosya bulunamadı." });
   const publicPath = `/uploads/${req.file.filename}`;
   return res.status(201).json({
-    fileName: req.file.originalname,
+    fileName: decodeOriginalName(req.file.originalname),
     size: req.file.size,
     path: publicPath,
     url: `${req.protocol}://${req.get("host")}${publicPath}`,

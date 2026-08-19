@@ -16,6 +16,7 @@ function moduleBlocks(moduleRow) {
 
 function VideoBlock({ resource }) {
   const [open, setOpen] = useState(false);
+  const [failed, setFailed] = useState(false);
   const source = useMemo(() => describeVideoSource(resource), [resource]);
   const title = resource.title || "Video ders";
 
@@ -70,9 +71,16 @@ function VideoBlock({ resource }) {
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
             />
+          ) : failed ? (
+            <div className="curriculum-player__error">
+              <p>Video bu tarayıcıda oynatılamadı. Dosya biçimi desteklenmiyor olabilir.</p>
+              <a href={source.src} target="_blank" rel="noopener noreferrer" download={resource.fileName || undefined}>
+                Videoyu indir
+              </a>
+            </div>
           ) : (
             // eslint-disable-next-line jsx-a11y/media-has-caption
-            <video src={source.src} controls preload="metadata" />
+            <video src={source.src} controls playsInline preload="metadata" onError={() => setFailed(true)} />
           )}
         </div>
       ) : null}

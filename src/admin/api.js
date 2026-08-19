@@ -53,6 +53,11 @@ async function readJsonBody(response) {
   try {
     return JSON.parse(raw);
   } catch {
+    if (response.status === 413) {
+      throw new Error(
+        "Dosya sunucunun kabul ettiği boyut sınırını aşıyor (413). Nginx tarafında client_max_body_size değerini yükseltin.",
+      );
+    }
     const gateway = response.status === 502 || response.status === 503 || response.status === 504;
     if (gateway || !response.ok) {
       throw new Error(

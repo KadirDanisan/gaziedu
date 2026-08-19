@@ -3,3 +3,10 @@ dist
 .env
 .env.example
 .env.production
+
+backend/uploads/*.mp4
+backend/uploads/*.mov
+backend/uploads/*.m4v
+backend/uploads/*.webm
+backend/uploads/*.avi
+backend/uploads/*.mkv
