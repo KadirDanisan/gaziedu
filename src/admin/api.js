@@ -41,8 +41,8 @@ export function invalidateAdminCachePrefix(prefix) {
   }
 }
 
-function moduleListKey(moduleName, page, search, readStatus) {
-  return `admin-module:${moduleName}:${page}:${search}:${readStatus}`;
+function moduleListKey(moduleName, page, search, readStatus, salesFilter) {
+  return `admin-module:${moduleName}:${page}:${search}:${readStatus}:${salesFilter}`;
 }
 
 /** 502/503/504 veya yanlış URL: gövde HTML olur; response.json() SyntaxError verir. */
@@ -93,10 +93,12 @@ export const adminApi = {
     const key = `admin-activity-logs:${page}:${pageSize}`;
     return adminSingleFlight(key, () => request(`/admin/activity-logs?page=${page}&pageSize=${pageSize}`));
   },
-  getModule: (moduleName, page = 1, search = "", readStatus = "all") => {
-    const key = moduleListKey(moduleName, page, search, readStatus);
+  getModule: (moduleName, page = 1, search = "", readStatus = "all", salesFilter = "") => {
+    const key = moduleListKey(moduleName, page, search, readStatus, salesFilter);
     return adminSingleFlight(key, () =>
-      request(`/admin/${moduleName}?page=${page}&search=${encodeURIComponent(search)}&readStatus=${encodeURIComponent(readStatus)}`),
+      request(
+        `/admin/${moduleName}?page=${page}&search=${encodeURIComponent(search)}&readStatus=${encodeURIComponent(readStatus)}&salesFilter=${encodeURIComponent(salesFilter)}`,
+      ),
     );
   },
   createItem: (moduleName, payload) => {
@@ -138,6 +140,16 @@ export const adminApi = {
     const formData = new FormData();
     formData.append("file", file);
     return request("/admin/uploads/exam-doc", { method: "POST", body: formData });
+  },
+  uploadEducationModuleFile: (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request("/admin/uploads/education-module-file", { method: "POST", body: formData });
+  },
+  uploadEducationModuleVideo: (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request("/admin/uploads/education-module-video", { method: "POST", body: formData });
   },
   getExamPortalVisits: ({ page = 1, search = "", period = "all" } = {}) => {
     const params = new URLSearchParams();

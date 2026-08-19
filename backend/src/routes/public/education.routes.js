@@ -9,11 +9,13 @@ import {
   buildEducationCalendarQuery,
   loadPublicCategoryOptions,
   queryPublicEducationsList,
+  queryLatestCoursesBySalesFilter,
   EDUCATION_LIST_SELECT,
   EDUCATION_DETAIL_SELECT,
   CALENDAR_DETAIL_SELECT,
 } from "../../services/education/publicCourses.js";
 import { loadEducationModules } from "../../services/education/modules.js";
+import { SALES_FILTERS } from "../../config/salesFilters.js";
 
 const router = Router();
 
@@ -97,7 +99,7 @@ router.get("/api/public/search/trainings", async (req, res, next) => {
 
 router.get("/api/public/top-rated-courses", async (req, res, next) => {
   try {
-    const limit = 3;
+    const limit = Math.min(12, Math.max(1, Number(req.query.limit) || 4));
     const listSql = `SELECT ${EDUCATION_LIST_SELECT}
        FROM educations e
        LEFT JOIN education_categories c ON c.id = e.category_id
@@ -165,6 +167,19 @@ router.get("/api/public/upcoming-courses", async (req, res, next) => {
     const result = await pool.query(listSql, [limit]);
     const courses = formatPublicCourseRows(result.rows.map((row) => ({ ...row, content_html: "" })));
     return res.json({ courses });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/api/public/sales-filters", (req, res) => {
+  return res.json({ salesFilters: SALES_FILTERS.map(({ key, label }) => ({ key, label })) });
+});
+
+router.get("/api/public/upcoming-courses-by-filter", async (req, res, next) => {
+  try {
+    const result = await queryLatestCoursesBySalesFilter({ limit: req.query.limit || 4 });
+    return res.json(result);
   } catch (error) {
     return next(error);
   }

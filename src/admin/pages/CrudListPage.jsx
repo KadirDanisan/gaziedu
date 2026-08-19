@@ -2,9 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { useAdminAuth } from "../context/AdminAuthContext";
 import { useAdminData } from "../context/AdminDataContext";
 import { adminApi } from "../api";
-import { BulletListEditor, EducationModulesEditor, renderBulletPreview } from "../components/EducationContentFields";
+import {
+  BulletListEditor,
+  EducationModulesEditor,
+  renderBulletPreview,
+  renderModuleResourcesPreview,
+} from "../components/EducationContentFields";
 import { normalizeEducationCode, parseEducationCode } from "../utils/educationCode";
 import { lookupCodeMatches, normalizeLookupCode, parseApprovedEducationExcelBuffer } from "../utils/parseApprovedEducationExcel";
+import { DEFAULT_SALES_FILTER, SALES_FILTERS, salesFilterLabel, salesFilterRequiresInstitution } from "../../constants/salesFilters";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
@@ -42,21 +48,23 @@ const moduleConfig = {
   },
   approvedEducations: {
     title: "Onaylanmış Eğitim Listesi",
-    fields: ["code", "name", "categoryId", "institutionId"],
+    fields: ["code", "name", "categoryId", "salesFilter", "institutionId"],
     labels: {
       code: "Eğitim Kodu",
       name: "Eğitim Adı",
       categoryId: "Eğitim Kategorisi",
+      salesFilter: "Satış Filtresi",
       institutionId: "Kurum",
     },
   },
   educations: {
     title: "Eğitim Listesi",
-    fields: ["code", "name", "categoryId", "institutionId", "instructorId", "description", "content", "topicHeadings", "imageUrl", "duration"],
+    fields: ["code", "name", "categoryId", "salesFilter", "institutionId", "instructorId", "description", "content", "topicHeadings", "imageUrl", "duration"],
     labels: {
       code: "Eğitim Kodu (onaylı listeden)",
       name: "Eğitim Adı",
       categoryId: "Eğitim Kategorisi",
+      salesFilter: "Satış Filtresi (onaylı listeden)",
       institutionId: "Kurum",
       instructorId: "Eğitmen",
       description: "Açıklama",
@@ -161,6 +169,7 @@ const renderTableCellValue = (field, value, maps = {}) => {
   if ((field === "logoUrl" || field === "imageUrl") && value) {
     return <img src={normalizeAssetUrl(value)} alt="Yüklenen görsel" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8 }} />;
   }
+  if (field === "salesFilter") return salesFilterLabel(value) || value || "-";
   if (field === "roleId") return maps.rolesById?.[value]?.name || value || "-";
   if (field === "categoryId") return maps.educationCategoriesById?.[value]?.categoryName || value || "-";
   if (field === "institutionId") return maps.institutionsById?.[value]?.name || value || "-";
@@ -244,6 +253,7 @@ export default function CrudListPage({ moduleKey }) {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [readStatusFilter, setReadStatusFilter] = useState("all");
+  const [salesFilterTab, setSalesFilterTab] = useState("");
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState([]);
   const [totalPages, setTotalPages] = useState(1);
@@ -281,15 +291,15 @@ export default function CrudListPage({ moduleKey }) {
   const educationInstructorsById = Object.fromEntries((data.educationInstructors || []).map((instructor) => [instructor.id, instructor]));
   const educationsById = Object.fromEntries((data.educations || []).map((education) => [education.id, education]));
   const lockEducationFromApproved = isEducationsModule && Boolean(String(form._approvedEducationId || "").trim());
+  const isSalesFilterModule = isApprovedEducationsModule || isEducationsModule;
+  const formNeedsInstitution = salesFilterRequiresInstitution(form.salesFilter);
   const formFields = isContactFormsModule
     ? config.fields.filter((field) => field !== "createdAt" && field !== "isRead")
-    : isApprovedEducationsModule
-      ? config.fields
-      : isEducationsModule
-        ? config.fields
-        : isInstructorsModule
-          ? ["firstName", "lastName", "email", "password", "title", "department", "about"]
-          : config.fields;
+    : isSalesFilterModule
+      ? config.fields.filter((field) => field !== "institutionId" || formNeedsInstitution)
+      : isInstructorsModule
+        ? ["firstName", "lastName", "email", "password", "title", "department", "about"]
+        : config.fields;
 
   const loadRows = async () => {
     setLoading(true);
@@ -300,6 +310,7 @@ export default function CrudListPage({ moduleKey }) {
         page,
         search,
         isContactFormsModule ? readStatusFilter : "all",
+        isSalesFilterModule ? salesFilterTab : "",
       );
       setRows(resultWithFilter.data);
       setTotalPages(resultWithFilter.pagination.totalPages);
@@ -312,7 +323,11 @@ export default function CrudListPage({ moduleKey }) {
 
   useEffect(() => {
     loadRows();
-  }, [moduleKey, page, search, readStatusFilter]);
+  }, [moduleKey, page, search, readStatusFilter, salesFilterTab]);
+
+  useEffect(() => {
+    setSalesFilterTab("");
+  }, [moduleKey]);
 
   useEffect(() => {
     data.loadFormOptionsForModule(moduleKey).catch(() => {});
@@ -362,8 +377,12 @@ export default function CrudListPage({ moduleKey }) {
     if (isContactFormsModule) {
       initialForm.isRead = false;
     }
+    if (isApprovedEducationsModule) {
+      initialForm.salesFilter = salesFilterTab || "";
+    }
     if (isEducationsModule) {
       initialForm._approvedEducationId = "";
+      initialForm.salesFilter = "";
       initialForm.topicHeadings = [];
       initialForm.modules = [];
     }
@@ -385,6 +404,7 @@ export default function CrudListPage({ moduleKey }) {
         (a) => String(a.code || "").trim().toUpperCase() === String(row.code || "").trim().toUpperCase(),
       );
       initial._approvedEducationId = match?.id || "";
+      initial.salesFilter = row.salesFilter || match?.salesFilter || "";
       initial.topicHeadings = Array.isArray(row.topicHeadings) ? row.topicHeadings : [];
       initial.modules = [];
       try {
@@ -407,6 +427,9 @@ export default function CrudListPage({ moduleKey }) {
       delete payload.password;
     }
     delete payload._approvedEducationId;
+    if (isSalesFilterModule && !formNeedsInstitution) {
+      payload.institutionId = null;
+    }
     if (isEducationsModule) {
       payload.modules = Array.isArray(form.modules) ? form.modules : [];
       payload.topicHeadings = Array.isArray(form.topicHeadings) ? form.topicHeadings : [];
@@ -606,6 +629,7 @@ export default function CrudListPage({ moduleKey }) {
           code: parsedCode.code,
           name: String(row.name).trim(),
           categoryId: category.id,
+          salesFilter: salesFilterTab || DEFAULT_SALES_FILTER,
           institutionId: institution.id,
         });
         if (created?.id) {
@@ -635,7 +659,7 @@ export default function CrudListPage({ moduleKey }) {
     <section className="admin-page">
       <div className="admin-page-head">
         <div>
-          <h2>{config.title}</h2>
+          <h2>{isSalesFilterModule && salesFilterTab ? salesFilterLabel(salesFilterTab) : config.title}</h2>
           <p>Eğitim, Kurum, Eğitmen, Bülten, İletişim Formu, Sınav Soruları ve daha fazlasını yönetin.</p>
         </div>
         {hasPermission(moduleKey, "canCreate") && (
@@ -687,6 +711,34 @@ export default function CrudListPage({ moduleKey }) {
           </select>
         )}
       </div>
+
+      {isSalesFilterModule && (
+        <div className="admin-filter-chips" role="group" aria-label="Satış filtresi">
+          <button
+            type="button"
+            className={`admin-filter-chip${salesFilterTab === "" ? " is-active" : ""}`}
+            onClick={() => {
+              setPage(1);
+              setSalesFilterTab("");
+            }}
+          >
+            Tümü
+          </button>
+          {SALES_FILTERS.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              className={`admin-filter-chip${salesFilterTab === option.key ? " is-active" : ""}`}
+              onClick={() => {
+                setPage(1);
+                setSalesFilterTab(option.key);
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {loading && <p>Yükleniyor...</p>}
       {error && <p className="admin-form-error">{error}</p>}
@@ -911,6 +963,35 @@ export default function CrudListPage({ moduleKey }) {
                           </option>
                         ))}
                       </select>
+                    ) : isSalesFilterModule && field === "salesFilter" ? (
+                      <div className="admin-field-stack">
+                        <select
+                          value={form[field] ?? ""}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              salesFilter: event.target.value,
+                              institutionId: salesFilterRequiresInstitution(event.target.value) ? prev.institutionId : "",
+                            }))
+                          }
+                          required
+                          disabled={isEducationsModule}
+                        >
+                          <option value="" disabled>
+                            Satış Filtresi Seçin
+                          </option>
+                          {SALES_FILTERS.map((option) => (
+                            <option key={option.key} value={option.key}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <small style={{ opacity: 0.85 }}>
+                          {isEducationsModule
+                            ? "Onaylanmış eğitim seçildiğinde otomatik gelir."
+                            : "Kurum seçimi yalnızca “Eğitim İşbirliği Sertifikasyon Eğitimleri” türünde istenir."}
+                        </small>
+                      </div>
                     ) : (isEducationLikeModule || isApprovedEducationsModule) && field === "categoryId" ? (
                       <select
                         value={form[field] ?? ""}
@@ -995,6 +1076,7 @@ export default function CrudListPage({ moduleKey }) {
                               code: "",
                               name: "",
                               categoryId: "",
+                              salesFilter: "",
                               institutionId: "",
                             }));
                             return;
@@ -1007,6 +1089,7 @@ export default function CrudListPage({ moduleKey }) {
                             code: String(picked.code || "").trim(),
                             name: String(picked.name || "").trim(),
                             categoryId: picked.categoryId || "",
+                            salesFilter: picked.salesFilter || "",
                             institutionId: picked.institutionId || "",
                           }));
                         }}
@@ -1132,7 +1215,12 @@ export default function CrudListPage({ moduleKey }) {
 
             <div className="admin-modal__body">
               <div className={`admin-detail-sheet ${isEducationLikeModule || isExamQuestionsModule ? "admin-detail-sheet--single" : ""}`}>
-                {config.fields.map((field) => (
+                {config.fields
+                  .filter(
+                    (field) =>
+                      !isSalesFilterModule || field !== "institutionId" || salesFilterRequiresInstitution(detail.salesFilter),
+                  )
+                  .map((field) => (
                   <div key={field} className="admin-detail-sheet__row">
                     <span className="admin-detail-sheet__label">{config.labels[field]}</span>
                     <span className="admin-detail-sheet__value">
@@ -1178,7 +1266,10 @@ export default function CrudListPage({ moduleKey }) {
                         detailModules.map((moduleRow, index) => (
                           <article key={moduleRow.id || `detail-module-${index}`} className="admin-module-card admin-module-card--readonly">
                             <h5>{moduleRow.title || `Modül ${index + 1}`}</h5>
-                            {renderBulletPreview(moduleRow.items, "Bu modülde madde yok.")}
+                            {Array.isArray(moduleRow.items) && moduleRow.items.length
+                              ? renderBulletPreview(moduleRow.items, "Bu modülde madde yok.")
+                              : null}
+                            {renderModuleResourcesPreview(moduleRow.resources)}
                           </article>
                         ))
                       )}

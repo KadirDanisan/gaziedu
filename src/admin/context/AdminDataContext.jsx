@@ -56,8 +56,8 @@ export function AdminDataProvider({ children }) {
     return adminApi.getDashboard();
   }, []);
 
-  const getModuleData = async (moduleName, page, search, readStatus) =>
-    adminApi.getModule(moduleName, page, search, readStatus);
+  const getModuleData = async (moduleName, page, search, readStatus, salesFilter) =>
+    adminApi.getModule(moduleName, page, search, readStatus, salesFilter);
   const createItem = async (moduleName, payload) => adminApi.createItem(moduleName, payload);
   const updateItem = async (moduleName, id, payload) => adminApi.updateItem(moduleName, id, payload);
   const deleteItem = async (moduleName, id) => adminApi.deleteItem(moduleName, id);

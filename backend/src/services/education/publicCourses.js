@@ -2,6 +2,7 @@ import pool from "../../db/pool.js";
 import { escapeIlikePattern } from "../../utils/sqlHelpers.js";
 import { sqlTitleSlugTrimmed } from "../../utils/slug.js";
 import { loadEducationModules, normalizeTopicHeadings } from "./modules.js";
+import { SALES_FILTERS, normalizeSalesFilter, salesFilterLabel } from "../../config/salesFilters.js";
 
 const formatRatingAggregateFields = (row) => {
   const ratingCount = Number(row.rating_count ?? 0) || 0;
@@ -53,6 +54,8 @@ const formatPublicCourse = (row) => ({
   modules: Array.isArray(row.modules) ? row.modules : [],
   contentHtml: "",
   code: row.code || "",
+  salesFilter: normalizeSalesFilter(row.sales_filter),
+  salesFilterLabel: salesFilterLabel(row.sales_filter),
   sourceType: row.source_type || "education",
   institutionId: row.institution_id || null,
   institutionName: row.institution_name ? String(row.institution_name) : "",
@@ -70,11 +73,11 @@ const loadPublicCategoryOptions = async () => {
   ];
 };
 
-const EDUCATION_DETAIL_SELECT = `e.id, e.name, e.description, e.content, e.image_url, e.code, e.duration, e.topic_headings, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
+const EDUCATION_DETAIL_SELECT = `e.id, e.name, e.description, e.content, e.image_url, e.code, e.duration, e.topic_headings, e.sales_filter, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
           ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email,
           NULL::text AS instructor_info, NULL::timestamptz AS calendar_date`;
 
-const CALENDAR_DETAIL_SELECT = `ec.id, ec.education_name, ec.description, ec.content, ec.image_url, ec.code, ec.duration, ec.topic_headings, ec.content_doc_path, ec.calendar_date, ec.category_id, ec.institution_id, ec.instructor_id, ec.instructor_info, ec.rating_average, ec.rating_count, c.category_name, 'calendar'::text AS source_type, inst.name AS institution_name, inst.logo_url AS institution_logo_url, inst.website_url AS institution_website_url,
+const CALENDAR_DETAIL_SELECT = `ec.id, ec.education_name, ec.description, ec.content, ec.image_url, ec.code, ec.duration, ec.topic_headings, ec.sales_filter, ec.content_doc_path, ec.calendar_date, ec.category_id, ec.institution_id, ec.instructor_id, ec.instructor_info, ec.rating_average, ec.rating_count, c.category_name, 'calendar'::text AS source_type, inst.name AS institution_name, inst.logo_url AS institution_logo_url, inst.website_url AS institution_website_url,
                      ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email`;
 
 const buildEducationCalendarQuery = (query) => {
@@ -112,7 +115,7 @@ const buildEducationCalendarQuery = (query) => {
 const formatPublicCourseRows = (rows, { withContent = false } = {}) =>
   rows.map((row) => formatPublicCourse({ ...row, content_html: withContent ? row.content_html || "" : "" }));
 
-const EDUCATION_LIST_SELECT = `e.id, e.name, e.description, e.image_url, e.code, e.duration, e.content_doc_path, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
+const EDUCATION_LIST_SELECT = `e.id, e.name, e.description, e.image_url, e.code, e.duration, e.content_doc_path, e.sales_filter, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
           ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email,
           NULL::text AS instructor_info`;
 
@@ -131,9 +134,19 @@ const parseEducationsCatalogQuery = (query) => {
           : "newest";
 
   const catRaw = query.category;
+  /** Küçük harfe çevirmeyi Postgres yapar: JS "İ" harfini i+U+0307 olarak açtığı için eşleşme kaçıyordu. */
   const categoryList = (Array.isArray(catRaw) ? catRaw : catRaw != null && catRaw !== "" ? [catRaw] : [])
-    .map((s) => String(s || "").trim().toLowerCase())
+    .map((s) => String(s || "").trim())
     .filter(Boolean);
+
+  const salesRaw = query.salesFilter;
+  const salesFilterList = [
+    ...new Set(
+      (Array.isArray(salesRaw) ? salesRaw : salesRaw != null && salesRaw !== "" ? [salesRaw] : [])
+        .map((s) => normalizeSalesFilter(s))
+        .filter(Boolean),
+    ),
+  ];
 
   const params = [];
   const conditions = [];
@@ -145,7 +158,14 @@ const parseEducationsCatalogQuery = (query) => {
 
   if (categoryList.length) {
     params.push(categoryList);
-    conditions.push(`LOWER(TRIM(COALESCE(c.category_name, ''))) = ANY($${params.length}::text[])`);
+    conditions.push(
+      `LOWER(TRIM(COALESCE(c.category_name, ''))) = ANY(ARRAY(SELECT LOWER(TRIM(v)) FROM unnest($${params.length}::text[]) AS v))`,
+    );
+  }
+
+  if (salesFilterList.length) {
+    params.push(salesFilterList);
+    conditions.push(`e.sales_filter = ANY($${params.length}::text[])`);
   }
 
   if (sort === "most_reviews") {
@@ -201,6 +221,48 @@ const queryPublicEducationsList = async (query) => {
   };
 };
 
+/** Ana sayfada her satış filtresi için ayrı bir şerit; tek sorguda gruplanır. */
+const queryLatestCoursesBySalesFilter = async ({ limit = 4 } = {}) => {
+  const perGroup = Math.min(12, Math.max(1, Number(limit) || 4));
+  const keys = SALES_FILTERS.map((item) => item.key);
+
+  const listSql = `SELECT * FROM (
+      SELECT ${EDUCATION_LIST_SELECT},
+             ROW_NUMBER() OVER (PARTITION BY e.sales_filter ORDER BY e.created_at DESC) AS group_rank
+      FROM educations e
+      LEFT JOIN education_categories c ON c.id = e.category_id
+      LEFT JOIN institutions i ON i.id = e.institution_id
+      LEFT JOIN instructors ins ON ins.id = e.instructor_id
+      WHERE e.sales_filter = ANY($1::text[])
+    ) ranked
+    WHERE ranked.group_rank <= $2`;
+
+  const countSql = `SELECT sales_filter, COUNT(*)::int AS total
+      FROM educations
+      WHERE sales_filter = ANY($1::text[])
+      GROUP BY sales_filter`;
+
+  const [listResult, countResult] = await Promise.all([
+    pool.query(listSql, [keys, perGroup]),
+    pool.query(countSql, [keys]),
+  ]);
+
+  const totalsByKey = Object.fromEntries(countResult.rows.map((row) => [row.sales_filter, row.total]));
+  const coursesByKey = new Map(keys.map((key) => [key, []]));
+  listResult.rows.forEach((row) => {
+    coursesByKey.get(row.sales_filter)?.push(row);
+  });
+
+  return {
+    groups: SALES_FILTERS.map((item) => ({
+      key: item.key,
+      label: item.label,
+      total: totalsByKey[item.key] || 0,
+      courses: formatPublicCourseRows((coursesByKey.get(item.key) || []).map((row) => ({ ...row, content_html: "" }))),
+    })),
+  };
+};
+
 const formatEducationReviewRow = (row) => {
   const first = String(row.first_name || "").trim();
   const last = String(row.last_name || "").trim();
@@ -227,5 +289,6 @@ export {
   EDUCATION_LIST_SELECT,
   parseEducationsCatalogQuery,
   queryPublicEducationsList,
+  queryLatestCoursesBySalesFilter,
   formatEducationReviewRow,
 };

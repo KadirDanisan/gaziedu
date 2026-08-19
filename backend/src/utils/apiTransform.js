@@ -32,6 +32,7 @@ const dbToApiMap = {
   content_doc_path: "contentDocPath",
   content_doc_name: "contentDocName",
   topic_headings: "topicHeadings",
+  sales_filter: "salesFilter",
   sort_order: "sortOrder",
   category_code: "categoryCode",
   category_name: "categoryName",

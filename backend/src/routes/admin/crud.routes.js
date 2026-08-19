@@ -9,6 +9,7 @@ import { getRoleCodeById, upsertInstructorByAdminUser, removeInstructorByAdminUs
 import { prepareEducationPayload, prepareExamQuestionPayload } from "../../services/education/payload.js";
 import { syncEducationModules, loadEducationModules, stripNonTableFields } from "../../services/education/modules.js";
 import { buildInsertSql, buildUpdateSql } from "../../utils/jsonbBind.js";
+import { normalizeSalesFilter } from "../../config/salesFilters.js";
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.get("/api/admin/:moduleName", auth, async (req, res, next) => {
     const pageSize = 20;
     const search = String(req.query.search || "").trim().toLowerCase();
     const readStatus = String(req.query.readStatus || "all").trim().toLowerCase();
+    const salesFilter = normalizeSalesFilter(req.query.salesFilter);
     const offset = (page - 1) * pageSize;
 
     if (moduleName === "instructors") {
@@ -81,6 +83,11 @@ router.get("/api/admin/:moduleName", auth, async (req, res, next) => {
     if (config.table === "contact_forms" && (readStatus === "read" || readStatus === "unread")) {
       params.push(readStatus === "read");
       conditions.push(`is_read = $${params.length}`);
+    }
+
+    if (salesFilter && (config.table === "approved_educations" || config.table === "educations" || config.table === "education_calendar")) {
+      params.push(salesFilter);
+      conditions.push(`sales_filter = $${params.length}`);
     }
 
     const whereSql = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";

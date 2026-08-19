@@ -59,12 +59,19 @@ export const publicApi = {
   getHeroCourses: () => singleFlight("hero-courses", () => request("/public/hero-courses")),
   getCategories: () => singleFlight("categories", () => request("/public/categories")),
   getUpcomingCourses: () => singleFlight("upcoming-courses", () => request("/public/upcoming-courses")),
-  getTopRatedCourses: () => singleFlight("top-rated-courses", () => request("/public/top-rated-courses")),
+  getTopRatedCourses: (limit = 4) =>
+    singleFlight(`top-rated-courses:${limit}`, () =>
+      request(`/public/top-rated-courses?limit=${encodeURIComponent(limit)}`),
+    ),
   getEducationDetail: (slug) => {
     const key = `education-detail:${encodeURIComponent(String(slug ?? ""))}`;
     return singleFlight(key, () => request(`/public/educations/detail/${encodeURIComponent(slug)}`));
   },
-  getAllTrainings: ({ page = 1, pageSize = 9, search = "", categories = [], sort = "newest" } = {}) => {
+  getUpcomingCoursesByFilter: (limit = 4) =>
+    singleFlight(`upcoming-courses-by-filter:${limit}`, () =>
+      request(`/public/upcoming-courses-by-filter?limit=${encodeURIComponent(limit)}`),
+    ),
+  getAllTrainings: ({ page = 1, pageSize = 9, search = "", categories = [], salesFilters = [], sort = "newest" } = {}) => {
     const params = new URLSearchParams();
     params.set("page", String(page));
     params.set("pageSize", String(pageSize));
@@ -73,6 +80,10 @@ export const publicApi = {
     (Array.isArray(categories) ? categories : []).forEach((c) => {
       const s = String(c || "").trim();
       if (s) params.append("category", s);
+    });
+    (Array.isArray(salesFilters) ? salesFilters : []).forEach((f) => {
+      const s = String(f || "").trim();
+      if (s) params.append("salesFilter", s);
     });
     const query = params.toString();
     const cacheKey = `all-trainings:${query}`;

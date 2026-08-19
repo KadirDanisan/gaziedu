@@ -80,6 +80,37 @@ const migrateApprovedEducationsTable = async () => {
   await pool.query(`CREATE INDEX IF NOT EXISTS approved_educations_institution_id_idx ON approved_educations(institution_id)`);
 };
 
+/** Onaylanmış eğitim türü (GUZEM ücretli / işbirliği / kamu yararı / YÖK mikro yeterlilik). */
+const migrateEducationSalesFilterColumn = async () => {
+  await pool.query(`ALTER TABLE approved_educations ADD COLUMN IF NOT EXISTS sales_filter TEXT`);
+  await pool.query(`ALTER TABLE educations ADD COLUMN IF NOT EXISTS sales_filter TEXT`);
+  await pool.query(`ALTER TABLE education_calendar ADD COLUMN IF NOT EXISTS sales_filter TEXT`);
+
+  /** Kurum yalnızca "Eğitim İşbirliği Sertifikasyon Eğitimleri" türünde seçilir. */
+  await pool.query(`ALTER TABLE approved_educations ALTER COLUMN institution_id DROP NOT NULL`);
+
+  await pool.query(
+    `UPDATE approved_educations
+     SET sales_filter = 'egitim-isbirligi-sertifikasyon'
+     WHERE sales_filter IS NULL OR btrim(sales_filter) = ''`,
+  );
+  await pool.query(
+    `UPDATE educations e
+     SET sales_filter = a.sales_filter
+     FROM approved_educations a
+     WHERE UPPER(BTRIM(a.code)) = UPPER(BTRIM(e.code))
+       AND (e.sales_filter IS NULL OR btrim(e.sales_filter) = '')`,
+  );
+  await pool.query(
+    `UPDATE educations
+     SET sales_filter = 'egitim-isbirligi-sertifikasyon'
+     WHERE sales_filter IS NULL OR btrim(sales_filter) = ''`,
+  );
+
+  await pool.query(`CREATE INDEX IF NOT EXISTS approved_educations_sales_filter_idx ON approved_educations (sales_filter)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS educations_sales_filter_idx ON educations (sales_filter)`);
+};
+
 const migrateUserFavoritesTable = async () => {
   await pool.query(
     `CREATE TABLE IF NOT EXISTS user_favorites (
@@ -501,6 +532,11 @@ const migrateEducationContentModules = async () => {
   await pool.query(`CREATE INDEX IF NOT EXISTS education_modules_sort_idx ON education_modules (education_id, sort_order, created_at)`);
 };
 
+/** Modül içeriği artık sıralı bloklardan oluşuyor: metin, PDF ve video. */
+const migrateEducationModuleResources = async () => {
+  await pool.query(`ALTER TABLE education_modules ADD COLUMN IF NOT EXISTS resources JSONB NOT NULL DEFAULT '[]'::jsonb`);
+};
+
 const migrateAdminMessagingTables = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_announcements (
@@ -656,6 +692,7 @@ export {
   migrateEducationCalendarColumns,
   migrateEducationCategoryColumns,
   migrateApprovedEducationsTable,
+  migrateEducationSalesFilterColumn,
   migrateUserFavoritesTable,
   migrateUserFavoritesDualSupport,
   migrateEducationReviewsTable,
@@ -676,6 +713,7 @@ export {
   migrateExamSuccessPaymentsPermissions,
   migrateExamQuestionSettingsColumns,
   migrateEducationContentModules,
+  migrateEducationModuleResources,
   migrateAdminMessagingTables,
   migrateAdminMessagingPermissions,
   migrateCertificateSerialNumbers,
@@ -690,6 +728,7 @@ export const migrations = [
   migrateEducationCalendarColumns,
   migrateEducationCategoryColumns,
   migrateApprovedEducationsTable,
+  migrateEducationSalesFilterColumn,
   migrateUserFavoritesTable,
   migrateUserFavoritesDualSupport,
   migrateEducationReviewsTable,
@@ -709,6 +748,7 @@ export const migrations = [
   migrateExamSuccessPaymentsPermissions,
   migrateExamQuestionSettingsColumns,
   migrateEducationContentModules,
+  migrateEducationModuleResources,
   migrateAdminMessagingTables,
   migrateAdminMessagingPermissions,
   migrateCertificateSerialNumbers,

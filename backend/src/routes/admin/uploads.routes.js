@@ -1,7 +1,7 @@
 import { Router } from "express";
 import path from "path";
 import { auth } from "../../middleware/auth.js";
-import { upload, uploadDoc } from "../../middleware/upload.js";
+import { upload, uploadDoc, uploadModuleFile, uploadModuleVideo } from "../../middleware/upload.js";
 import { parseExamQuestionsFromDocx } from "../../services/exam/docxTable.js";
 
 const router = Router();
@@ -62,6 +62,33 @@ router.post("/api/admin/uploads/exam-doc", auth, uploadDoc.single("file"), async
       questions,
       questionCount,
     });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+const respondWithModuleAsset = (req, res) => {
+  if (!req.file) return res.status(400).json({ message: "Yüklenecek dosya bulunamadı." });
+  const publicPath = `/uploads/${req.file.filename}`;
+  return res.status(201).json({
+    fileName: req.file.originalname,
+    size: req.file.size,
+    path: publicPath,
+    url: `${req.protocol}://${req.get("host")}${publicPath}`,
+  });
+};
+
+router.post("/api/admin/uploads/education-module-file", auth, uploadModuleFile.single("file"), (req, res, next) => {
+  try {
+    return respondWithModuleAsset(req, res);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/api/admin/uploads/education-module-video", auth, uploadModuleVideo.single("file"), (req, res, next) => {
+  try {
+    return respondWithModuleAsset(req, res);
   } catch (error) {
     return next(error);
   }

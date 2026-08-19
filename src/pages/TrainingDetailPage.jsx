@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { publicApi, resolvePublicImageUrl, invalidateEducationReviewsCache } from "../api/publicApi";
 import { userApi } from "../api/userApi";
+import TrainingCurriculum from "../components/TrainingCurriculum";
 import { useAuth } from "../context/AuthContext";
 
 const COURSE_ID_UUID =
@@ -29,12 +30,6 @@ function buildInstitutionCourseUrl(rawWebsite, educationCode) {
     return `${base.replace(/\/+$/, "")}/${code}`;
   }
 }
-
-const defaultHighlights = [
-  "Proje yönetiminin temel kavramları ve süreç grupları",
-  "PMI metodolojisine uygun planlama, yürütme ve kontrol teknikleri",
-  "Gerçek vaka örnekleri, soru setleri ve uygulamalı çalışmalar",
-];
 
 const sectionTabs = [
   { id: "genel-bilgi", label: "Genel Bilgi" },
@@ -492,13 +487,37 @@ function TrainingDetailPage() {
           <div id="genel-bilgi" className="training-detail-box rbt-shadow-box">
             <h3>Eğitimin Amacı ve Katılım Şartları</h3>
             <div className="training-detail-inline-title">Eğitimin Amacı</div>
-            <p>
-              {c.description || "Bu eğitim için açıklama henüz eklenmedi."}
-            </p>
-            <ul>
-              {defaultHighlights.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
+            <p>{c.description || "Bu eğitim için açıklama henüz eklenmedi."}</p>
+
+            {Array.isArray(c.topicHeadings) && c.topicHeadings.length ? (
+              <div className="training-detail-highlights">
+                <div className="training-detail-inline-title">Neler Öğreneceksiniz?</div>
+                <ul className="training-detail-highlight-grid">
+                  {c.topicHeadings.slice(0, 6).map((item) => (
+                    <li key={item}>
+                      <i className="fa-solid fa-circle-check" aria-hidden /> <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <ul className="training-detail-facts">
+              <li>
+                <i className="fa-regular fa-clock" aria-hidden />
+                <span>Süre</span>
+                <strong>{c.duration}</strong>
+              </li>
+              <li>
+                <i className="fa-solid fa-globe" aria-hidden />
+                <span>Katılım</span>
+                <strong>{c.mode}</strong>
+              </li>
+              <li>
+                <i className="fa-solid fa-certificate" aria-hidden />
+                <span>Sertifika</span>
+                <strong>Gazi Üniversitesi</strong>
+              </li>
             </ul>
           </div>
 
@@ -523,24 +542,8 @@ function TrainingDetailPage() {
           ) : null}
 
           {Array.isArray(c.modules) && c.modules.length ? (
-            <div id="moduller" className="training-detail-modules-stack">
-              {c.modules.map((moduleRow, index) => (
-                <article
-                  key={moduleRow.id || `module-${index}`}
-                  className="training-detail-box rbt-shadow-box training-detail-module-card"
-                >
-                  <h3>{moduleRow.title || `Modül ${index + 1}`}</h3>
-                  {Array.isArray(moduleRow.items) && moduleRow.items.length ? (
-                    <ul className="training-detail-bullets">
-                      {moduleRow.items.map((item) => (
-                        <li key={`${moduleRow.id || index}-${item}`}>{item}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="training-detail-empty-note">Bu modülde madde yok.</p>
-                  )}
-                </article>
-              ))}
+            <div id="moduller" className="training-detail-box rbt-shadow-box training-detail-box--curriculum">
+              <TrainingCurriculum modules={c.modules} />
             </div>
           ) : null}
 

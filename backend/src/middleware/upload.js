@@ -33,4 +33,33 @@ const uploadDoc = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-export { upload, uploadDoc };
+const moduleAssetStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadsDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    cb(null, `education-module-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+  },
+});
+
+const MODULE_FILE_EXTENSIONS = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".zip"];
+
+const uploadModuleFile = multer({
+  storage: moduleAssetStorage,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    if (MODULE_FILE_EXTENSIONS.includes(ext)) cb(null, true);
+    else cb(new Error("Yalnızca PDF, Office veya ZIP dosyaları yüklenebilir."));
+  },
+});
+
+const uploadModuleVideo = multer({
+  storage: moduleAssetStorage,
+  limits: { fileSize: 2 * 1024 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("video/")) cb(null, true);
+    else cb(new Error("Sadece video dosyaları yüklenebilir."));
+  },
+});
+
+export { upload, uploadDoc, uploadModuleFile, uploadModuleVideo, MODULE_FILE_EXTENSIONS };

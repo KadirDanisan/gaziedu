@@ -1,3 +1,5 @@
+import { normalizeSalesFilter, salesFilterRequiresInstitution } from "../../config/salesFilters.js";
+
 const normalizeUploadPath = (value) => {
   if (typeof value !== "string" || !value.length) return value;
   if (!value.includes("/uploads/")) return value;
@@ -68,6 +70,22 @@ const prepareEducationPayload = (payload) => {
   if (Object.hasOwn(payload, "code")) {
     payload.code = normalizeEducationCodeValue(payload.code);
   }
+
+  if (Object.hasOwn(payload, "sales_filter")) {
+    const salesFilter = normalizeSalesFilter(payload.sales_filter);
+    if (!salesFilter) {
+      throw new Error("Geçerli bir satış filtresi seçin.");
+    }
+    payload.sales_filter = salesFilter;
+    /** Kurum yalnızca işbirliği sertifikasyon türünde tutulur. */
+    if (!salesFilterRequiresInstitution(salesFilter)) {
+      payload.institution_id = null;
+    }
+  }
+
+  if (payload.institution_id === "") payload.institution_id = null;
+  if (payload.instructor_id === "") payload.instructor_id = null;
+  if (payload.category_id === "") payload.category_id = null;
 };
 
 const prepareExamQuestionPayload = (payload) => {

@@ -17,8 +17,8 @@ const HEADERS = [
 /** Kolon minimum genişlikleri (karakter) */
 const MIN_COL_WIDTHS = [18, 40, 16, 26, 14, 22, 20, 18, 28, 24, 20];
 
-/** 90–99 arası rastgele izlenme yüzdesi */
-const randomWatchPercent = () => Math.floor(Math.random() * 10) + 90;
+/** 90–99 arası rastgele izlenme yüzdesi (örn. 90%, 93%, 99%) */
+const randomWatchPercent = () => `${Math.floor(Math.random() * 10) + 90}%`;
 
 const headerStyle = {
   font: { bold: true, sz: 13, color: { rgb: "FFFFFF" }, name: "Calibri" },

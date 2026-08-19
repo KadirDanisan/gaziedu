@@ -3,6 +3,7 @@ import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { publicApi, resolvePublicImageUrl } from "../api/publicApi";
 import CourseCardThumb from "../components/CourseCardThumb";
 import { makeSlug } from "../data/homeData";
+import { SALES_FILTERS, normalizeSalesFilter, salesFilterLabel } from "../constants/salesFilters";
 import { useAuth } from "../context/AuthContext";
 
 function CourseRatingStars({ value, max = 5 }) {
@@ -36,6 +37,10 @@ function sameCategorySelection(a, b) {
   return categoriesKey(a) === categoriesKey(b);
 }
 
+function joinWithComma(values) {
+  return values.join(", ");
+}
+
 const defaultPagination = { page: 1, pageSize: 9, total: 0, totalPages: 1 };
 
 function AllTrainingsPage() {
@@ -45,6 +50,7 @@ function AllTrainingsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sortBy, setSortBy] = useState("newest");
   const [selectedCategories, setSelectedCategories] = useState([]);
+  const [selectedSalesFilters, setSelectedSalesFilters] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [listItems, setListItems] = useState([]);
   const [pagination, setPagination] = useState(defaultPagination);
@@ -101,6 +107,7 @@ function AllTrainingsPage() {
         pageSize: itemsPerPage,
         search: debouncedSearch,
         categories: selectedCategories,
+        salesFilters: selectedSalesFilters,
         sort: sortBy,
       })
       .then((data) => {
@@ -145,7 +152,7 @@ function AllTrainingsPage() {
     return () => {
       active = false;
     };
-  }, [currentPage, debouncedSearch, selectedCategories, sortBy, itemsPerPage]);
+  }, [currentPage, debouncedSearch, selectedCategories, selectedSalesFilters, sortBy, itemsPerPage]);
 
   useEffect(() => {
     const sortParam = String(searchParams.get("sort") || "").toLowerCase();
@@ -167,6 +174,15 @@ function AllTrainingsPage() {
     const next = valid.length ? valid : [];
     setSelectedCategories((prev) => (sameCategorySelection(prev, next) ? prev : next));
   }, [searchParams, availableCategories]);
+
+  useEffect(() => {
+    const raw = searchParams.get("tur");
+    const next = String(raw || "")
+      .split(",")
+      .map((part) => normalizeSalesFilter(part))
+      .filter(Boolean);
+    setSelectedSalesFilters((prev) => (sameCategorySelection(prev, next) ? prev : next));
+  }, [searchParams]);
 
   useEffect(() => {
     if (currentPage <= pagination.totalPages) return;
@@ -192,6 +208,21 @@ function AllTrainingsPage() {
     });
   };
 
+  const toggleSalesFilter = (key) => {
+    setCurrentPage(1);
+    setSelectedSalesFilters((prev) => {
+      const nextFilters = prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key];
+      const nextParams = new URLSearchParams(searchParams);
+      if (nextFilters.length) {
+        nextParams.set("tur", nextFilters.join(","));
+      } else {
+        nextParams.delete("tur");
+      }
+      setSearchParams(nextParams, { replace: true });
+      return nextFilters;
+    });
+  };
+
   const handleFavoriteClick = async (course) => {
     if (!isLoggedIn) {
       navigate("/kullanici-islemleri");
@@ -208,12 +239,17 @@ function AllTrainingsPage() {
 
   const pageButtons = useMemo(() => Array.from({ length: totalPages }, (_, idx) => idx + 1), [totalPages]);
 
-  const filterHead = useMemo(() => {
+  const activeFilterLabels = useMemo(() => {
     const cats = [...selectedCategories].sort((a, b) => a.localeCompare(b, "tr"));
-    const hasSearch = Boolean(debouncedSearch);
-    const hasCats = cats.length > 0;
+    const types = selectedSalesFilters.map((key) => salesFilterLabel(key)).filter(Boolean);
+    return [...types, ...cats];
+  }, [selectedCategories, selectedSalesFilters]);
 
-    if (!hasCats && !hasSearch) {
+  const filterHead = useMemo(() => {
+    const hasSearch = Boolean(debouncedSearch);
+    const hasFilters = activeFilterLabels.length > 0;
+
+    if (!hasFilters && !hasSearch) {
       return {
         title: "Tüm Eğitimler",
         showAllTrainingsCrumb: false,
@@ -221,21 +257,21 @@ function AllTrainingsPage() {
       };
     }
 
-    const catLabel = hasCats ? (cats.length === 1 ? cats[0] : cats.join(", ")) : null;
+    const filterLabel = hasFilters ? joinWithComma(activeFilterLabels) : null;
     let currentCrumb = "";
-    if (hasCats && hasSearch) {
-      currentCrumb = `${catLabel} · “${debouncedSearch}”`;
-    } else if (hasCats) {
-      currentCrumb = catLabel;
+    if (hasFilters && hasSearch) {
+      currentCrumb = `${filterLabel} · “${debouncedSearch}”`;
+    } else if (hasFilters) {
+      currentCrumb = filterLabel;
     } else {
       currentCrumb = `“${debouncedSearch}”`;
     }
 
     let title = "Tüm Eğitimler";
-    if (hasCats && hasSearch) {
-      title = `${catLabel} — “${debouncedSearch}”`;
-    } else if (hasCats) {
-      title = cats.length === 1 ? cats[0] : catLabel;
+    if (hasFilters && hasSearch) {
+      title = `${filterLabel} — “${debouncedSearch}”`;
+    } else if (hasFilters) {
+      title = filterLabel;
     } else if (hasSearch) {
       title = `Arama: “${debouncedSearch}”`;
     }
@@ -245,25 +281,25 @@ function AllTrainingsPage() {
       showAllTrainingsCrumb: true,
       currentCrumb,
     };
-  }, [selectedCategories, debouncedSearch]);
+  }, [activeFilterLabels, debouncedSearch]);
 
   const resultsLine = useMemo(() => {
     const n = totalCount;
-    const cats = [...selectedCategories].sort((a, b) => a.localeCompare(b, "tr"));
-    if (debouncedSearch && cats.length) {
-      return `${n} eğitim bulundu (${cats.join(", ")} · “${debouncedSearch}”).`;
+    const hasFilters = activeFilterLabels.length > 0;
+    if (debouncedSearch && hasFilters) {
+      return `${n} eğitim bulundu (${joinWithComma(activeFilterLabels)} · “${debouncedSearch}”).`;
     }
     if (debouncedSearch) {
       return `${n} eğitim bulundu (“${debouncedSearch}”).`;
     }
-    if (cats.length === 1) {
-      return `${n} eğitim bulundu (${cats[0]}).`;
+    if (activeFilterLabels.length === 1) {
+      return `${n} eğitim bulundu (${activeFilterLabels[0]}).`;
     }
-    if (cats.length > 1) {
-      return `${n} eğitim bulundu (${cats.length} kategori).`;
+    if (hasFilters) {
+      return `${n} eğitim bulundu (${activeFilterLabels.length} filtre).`;
     }
     return `${n} eğitim bulundu.`;
-  }, [totalCount, selectedCategories, debouncedSearch]);
+  }, [totalCount, activeFilterLabels, debouncedSearch]);
 
   return (
     <>
@@ -346,6 +382,22 @@ function AllTrainingsPage() {
                 onChange={(event) => setSearchInput(event.target.value)}
               />
               <i className="fa-solid fa-magnifying-glass" />
+            </div>
+          </div>
+
+          <div className="sidebar-widget">
+            <h4>Eğitim Türü</h4>
+            <div className="sidebar-check-list">
+              {SALES_FILTERS.map((option) => (
+                <label key={option.key} className="sidebar-check-item">
+                  <input
+                    type="checkbox"
+                    checked={selectedSalesFilters.includes(option.key)}
+                    onChange={() => toggleSalesFilter(option.key)}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
             </div>
           </div>
 

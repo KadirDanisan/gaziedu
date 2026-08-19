@@ -14,7 +14,7 @@ function FollowerCourses() {
     let active = true;
     setIsLoading(true);
     publicApi
-      .getTopRatedCourses()
+      .getTopRatedCourses(4)
       .then((data) => {
         if (!active) return;
         const items = Array.isArray(data?.courses) ? data.courses : [];
@@ -64,7 +64,7 @@ function FollowerCourses() {
           Tüm Eğitimleri İncele <i className="fa-solid fa-arrow-right-long" />
         </Link>
       </div>
-      <div className="upcoming-grid">
+      <div className="upcoming-grid upcoming-grid--quad">
         {isLoading && <p>Yükleniyor...</p>}
         {coursesToShow.map((course) => {
           const reviewCount = Number(course.ratingCount ?? 0) || 0;
