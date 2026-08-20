@@ -6489,10 +6489,25 @@ textarea {
   font-size: 0.95rem;
 }
 
-.curriculum-player__notice a {
+.curriculum-player__hint {
+  margin: 0;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.curriculum-player__retry {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: transparent;
   color: #fff;
-  font-weight: 600;
-  text-decoration: underline;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.curriculum-player__retry:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .curriculum-text {

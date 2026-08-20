@@ -7,13 +7,6 @@ import {
   resolveAssetUrl,
 } from "../utils/moduleResources";
 
-/**
- * Bazı vekil sunucular Range isteklerini reddediyor (416), bu da <video> etiketini çalışmaz kılıyor.
- * Böyle durumlarda dosyayı aralıksız tek istekte indirip blob olarak oynatıyoruz; bellek şişmesin
- * diye yalnızca bu sınırın altındaki dosyalarda deniyoruz.
- */
-const MAX_INLINE_FETCH_BYTES = 300 * 1024 * 1024;
-
 /** Eski kayıtlarda içerik modül üstündeki `items` alanındaydı; onu da bir metin bloğu gibi göster. */
 function moduleBlocks(moduleRow) {
   const resources = Array.isArray(moduleRow?.resources) ? moduleRow.resources : [];
@@ -22,12 +15,44 @@ function moduleBlocks(moduleRow) {
   return [{ kind: "text", title: "", items: legacyItems, body: "" }, ...resources];
 }
 
+/**
+ * OpenResty Range isteklerini 416 ile kesiyor; ileri sarma da Range kullanır.
+ * Bu yüzden kendi sunucumuzdaki videoları Range'siz indirip blob URL ile oynatıyoruz.
+ */
+async function fetchVideoAsObjectUrl(url, { signal, onProgress } = {}) {
+  const response = await fetch(url, { signal, cache: "force-cache" });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  const total = Number(response.headers.get("content-length")) || 0;
+  if (!response.body || !response.body.getReader) {
+    const blob = await response.blob();
+    onProgress?.(100);
+    return URL.createObjectURL(blob);
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.byteLength;
+    if (total > 0) onProgress?.(Math.min(99, Math.round((received / total) * 100)));
+  }
+  onProgress?.(100);
+  const blob = new Blob(chunks, { type: response.headers.get("content-type") || "video/mp4" });
+  return URL.createObjectURL(blob);
+}
+
 function VideoBlock({ resource }) {
   const [open, setOpen] = useState(false);
-  const [fallback, setFallback] = useState({ status: "idle", src: "" });
+  const [reloadToken, setReloadToken] = useState(0);
+  const [playback, setPlayback] = useState({ status: "idle", src: "", progress: 0 });
   const objectUrlRef = useRef("");
   const source = useMemo(() => describeVideoSource(resource), [resource]);
   const title = resource.title || "Video ders";
+  const needsBlobPlayback = source.type === "file";
 
   useEffect(
     () => () => {
@@ -36,20 +61,44 @@ function VideoBlock({ resource }) {
     [],
   );
 
-  const loadWithoutRanges = async () => {
-    if (fallback.status !== "idle") return;
-    setFallback({ status: "loading", src: "" });
-    try {
-      const response = await fetch(source.src);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const declared = Number(response.headers.get("content-length"));
-      if (Number.isFinite(declared) && declared > MAX_INLINE_FETCH_BYTES) throw new Error("too-large");
-      const objectUrl = URL.createObjectURL(await response.blob());
-      objectUrlRef.current = objectUrl;
-      setFallback({ status: "ready", src: objectUrl });
-    } catch {
-      setFallback({ status: "failed", src: "" });
+  useEffect(() => {
+    if (!open || !needsBlobPlayback) return undefined;
+
+    if (objectUrlRef.current) {
+      setPlayback({ status: "ready", src: objectUrlRef.current, progress: 100 });
+      return undefined;
     }
+
+    const controller = new AbortController();
+    setPlayback({ status: "loading", src: "", progress: 0 });
+
+    fetchVideoAsObjectUrl(source.src, {
+      signal: controller.signal,
+      onProgress: (progress) => setPlayback((prev) => (prev.status === "loading" ? { ...prev, progress } : prev)),
+    })
+      .then((objectUrl) => {
+        if (controller.signal.aborted) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        objectUrlRef.current = objectUrl;
+        setPlayback({ status: "ready", src: objectUrl, progress: 100 });
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
+        setPlayback({ status: "failed", src: "", progress: 0 });
+      });
+
+    return () => controller.abort();
+  }, [open, needsBlobPlayback, source.src, reloadToken]);
+
+  const retryBlobLoad = () => {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = "";
+    }
+    setPlayback({ status: "idle", src: "", progress: 0 });
+    setReloadToken((token) => token + 1);
   };
 
   if (source.type === "none") return null;
@@ -103,27 +152,35 @@ function VideoBlock({ resource }) {
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
             />
-          ) : fallback.status === "loading" ? (
-            <div className="curriculum-player__notice">
-              <i className="fa-solid fa-spinner fa-spin" aria-hidden />
-              <p>Video hazırlanıyor, dosya indiriliyor...</p>
-            </div>
-          ) : fallback.status === "failed" ? (
-            <div className="curriculum-player__notice">
-              <p>Video bu tarayıcıda oynatılamadı.</p>
-              <a href={source.src} target="_blank" rel="noopener noreferrer" download={fixUploadedFileName(resource.fileName) || undefined}>
-                Videoyu indir
-              </a>
-            </div>
+          ) : needsBlobPlayback && playback.status !== "ready" ? (
+            playback.status === "failed" ? (
+              <div className="curriculum-player__notice">
+                <p>Video hazırlanamadı. Tekrar deneyin veya dosyayı indirin.</p>
+                <button type="button" className="curriculum-player__retry" onClick={retryBlobLoad}>
+                  Tekrar dene
+                </button>
+                <a href={source.src} target="_blank" rel="noopener noreferrer" download={fixUploadedFileName(resource.fileName) || undefined}>
+                  Videoyu indir
+                </a>
+              </div>
+            ) : (
+              <div className="curriculum-player__notice">
+                <i className="fa-solid fa-spinner fa-spin" aria-hidden />
+                <p>
+                  Video indiriliyor
+                  {playback.progress > 0 ? ` (%${playback.progress})` : ""}…
+                </p>
+                <p className="curriculum-player__hint">İleri sarma için dosya önce tamamen yüklenir.</p>
+              </div>
+            )
           ) : (
             // eslint-disable-next-line jsx-a11y/media-has-caption
             <video
-              key={fallback.status}
-              src={fallback.src || source.src}
+              key={playback.src || source.src}
+              src={needsBlobPlayback ? playback.src : source.src}
               controls
               playsInline
-              preload="metadata"
-              onError={fallback.status === "idle" ? loadWithoutRanges : undefined}
+              preload="auto"
             />
           )}
         </div>
