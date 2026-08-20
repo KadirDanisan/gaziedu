@@ -143,7 +143,9 @@ function ResourceBlock({ resource, index, total, onPatch, onRemove, onMove, onUp
             onChange={(event) => onUpload(index, event.target.files?.[0], "video")}
             disabled={uploading}
           />
-          {uploading ? <small>Video yükleniyor, pencereyi kapatmayın...</small> : null}
+          {uploading ? (
+            <small>Video yükleniyor ve web için optimize ediliyor (faststart), pencereyi kapatmayın...</small>
+          ) : null}
           {resource.path ? (
             <small className="admin-resource-card__file">
               <i className="fa-regular fa-circle-check" aria-hidden /> Yüklendi: {fixUploadedFileName(resource.fileName) || resource.path}
@@ -159,7 +161,8 @@ function ResourceBlock({ resource, index, total, onPatch, onRemove, onMove, onUp
             placeholder="Süre (ör. 12:30)"
           />
           <small style={{ opacity: 0.85 }}>
-            Yüklenen dosya varsa o oynatılır; yoksa bağlantı kullanılır. Dosya için en fazla 2 GB.
+            Yüklenen dosya varsa o oynatılır; yoksa bağlantı kullanılır. En fazla 2 GB. Yükleme sonrası
+            sunucu videoyu tarayıcıda hızlı başlatmak için otomatik optimize eder.
           </small>
         </div>
       ) : null}
