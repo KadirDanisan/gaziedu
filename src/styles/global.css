@@ -6489,10 +6489,13 @@ textarea {
   font-size: 0.95rem;
 }
 
-.curriculum-player__hint {
-  margin: 0;
-  font-size: 0.85rem;
-  opacity: 0.8;
+.curriculum-player__notice--spinner {
+  gap: 0;
+}
+
+.curriculum-player__notice--spinner i {
+  font-size: 1.75rem;
+  opacity: 0.9;
 }
 
 .curriculum-player__retry {

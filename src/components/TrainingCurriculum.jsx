@@ -164,13 +164,8 @@ function VideoBlock({ resource }) {
                 </a>
               </div>
             ) : (
-              <div className="curriculum-player__notice">
+              <div className="curriculum-player__notice curriculum-player__notice--spinner" aria-label="Yükleniyor">
                 <i className="fa-solid fa-spinner fa-spin" aria-hidden />
-                <p>
-                  Video indiriliyor
-                  {playback.progress > 0 ? ` (%${playback.progress})` : ""}…
-                </p>
-                <p className="curriculum-player__hint">İleri sarma için dosya önce tamamen yüklenir.</p>
               </div>
             )
           ) : (
