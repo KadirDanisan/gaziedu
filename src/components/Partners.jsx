@@ -20,7 +20,7 @@ function Partners() {
 
   return (
     <section className="section partners">
-      <h2>Gazi Üniversitesi ile işbirliği yapan kurumlar</h2>
+      <h2>İş Birliği Yaptığımız Kurumlar</h2>
       <div className="partner-marquee" aria-label="Kurumsal referans logoları">
         <div className="partner-grid">
           {loopedPartners.map((partner, index) => (

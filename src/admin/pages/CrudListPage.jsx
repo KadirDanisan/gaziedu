@@ -989,7 +989,7 @@ export default function CrudListPage({ moduleKey }) {
                         <small style={{ opacity: 0.85 }}>
                           {isEducationsModule
                             ? "Onaylanmış eğitim seçildiğinde otomatik gelir."
-                            : "Kurum seçimi yalnızca “Eğitim İşbirliği Sertifikasyon Eğitimleri” türünde istenir."}
+                            : "Kurum seçimi yalnızca “İş Birliği ve Sertifika Programları” türünde istenir."}
                         </small>
                       </div>
                     ) : (isEducationLikeModule || isApprovedEducationsModule) && field === "categoryId" ? (

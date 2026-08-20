@@ -45,7 +45,7 @@ function Footer() {
           <Link to="/">Anasayfa</Link>
           <Link to="/egitim-takvimi">Eğitim Takvimi</Link>
           <Link to="/hakkimizda">Hakkımızda</Link>
-          <Link to="/kurumsal-egitim-cozumleri">Kurumsal Eğitim Çözümleri</Link>
+          <Link to="/kurumsal-egitim-cozumleri">Kurumsal Eğitimler</Link>
           <Link to="/iletisim">İletişim</Link>
         </div>
 

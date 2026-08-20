@@ -1,9 +1,9 @@
 /** Onaylanmış eğitimlerin satış/listeleme türü. Frontend kopyası: src/constants/salesFilters.js */
 const SALES_FILTERS = [
-  { key: "guzem-ucretli", label: "GUZEM ÜCRETLİ EĞİTİM", requiresInstitution: false },
-  { key: "egitim-isbirligi-sertifikasyon", label: "Eğitim İşbirliği Sertifikasyon Eğitimleri", requiresInstitution: true },
-  { key: "guzem-kamu-yarari-ucretsiz", label: "GUZEM KAMU YARARI (ÜCRETSİZ) EĞİTİMLER", requiresInstitution: false },
-  { key: "yok-mikro-yeterlilik", label: "YÖK MİKRO YETERLİLİK EĞİTİMLERİ", requiresInstitution: false },
+  { key: "guzem-ucretli", label: "Ücretli Eğitim Programları", requiresInstitution: false },
+  { key: "egitim-isbirligi-sertifikasyon", label: "İş Birliği ve Sertifika Programları", requiresInstitution: true },
+  { key: "guzem-kamu-yarari-ucretsiz", label: "Kamu Yararına Yönelik Ücretsiz Eğitim Programları", requiresInstitution: false },
+  { key: "yok-mikro-yeterlilik", label: "YÖK Mikro Yeterlilik Programları", requiresInstitution: false },
 ];
 
 const DEFAULT_SALES_FILTER = "egitim-isbirligi-sertifikasyon";

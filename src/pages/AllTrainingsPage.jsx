@@ -386,7 +386,7 @@ function AllTrainingsPage() {
           </div>
 
           <div className="sidebar-widget">
-            <h4>Eğitim Türü</h4>
+            <h4>Program Türü</h4>
             <div className="sidebar-check-list">
               {SALES_FILTERS.map((option) => (
                 <label key={option.key} className="sidebar-check-item">

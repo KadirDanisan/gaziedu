@@ -66,8 +66,8 @@ function UpcomingCourses() {
     <section className="section upcoming-section">
       <div className="section-head upcoming-head">
         <div>
-          <span className="upcoming-kicker">Yeni Dönem Programları</span>
-          <h2>Eğitimlerimiz</h2>
+          <span className="upcoming-kicker">Güncel Eğitim Programları</span>
+          <h2>Eğitim Programlarımız</h2>
         </div>
         <Link className="upcoming-link" to="/tum-egitimler">
           Tüm Eğitimleri İncele <i className="fa-solid fa-arrow-right-long" />
@@ -80,7 +80,7 @@ function UpcomingCourses() {
         <div className="upcoming-filter-block" key={group.key}>
           <div className="section-head upcoming-head upcoming-head--filter">
             <div>
-              <span className="upcoming-kicker">Eğitim Türü</span>
+              <span className="upcoming-kicker">Program Türü</span>
               <h3>{group.label}</h3>
             </div>
             <Link className="upcoming-link" to={`/tum-egitimler?tur=${encodeURIComponent(group.key)}`}>

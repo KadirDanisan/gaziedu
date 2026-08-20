@@ -1,4 +1,5 @@
 import pool from "../../db/pool.js";
+import { fixUploadedFileName } from "../../utils/fileName.js";
 import { toApiObject } from "../../utils/apiTransform.js";
 import { normalizeUploadPath } from "./payload.js";
 
@@ -36,7 +37,7 @@ const normalizeModuleResources = (value) => {
         const path = normalizeUploadPath(trimmed(raw?.path));
         const url = trimmed(raw?.url);
         if (!path && !url) return null;
-        return { kind, title, path, url, fileName: trimmed(raw?.fileName), size: normalizeByteSize(raw?.size) };
+        return { kind, title, path, url, fileName: fixUploadedFileName(raw?.fileName), size: normalizeByteSize(raw?.size) };
       }
 
       const path = normalizeUploadPath(trimmed(raw?.path));
@@ -47,7 +48,7 @@ const normalizeModuleResources = (value) => {
         title,
         path,
         url,
-        fileName: trimmed(raw?.fileName),
+        fileName: fixUploadedFileName(raw?.fileName),
         size: normalizeByteSize(raw?.size),
         duration: trimmed(raw?.duration),
       };

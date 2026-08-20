@@ -174,7 +174,7 @@ function Header() {
         <nav>
           <div className="dropdown" ref={desktopDropdownRef} onMouseLeave={handleDesktopDropdownMouseLeave}>
             <button className="dropdown-trigger" type="button" onClick={loadCategories}>
-              Eğitimler <i className="fa-solid fa-chevron-down" />
+              Eğitim Programları <i className="fa-solid fa-chevron-down" />
             </button>
             <div className="dropdown-menu categories-mega-menu" role="menu" aria-label="Eğitim kategorileri">
               {categoryItems.map((item) => (
@@ -191,7 +191,7 @@ function Header() {
           </div>
           <NavLink to="/egitim-takvimi">Eğitim Takvimi</NavLink>
           <NavLink to="/hakkimizda">Hakkımızda</NavLink>
-          <NavLink to="/kurumsal-egitim-cozumleri">Kurumsal Eğitim Çözümleri</NavLink>
+          <NavLink to="/kurumsal-egitim-cozumleri">Kurumsal Eğitimler</NavLink>
           <NavLink to="/iletisim">İletişim</NavLink>
         </nav>
         <div className="header-actions">
@@ -348,7 +348,7 @@ function Header() {
               }}
               aria-expanded={isMobileCoursesOpen}
             >
-              Eğitimler <i className="fa-solid fa-chevron-down" />
+              Eğitim Programları <i className="fa-solid fa-chevron-down" />
             </button>
             <div className="mobile-dropdown-menu categories-scroll-menu" role="menu" aria-label="Eğitim kategorileri">
               {categoryItems.map((item) => (
@@ -371,7 +371,7 @@ function Header() {
             Hakkımızda
           </NavLink>
           <NavLink to="/kurumsal-egitim-cozumleri" onClick={closeMobileMenu}>
-            Kurumsal Eğitim Çözümleri
+            Kurumsal Eğitimler
           </NavLink>
           <NavLink to="/iletisim" onClick={closeMobileMenu}>
             İletişim

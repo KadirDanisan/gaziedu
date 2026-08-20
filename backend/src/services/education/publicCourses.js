@@ -45,7 +45,7 @@ const formatPublicCourse = (row) => ({
     : null,
   mode: row.mode || "Uzaktan Eğitim",
   duration: row.duration || "Belirtilmedi",
-  attendees: row.attendees || "Kontenjan Sınırı Yoktur ",
+  attendees: row.attendees || "Sınırsız Kontenjan",
   image: row.image_url || "https://istanbulinstitute.com/thumb.php?src=site/images/no_image.jpg&size=526x282",
   description: row.description || "",
   content: row.content || "",

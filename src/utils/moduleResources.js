@@ -3,6 +3,21 @@ const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
 
 export const MODULE_RESOURCE_KINDS = ["text", "pdf", "video"];
 
+/** Eski/bozuk kayıtlarda ModÃ¼l → Modül gibi düzeltme. */
+export function fixUploadedFileName(name) {
+  const raw = String(name ?? "").trim();
+  if (!raw) return "";
+  if (!/[ÃÄÅâ€]/.test(raw)) return raw;
+  try {
+    const bytes = new Uint8Array([...raw].map((ch) => ch.charCodeAt(0) & 0xff));
+    const fixed = new TextDecoder("utf-8").decode(bytes);
+    if (fixed && !fixed.includes("\uFFFD")) return fixed;
+  } catch {
+    /* ignore */
+  }
+  return raw;
+}
+
 export function resolveAssetUrl(value) {
   const raw = String(value ?? "").trim();
   if (!raw) return "";

@@ -58,7 +58,7 @@ function FollowerCourses() {
       <div className="section-head upcoming-head">
         <div>
           <span className="upcoming-kicker">Katılımcıların Tercihi</span>
-          <h2>En Çok Tercih Edilen Eğitimler</h2>
+          <h2>Öne Çıkan Eğitimler</h2>
         </div>
         <Link className="upcoming-link" to="/tum-egitimler?sort=most_reviews">
           Tüm Eğitimleri İncele <i className="fa-solid fa-arrow-right-long" />

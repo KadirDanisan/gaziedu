@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   countResourcesByKind,
   describeVideoSource,
+  fixUploadedFileName,
   formatFileSize,
   resolveAssetUrl,
 } from "../utils/moduleResources";
@@ -110,7 +111,7 @@ function VideoBlock({ resource }) {
           ) : fallback.status === "failed" ? (
             <div className="curriculum-player__notice">
               <p>Video bu tarayıcıda oynatılamadı.</p>
-              <a href={source.src} target="_blank" rel="noopener noreferrer" download={resource.fileName || undefined}>
+              <a href={source.src} target="_blank" rel="noopener noreferrer" download={fixUploadedFileName(resource.fileName) || undefined}>
                 Videoyu indir
               </a>
             </div>
@@ -134,8 +135,9 @@ function VideoBlock({ resource }) {
 function FileBlock({ resource }) {
   const href = resolveAssetUrl(resource.path || resource.url);
   if (!href) return null;
-  const title = resource.title || resource.fileName || "Doküman";
-  const meta = [resource.fileName, formatFileSize(resource.size)].filter(Boolean).join(" · ");
+  const downloadName = fixUploadedFileName(resource.fileName);
+  const title = resource.title?.trim() || "PDF";
+  const meta = formatFileSize(resource.size);
 
   return (
     <a
@@ -143,14 +145,14 @@ function FileBlock({ resource }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      download={resource.fileName || undefined}
+      download={downloadName || undefined}
     >
       <span className="curriculum-lesson__icon curriculum-lesson__icon--file" aria-hidden>
         <i className="fa-regular fa-file-pdf" />
       </span>
       <span className="curriculum-lesson__body">
         <span className="curriculum-lesson__title">{title}</span>
-        <span className="curriculum-lesson__meta">{meta || "İndirilebilir dosya"}</span>
+        {meta ? <span className="curriculum-lesson__meta">{meta}</span> : null}
       </span>
       <span className="curriculum-lesson__action curriculum-lesson__action--download">
         <i className="fa-solid fa-download" aria-hidden /> İndir

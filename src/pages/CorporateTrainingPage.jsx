@@ -126,7 +126,7 @@ function CorporateTrainingPage() {
       <section className="corporate-image">
         <img
           src="/work.png"
-          alt="Kurumsal Eğitim Çözümleri"
+          alt="Kurumsal Eğitimler"
         />
       </section>
 

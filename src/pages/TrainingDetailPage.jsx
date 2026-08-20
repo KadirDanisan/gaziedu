@@ -608,7 +608,7 @@ function TrainingDetailPage() {
               <strong>{c.attendees}</strong>
             </li>
             <li>
-              <span>Eğitim Türü</span>
+              <span>Program Türü</span>
               <strong>{c.mode}</strong>
             </li>
           </ul>

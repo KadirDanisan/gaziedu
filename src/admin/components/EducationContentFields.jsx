@@ -3,6 +3,7 @@ import { adminApi } from "../api";
 import {
   countResourcesByKind,
   describeVideoSource,
+  fixUploadedFileName,
   formatFileSize,
   resourceIconClass,
   resourceKindLabel,
@@ -114,7 +115,7 @@ function ResourceBlock({ resource, index, total, onPatch, onRemove, onMove, onUp
           {uploading ? <small>Yükleniyor...</small> : null}
           {resource.path ? (
             <small className="admin-resource-card__file">
-              <i className="fa-regular fa-circle-check" aria-hidden /> {resource.fileName || resource.path}
+              <i className="fa-regular fa-circle-check" aria-hidden /> {fixUploadedFileName(resource.fileName) || resource.path}
             </small>
           ) : null}
           <input
@@ -145,7 +146,7 @@ function ResourceBlock({ resource, index, total, onPatch, onRemove, onMove, onUp
           {uploading ? <small>Video yükleniyor, pencereyi kapatmayın...</small> : null}
           {resource.path ? (
             <small className="admin-resource-card__file">
-              <i className="fa-regular fa-circle-check" aria-hidden /> Yüklendi: {resource.fileName || resource.path}
+              <i className="fa-regular fa-circle-check" aria-hidden /> Yüklendi: {fixUploadedFileName(resource.fileName) || resource.path}
               <button type="button" className="admin-resource-card__unlink" onClick={() => onPatch(index, { path: "", fileName: "" })}>
                 kaldır
               </button>
@@ -200,7 +201,7 @@ function ModuleCard({ moduleRow, index, onPatch, onRemove }) {
         kind === "video" ? await adminApi.uploadEducationModuleVideo(file) : await adminApi.uploadEducationModuleFile(file);
       patchResource(resourceIndex, {
         path: result?.path || "",
-        fileName: result?.fileName || file.name,
+        fileName: fixUploadedFileName(result?.fileName || file.name),
         size: result?.size || file.size,
       });
     } catch (err) {
@@ -328,13 +329,13 @@ export function renderModuleResourcesPreview(resources = [], emptyText = "Bu mod
           <li key={`${index}-${resource.kind}`} className="admin-resource-preview__item">
             <i className={resourceIconClass(resource.kind)} aria-hidden />
             <span className="admin-resource-preview__title">
-              {resource.title || resource.fileName || resourceKindLabel(resource.kind)}
+              {resource.title?.trim() || (resource.kind === "pdf" ? "PDF" : fixUploadedFileName(resource.fileName) || resourceKindLabel(resource.kind))}
             </span>
             <span className="admin-resource-preview__meta">
               {resource.kind === "text"
                 ? `${(resource.items || []).length} madde`
                 : resource.kind === "pdf"
-                  ? [resource.fileName, formatFileSize(resource.size)].filter(Boolean).join(" · ") || "Dosya"
+                  ? formatFileSize(resource.size) || "PDF"
                   : [resource.duration, source?.type === "file" ? "Yüklenen video" : "Bağlantı"].filter(Boolean).join(" · ")}
             </span>
           </li>
