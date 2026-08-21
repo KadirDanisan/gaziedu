@@ -30,6 +30,7 @@ const formatPublicCourseInstructor = (row) => {
     instructorDepartment: row.instructor_department != null && row.instructor_department !== "" ? String(row.instructor_department).trim() : "",
     instructorAbout: about,
     instructorEmail: row.instructor_email != null && row.instructor_email !== "" ? String(row.instructor_email).trim().toLowerCase() : "",
+    instructorImage: row.instructor_image_url != null && row.instructor_image_url !== "" ? String(row.instructor_image_url).trim() : "",
     instructorLegacyInfo: !hasStructuredInstructor && info ? info : "",
   };
 };
@@ -74,11 +75,11 @@ const loadPublicCategoryOptions = async () => {
 };
 
 const EDUCATION_DETAIL_SELECT = `e.id, e.name, e.description, e.content, e.image_url, e.code, e.duration, e.topic_headings, e.sales_filter, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
-          ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email,
+          ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email, ins.image_url AS instructor_image_url,
           NULL::text AS instructor_info, NULL::timestamptz AS calendar_date`;
 
 const CALENDAR_DETAIL_SELECT = `ec.id, ec.education_name, ec.description, ec.content, ec.image_url, ec.code, ec.duration, ec.topic_headings, ec.sales_filter, ec.content_doc_path, ec.calendar_date, ec.category_id, ec.institution_id, ec.instructor_id, ec.instructor_info, ec.rating_average, ec.rating_count, c.category_name, 'calendar'::text AS source_type, inst.name AS institution_name, inst.logo_url AS institution_logo_url, inst.website_url AS institution_website_url,
-                     ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email`;
+                     ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email, ins.image_url AS instructor_image_url`;
 
 const buildEducationCalendarQuery = (query) => {
   const page = Math.max(1, Number(query.page || 1));
@@ -116,7 +117,7 @@ const formatPublicCourseRows = (rows, { withContent = false } = {}) =>
   rows.map((row) => formatPublicCourse({ ...row, content_html: withContent ? row.content_html || "" : "" }));
 
 const EDUCATION_LIST_SELECT = `e.id, e.name, e.description, e.image_url, e.code, e.duration, e.content_doc_path, e.sales_filter, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
-          ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email,
+          ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email, ins.image_url AS instructor_image_url,
           NULL::text AS instructor_info`;
 
 const parseEducationsCatalogQuery = (query) => {

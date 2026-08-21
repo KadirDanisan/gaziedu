@@ -76,8 +76,16 @@ const moduleConfig = {
   },
   instructors: {
     title: "Eğitmen Listesi",
-    fields: ["firstName", "lastName", "email", "title", "department", "about"],
-    labels: { firstName: "Ad", lastName: "Soyad", email: "E-Posta", title: "Ünvan", department: "Bölüm", about: "Hakkında" },
+    fields: ["firstName", "lastName", "email", "title", "department", "about", "imageUrl"],
+    labels: {
+      firstName: "Ad",
+      lastName: "Soyad",
+      email: "E-Posta",
+      title: "Ünvan",
+      department: "Bölüm",
+      about: "Hakkında",
+      imageUrl: "Eğitmen Görseli",
+    },
   },
   educationCalendar: {
     title: "Eğitim Takvimi Listesi",
@@ -298,7 +306,7 @@ export default function CrudListPage({ moduleKey }) {
     : isSalesFilterModule
       ? config.fields.filter((field) => field !== "institutionId" || formNeedsInstitution)
       : isInstructorsModule
-        ? ["firstName", "lastName", "email", "password", "title", "department", "about"]
+        ? ["firstName", "lastName", "email", "password", "title", "department", "about", "imageUrl"]
         : config.fields;
 
   const loadRows = async () => {
@@ -920,6 +928,21 @@ export default function CrudListPage({ moduleKey }) {
                         placeholder="Yüklenen görsel URL"
                         required
                       />
+                    </div>
+                  ) : isInstructorsModule && field === "imageUrl" ? (
+                    <div className="admin-field-stack">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(event) => handleEducationImageUpload(event.target.files?.[0])}
+                        disabled={educationImageUploading}
+                      />
+                      <input
+                        value={form.imageUrl ?? ""}
+                        onChange={(event) => setForm((prev) => ({ ...prev, imageUrl: event.target.value }))}
+                        placeholder="Yüklenen görsel URL"
+                      />
+                      {educationImageUploading ? <small>Görsel yükleniyor...</small> : null}
                     </div>
                   ) : isEducationLikeModule && field === "imageUrl" ? (
                     <div className="admin-field-stack">

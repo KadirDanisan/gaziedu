@@ -292,14 +292,19 @@ function TrainingInstructorBlock({ course }) {
   const about = String(course?.instructorAbout ?? "").trim();
   const email = String(course?.instructorEmail ?? "").trim();
   const legacy = String(course?.instructorLegacyInfo ?? "").trim();
+  const photo = resolvePublicImageUrl(course?.instructorImage);
   const metaLine = [title, department].filter(Boolean).join(" · ");
+
+  const avatar = (
+    <div className={`training-detail-instructor-avatar${photo ? " training-detail-instructor-avatar--photo" : ""}`} aria-hidden>
+      {photo ? <img src={photo} alt="" /> : <i className="fa-solid fa-chalkboard-user" />}
+    </div>
+  );
 
   if (legacy) {
     return (
       <div className="training-detail-instructor training-detail-instructor--legacy">
-        <div className="training-detail-instructor-avatar" aria-hidden>
-          <i className="fa-solid fa-chalkboard-user" />
-        </div>
+        {avatar}
         <p className="training-detail-instructor-legacy-text">{legacy}</p>
       </div>
     );
@@ -311,9 +316,7 @@ function TrainingInstructorBlock({ course }) {
 
   return (
     <div className="training-detail-instructor">
-      <div className="training-detail-instructor-avatar" aria-hidden>
-        <i className="fa-solid fa-chalkboard-user" />
-      </div>
+      {avatar}
       <div className="training-detail-instructor-body">
         {name ? <p className="training-detail-instructor-name">{name}</p> : null}
         {metaLine ? <p className="training-detail-instructor-meta">{metaLine}</p> : null}

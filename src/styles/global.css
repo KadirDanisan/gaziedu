@@ -5926,6 +5926,19 @@ textarea {
   justify-content: center;
   color: #3d4d6b;
   font-size: 1.35rem;
+  overflow: hidden;
+}
+
+.training-detail-instructor-avatar--photo {
+  padding: 0;
+  background: #e8ecf8;
+}
+
+.training-detail-instructor-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .training-detail-instructor-body {

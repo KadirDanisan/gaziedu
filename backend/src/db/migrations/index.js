@@ -684,10 +684,16 @@ const migrateEdevletExcelExportState = async () => {
   `);
 };
 
+/** Eğitmen profil görseli (kurs detay kartı). */
+const migrateInstructorImageColumn = async () => {
+  await pool.query(`ALTER TABLE instructors ADD COLUMN IF NOT EXISTS image_url TEXT`);
+};
+
 export {
   migrateContactFormTimestampsToIstanbul,
   migrateInstitutionCodeColumn,
   migrateInstructorAdminLinkColumn,
+  migrateInstructorImageColumn,
   migrateEducationDocColumns,
   migrateEducationCalendarColumns,
   migrateEducationCategoryColumns,
@@ -755,4 +761,5 @@ export const migrations = [
   migrateCertificateEdevletProcessed,
   migrateEdevletExcelExportState,
   migrateContactFormTimestampsToIstanbul,
+  migrateInstructorImageColumn,
 ];

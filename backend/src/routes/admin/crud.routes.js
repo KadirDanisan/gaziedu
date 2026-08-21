@@ -46,7 +46,8 @@ router.get("/api/admin/:moduleName", auth, async (req, res, next) => {
                         INNER JOIN roles r ON r.id = a.role_id
                         ${whereSql}`;
       const listSql = `SELECT a.id, a.first_name, a.last_name, a.email, a.created_at, a.updated_at,
-                              COALESCE(i.title, '') AS title, COALESCE(i.department, '') AS department, COALESCE(i.about, '') AS about
+                              COALESCE(i.title, '') AS title, COALESCE(i.department, '') AS department, COALESCE(i.about, '') AS about,
+                              COALESCE(i.image_url, '') AS image_url
                        FROM admin_users a
                        INNER JOIN roles r ON r.id = a.role_id
                        LEFT JOIN instructors i ON i.admin_user_id = a.id
@@ -134,6 +135,7 @@ router.post("/api/admin/:moduleName", auth, async (req, res, next) => {
       const title = String(body.title || "").trim();
       const department = String(body.department || "").trim();
       const about = String(body.about || "").trim();
+      const imageUrl = String(body.imageUrl || "").trim() || null;
       if (!firstName || !lastName || !email || !password) {
         return res.status(400).json({ message: "Ad, soyad, e-posta ve şifre zorunludur." });
       }
@@ -148,13 +150,14 @@ router.post("/api/admin/:moduleName", auth, async (req, res, next) => {
       );
       const admin = insert.rows[0];
       await upsertInstructorByAdminUser(admin);
-      if (title || department || about) {
-        await pool.query(
-          `UPDATE instructors SET title = $1, department = $2, about = $3, updated_at = NOW() WHERE admin_user_id = $4`,
-          [title, department, about, admin.id],
-        );
-      }
-      const instRow = await pool.query(`SELECT title, department, about FROM instructors WHERE admin_user_id = $1 LIMIT 1`, [admin.id]);
+      await pool.query(
+        `UPDATE instructors SET title = $1, department = $2, about = $3, image_url = $4, updated_at = NOW() WHERE admin_user_id = $5`,
+        [title, department, about, imageUrl, admin.id],
+      );
+      const instRow = await pool.query(
+        `SELECT title, department, about, image_url FROM instructors WHERE admin_user_id = $1 LIMIT 1`,
+        [admin.id],
+      );
       const i = instRow.rows[0] || {};
       await writeActivityLog({ req, action: "create", moduleName, entityId: admin.id, newData: { ...admin, ...i } });
       return res.status(201).json(
@@ -163,6 +166,7 @@ router.post("/api/admin/:moduleName", auth, async (req, res, next) => {
           title: i.title ?? "",
           department: i.department ?? "",
           about: i.about ?? "",
+          image_url: i.image_url ?? "",
         }),
       );
     } catch (error) {
@@ -223,8 +227,11 @@ router.put("/api/admin/:moduleName/:id", auth, async (req, res, next) => {
     const p = await pool.query(`SELECT can_update FROM permissions WHERE role_id = $1 AND module_name = $2 LIMIT 1`, [req.user.roleId, moduleName]);
     if (!p.rows[0]?.can_update) return res.status(403).json({ message: "Yetkiniz yok." });
     if (config.table === "instructors") {
-      const allowed = ["title", "department", "about"];
+      const allowed = ["title", "department", "about", "image_url"];
       const payload = toDbObject(req.body);
+      if (Object.hasOwn(payload, "image_url")) {
+        payload.image_url = String(payload.image_url || "").trim() || null;
+      }
       const adminPayload = {};
       if (payload.first_name !== undefined) adminPayload.first_name = String(payload.first_name || "").trim();
       if (payload.last_name !== undefined) adminPayload.last_name = String(payload.last_name || "").trim();
