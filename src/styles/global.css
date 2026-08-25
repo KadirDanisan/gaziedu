@@ -576,6 +576,122 @@ html {
   color: #56647d;
 }
 
+.certificate-page-head {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.certificate-page-head__intro {
+  max-width: 52rem;
+}
+
+.certificate-action-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  width: 100%;
+}
+
+.certificate-action-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.certificate-action-panel--edevlet {
+  border-color: #dbeafe;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 70%);
+}
+
+.certificate-action-panel--reports {
+  border-color: #dcfce7;
+  background: linear-gradient(180deg, #f7fdf9 0%, #ffffff 70%);
+}
+
+.certificate-action-panel__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.certificate-action-panel__icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+}
+
+.certificate-action-panel--edevlet .certificate-action-panel__icon {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.certificate-action-panel--reports .certificate-action-panel__icon {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.certificate-action-panel__label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #334155;
+  line-height: 1.2;
+}
+
+.certificate-action-panel__hint {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.certificate-action-panel__buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.certificate-action-panel__buttons .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.certificate-action-panel__buttons .btn i {
+  opacity: 0.85;
+  font-size: 0.9rem;
+}
+
+.certificate-action-panel__buttons .btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 980px) {
+  .certificate-action-panels,
+  .certificate-action-panel__buttons {
+    grid-template-columns: 1fr;
+  }
+}
+
 .admin-stats-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

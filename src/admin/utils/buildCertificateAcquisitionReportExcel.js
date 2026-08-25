@@ -1,6 +1,6 @@
 import XLSX from "xlsx-js-style";
 
-const HEADERS = [
+const ACQUISITION_HEADERS = [
   "Eğitim Kodu",
   "Eğitim Adı",
   "TC Kimlik No",
@@ -14,8 +14,18 @@ const HEADERS = [
   "E-devlete İşlendi mi",
 ];
 
+const EDEVLET_ISSUED_HEADERS = [
+  "Sertifika No",
+  "Eğitim Kodu",
+  "Eğitim Adı",
+  "Kullanıcı",
+  "Tc Kimlik No",
+  "Sınav Giriş Tarihi ve Saati",
+];
+
 /** Kolon minimum genişlikleri (karakter) */
-const MIN_COL_WIDTHS = [18, 40, 16, 26, 14, 22, 20, 18, 28, 24, 20];
+const ACQUISITION_MIN_COL_WIDTHS = [18, 40, 16, 26, 14, 22, 20, 18, 28, 24, 20];
+const EDEVLET_ISSUED_MIN_COL_WIDTHS = [20, 18, 40, 26, 16, 26];
 
 /** 90–99 arası rastgele izlenme yüzdesi (örn. 90%, 93%, 99%) */
 const randomWatchPercent = () => `${Math.floor(Math.random() * 10) + 90}%`;
@@ -84,9 +94,19 @@ export const buildCertificateAcquisitionReportRows = (rows = []) =>
     yesNo(Boolean(row.edevletProcessed)),
   ]);
 
-const estimateColWidths = (sheetRows) =>
-  HEADERS.map((_, colIndex) => {
-    let maxLen = MIN_COL_WIDTHS[colIndex] || 14;
+export const buildEdevletIssuedCertificateRows = (rows = []) =>
+  rows.map((row) => [
+    String(row.documentNumber || "").trim(),
+    String(row.educationCode || "").trim(),
+    String(row.educationName || "").trim(),
+    String(row.participantName || "").trim(),
+    String(row.nationalId || "").replace(/\D/g, ""),
+    formatIstanbulDate(row.bestRecordedAt || row.lastAttemptAt),
+  ]);
+
+const estimateColWidths = (headers, minWidths, sheetRows) =>
+  headers.map((_, colIndex) => {
+    let maxLen = minWidths[colIndex] || 14;
     sheetRows.forEach((row) => {
       const value = row[colIndex] == null ? "" : String(row[colIndex]);
       maxLen = Math.max(maxLen, Math.min(value.length + 2, 50));
@@ -94,17 +114,21 @@ const estimateColWidths = (sheetRows) =>
     return { wch: maxLen };
   });
 
-export const downloadCertificateAcquisitionReportExcel = (
-  rows = [],
-  fileName = "sertifika-alim-raporu.xlsx",
-) => {
-  const dataRows = buildCertificateAcquisitionReportRows(rows);
-  const sheetRows = [HEADERS, ...dataRows];
+const writeStyledWorkbook = ({
+  headers,
+  dataRows,
+  minWidths,
+  centeredColIndexes,
+  sheetName,
+  fileName,
+}) => {
+  const sheetRows = [headers, ...dataRows];
   const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
-  const lastCol = colLetter(HEADERS.length - 1);
+  const lastCol = colLetter(headers.length - 1);
   const lastRow = sheetRows.length;
+  const centered = new Set(centeredColIndexes);
 
-  HEADERS.forEach((title, colIndex) => {
+  headers.forEach((title, colIndex) => {
     const address = `${colLetter(colIndex)}1`;
     worksheet[address] = {
       t: "s",
@@ -117,9 +141,8 @@ export const downloadCertificateAcquisitionReportExcel = (
     const excelRow = rowIndex + 2;
     row.forEach((value, colIndex) => {
       const address = `${colLetter(colIndex)}${excelRow}`;
-      const centered = colIndex === 2 || colIndex === 4 || colIndex >= 7;
       const style = {
-        ...(centered ? centerBodyStyle : bodyStyle),
+        ...(centered.has(colIndex) ? centerBodyStyle : bodyStyle),
         ...(rowIndex % 2 === 1 ? { fill: altRowFill } : {}),
       };
       worksheet[address] = {
@@ -130,7 +153,7 @@ export const downloadCertificateAcquisitionReportExcel = (
     });
   });
 
-  worksheet["!cols"] = estimateColWidths(sheetRows);
+  worksheet["!cols"] = estimateColWidths(headers, minWidths, sheetRows);
   worksheet["!rows"] = [{ hpt: 32 }, ...dataRows.map(() => ({ hpt: 22 }))];
   worksheet["!autofilter"] = { ref: `A1:${lastCol}${lastRow}` };
   worksheet["!freeze"] = {
@@ -142,6 +165,34 @@ export const downloadCertificateAcquisitionReportExcel = (
   };
 
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Sertifika Alım Raporu");
+  XLSX.utils.book_append_sheet(workbook, worksheet, String(sheetName || "Rapor").slice(0, 31));
   XLSX.writeFile(workbook, fileName);
+};
+
+export const downloadCertificateAcquisitionReportExcel = (
+  rows = [],
+  fileName = "sertifika-alim-raporu.xlsx",
+) => {
+  writeStyledWorkbook({
+    headers: ACQUISITION_HEADERS,
+    dataRows: buildCertificateAcquisitionReportRows(rows),
+    minWidths: ACQUISITION_MIN_COL_WIDTHS,
+    centeredColIndexes: [2, 4, 7, 8, 9, 10],
+    sheetName: "Sertifika Alım Raporu",
+    fileName,
+  });
+};
+
+export const downloadEdevletIssuedCertificateExcel = (
+  rows = [],
+  fileName = "edevlet-sertifikasi-verilenler.xlsx",
+) => {
+  writeStyledWorkbook({
+    headers: EDEVLET_ISSUED_HEADERS,
+    dataRows: buildEdevletIssuedCertificateRows(rows),
+    minWidths: EDEVLET_ISSUED_MIN_COL_WIDTHS,
+    centeredColIndexes: [0, 1, 4, 5],
+    sheetName: "E-devlet Verilenler",
+    fileName,
+  });
 };

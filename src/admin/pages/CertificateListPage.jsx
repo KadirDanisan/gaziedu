@@ -3,7 +3,7 @@ import { adminApi } from "../api";
 import AdminDateRangeFilter from "../components/AdminDateRangeFilter";
 import { DEFAULT_DATE_RANGE_PERIOD } from "../utils/dateRangePeriod";
 import { downloadEdevletCertificateExcel } from "../utils/buildEdevletCertificateExcel";
-import { downloadCertificateAcquisitionReportExcel } from "../utils/buildCertificateAcquisitionReportExcel";
+import { downloadCertificateAcquisitionReportExcel, downloadEdevletIssuedCertificateExcel } from "../utils/buildCertificateAcquisitionReportExcel";
 
 const formatIstanbul = (value) => {
   if (!value) return "-";
@@ -88,6 +88,7 @@ export default function CertificateListPage() {
   const [excelExportConfirm, setExcelExportConfirm] = useState(null);
   const [bulkPdfProgress, setBulkPdfProgress] = useState(null);
   const [exportingAcquisitionReport, setExportingAcquisitionReport] = useState(false);
+  const [exportingEdevletIssuedList, setExportingEdevletIssuedList] = useState(false);
 
   const runSearch = () => {
     setSearch(searchInput.trim());
@@ -318,6 +319,36 @@ export default function CertificateListPage() {
     }
   };
 
+  const handleExportEdevletIssuedList = async () => {
+    if (!selectedCount) {
+      setError("E-devlet sertifikası verilenler listesi için en az bir kayıt seçin.");
+      return;
+    }
+    setExportingEdevletIssuedList(true);
+    setError("");
+    try {
+      const res = await adminApi.getCertificateListEdevletExport({ search, period, completion });
+      const exportRows = (res.data || []).filter(
+        (row) => selectedIds.has(String(row.id)) && Boolean(row.edevletProcessed),
+      );
+      if (!exportRows.length) {
+        setError("Seçili kayıtlar arasında E-devlete işlenmiş sertifika bulunamadı.");
+        return;
+      }
+      const stamp = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Europe/Istanbul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+      downloadEdevletIssuedCertificateExcel(exportRows, `edevlet-sertifikasi-verilenler-${stamp}.xlsx`);
+    } catch (e) {
+      setError(e.message || "E-devlet sertifikası verilenler listesi oluşturulamadı.");
+    } finally {
+      setExportingEdevletIssuedList(false);
+    }
+  };
+
   const submitEdevletProcessed = async () => {
     const id = edevletConfirmId;
     if (!id) return;
@@ -336,75 +367,137 @@ export default function CertificateListPage() {
 
   return (
     <section className="admin-page">
-      <div className="admin-page-head">
-        <div>
+      <div className="admin-page-head certificate-page-head">
+        <div className="certificate-page-head__intro">
           <h2>Sertifika Çıkartma Sistemi</h2>
           <p>
             Ödemesi alınmış ve sınavdan en az 60 puan almış katılımcılar. E-devlete işlenen kayıtlar için{" "}
             <strong>Sertifika Hazırla</strong> kilitlenir.
           </p>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}>
-          <button
-            type="button"
-            className="btn btn-outline"
-            onClick={handleBulkDownloadCertificates}
-            disabled={
-              loading ||
-              exportingEdevlet ||
-              exportingAcquisitionReport ||
-              selectingAll ||
-              Boolean(generatingId) ||
-              Boolean(bulkPdfProgress) ||
-              !selectedCount
-            }
-          >
-            {bulkPdfProgress
-              ? "Toplu sertifika hazırlanıyor…"
-              : selectedCount
-                ? `Toplu sertifika indir (${selectedCount})`
-                : "Toplu sertifika indir"}
-          </button>
-          <button
-            type="button"
-            className="btn btn-outline"
-            onClick={handleExportAcquisitionReport}
-            disabled={
-              loading ||
-              exportingEdevlet ||
-              exportingAcquisitionReport ||
-              selectingAll ||
-              Boolean(generatingId) ||
-              Boolean(bulkPdfProgress) ||
-              !selectedCount
-            }
-          >
-            {exportingAcquisitionReport
-              ? "Rapor hazırlanıyor…"
-              : selectedCount
-                ? `Sertifika Alım Raporu (${selectedCount})`
-                : "Sertifika Alım Raporu"}
-          </button>
-          <button
-            type="button"
-            className="btn btn-outline"
-            onClick={handleExportEdevletExcel}
-            disabled={
-              loading ||
-              exportingEdevlet ||
-              exportingAcquisitionReport ||
-              selectingAll ||
-              Boolean(generatingId) ||
-              Boolean(bulkPdfProgress) ||
-              !selectedCount
-            }
-          >
-            {exportingEdevlet
-              ? "Excel hazırlanıyor…"
-              : selectedCount
-                ? `E-devlet işlem excel çıkart (${selectedCount})`
-                : "E-devlet işlem excel çıkart"}
-          </button>
+        <div className="certificate-action-panels">
+          <div className="certificate-action-panel certificate-action-panel--edevlet">
+            <div className="certificate-action-panel__head">
+              <span className="certificate-action-panel__icon" aria-hidden>
+                <i className="fa-solid fa-cloud-arrow-up" />
+              </span>
+              <div>
+                <span className="certificate-action-panel__label">E-devlet yükleme</span>
+                <p className="certificate-action-panel__hint">PDF hazırla ve işlem Excel’i çıkar</p>
+              </div>
+            </div>
+            <div className="certificate-action-panel__buttons">
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={handleBulkDownloadCertificates}
+                disabled={
+                  loading ||
+                  exportingEdevlet ||
+                  exportingAcquisitionReport ||
+                  exportingEdevletIssuedList ||
+                  selectingAll ||
+                  Boolean(generatingId) ||
+                  Boolean(bulkPdfProgress) ||
+                  !selectedCount
+                }
+              >
+                <i className="fa-solid fa-file-zipper" aria-hidden />
+                <span>
+                  {bulkPdfProgress
+                    ? "Hazırlanıyor…"
+                    : selectedCount
+                      ? `Toplu sertifika (${selectedCount})`
+                      : "Toplu sertifika indir"}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={handleExportEdevletExcel}
+                disabled={
+                  loading ||
+                  exportingEdevlet ||
+                  exportingAcquisitionReport ||
+                  exportingEdevletIssuedList ||
+                  selectingAll ||
+                  Boolean(generatingId) ||
+                  Boolean(bulkPdfProgress) ||
+                  !selectedCount
+                }
+              >
+                <i className="fa-solid fa-file-excel" aria-hidden />
+                <span>
+                  {exportingEdevlet
+                    ? "Hazırlanıyor…"
+                    : selectedCount
+                      ? `İşlem Excel (${selectedCount})`
+                      : "E-devlet işlem Excel"}
+                </span>
+              </button>
+            </div>
+          </div>
+          <div className="certificate-action-panel certificate-action-panel--reports">
+            <div className="certificate-action-panel__head">
+              <span className="certificate-action-panel__icon" aria-hidden>
+                <i className="fa-solid fa-chart-simple" />
+              </span>
+              <div>
+                <span className="certificate-action-panel__label">Raporlar</span>
+                <p className="certificate-action-panel__hint">Alım ve verilenler listelerini indir</p>
+              </div>
+            </div>
+            <div className="certificate-action-panel__buttons">
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={handleExportAcquisitionReport}
+                disabled={
+                  loading ||
+                  exportingEdevlet ||
+                  exportingAcquisitionReport ||
+                  exportingEdevletIssuedList ||
+                  selectingAll ||
+                  Boolean(generatingId) ||
+                  Boolean(bulkPdfProgress) ||
+                  !selectedCount
+                }
+              >
+                <i className="fa-solid fa-file-arrow-down" aria-hidden />
+                <span>
+                  {exportingAcquisitionReport
+                    ? "Hazırlanıyor…"
+                    : selectedCount
+                      ? `Alım raporu (${selectedCount})`
+                      : "Sertifika alım raporu"}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={handleExportEdevletIssuedList}
+                disabled={
+                  loading ||
+                  exportingEdevlet ||
+                  exportingAcquisitionReport ||
+                  exportingEdevletIssuedList ||
+                  selectingAll ||
+                  Boolean(generatingId) ||
+                  Boolean(bulkPdfProgress) ||
+                  !selectedCount
+                }
+              >
+                <i className="fa-solid fa-list-check" aria-hidden />
+                <span>
+                  {exportingEdevletIssuedList
+                    ? "Hazırlanıyor…"
+                    : selectedCount
+                      ? `Verilenler (${selectedCount})`
+                      : "E-devlet verilenler"}
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
