@@ -63,6 +63,7 @@ export function AdminDataProvider({ children }) {
   const deleteItem = async (moduleName, id) => adminApi.deleteItem(moduleName, id);
   const uploadInstitutionLogo = async (file) => adminApi.uploadInstitutionLogo(file);
   const uploadEducationImage = async (file) => adminApi.uploadEducationImage(file);
+  const uploadEducationModuleVideo = async (file) => adminApi.uploadEducationModuleVideo(file);
   const uploadEducationContentDoc = async (file) => adminApi.uploadEducationContentDoc(file);
   const uploadExamDoc = async (file) => adminApi.uploadExamDoc(file);
   const updatePermission = async (id, payload) => adminApi.updatePermission(id, payload);
@@ -85,6 +86,7 @@ export function AdminDataProvider({ children }) {
     deleteItem,
     uploadInstitutionLogo,
     uploadEducationImage,
+    uploadEducationModuleVideo,
     uploadEducationContentDoc,
     uploadExamDoc,
     updatePermission,

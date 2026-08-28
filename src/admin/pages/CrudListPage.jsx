@@ -59,7 +59,7 @@ const moduleConfig = {
   },
   educations: {
     title: "Eğitim Listesi",
-    fields: ["code", "name", "categoryId", "salesFilter", "institutionId", "instructorId", "description", "content", "topicHeadings", "imageUrl", "duration"],
+    fields: ["code", "name", "categoryId", "salesFilter", "institutionId", "instructorId", "description", "content", "topicHeadings", "imageUrl", "promoVideoPath", "promoVideoUrl", "duration"],
     labels: {
       code: "Eğitim Kodu (onaylı listeden)",
       name: "Eğitim Adı",
@@ -71,6 +71,8 @@ const moduleConfig = {
       content: "Eğitim İçeriği",
       topicHeadings: "Konu Başlıkları",
       imageUrl: "Görsel URL",
+      promoVideoPath: "Tanıtım Videosu",
+      promoVideoUrl: "Tanıtım Videosu (harici bağlantı)",
       duration: "Eğitim Saati",
     },
   },
@@ -274,6 +276,7 @@ export default function CrudListPage({ moduleKey }) {
   const [form, setForm] = useState({});
   const [logoUploading, setLogoUploading] = useState(false);
   const [educationImageUploading, setEducationImageUploading] = useState(false);
+  const [promoVideoUploading, setPromoVideoUploading] = useState(false);
   const [examDocUploading, setExamDocUploading] = useState("");
   const [excelImportProgress, setExcelImportProgress] = useState(null);
   const [excelImportConflict, setExcelImportConflict] = useState(null);
@@ -380,6 +383,7 @@ export default function CrudListPage({ moduleKey }) {
     setEditing("new");
     setLogoUploading(false);
     setEducationImageUploading(false);
+    setPromoVideoUploading(false);
     setExamDocUploading("");
     const initialForm = formFields.reduce((acc, key) => ({ ...acc, [key]: "" }), {});
     if (isContactFormsModule) {
@@ -404,6 +408,7 @@ export default function CrudListPage({ moduleKey }) {
     setEditing(row.id);
     setLogoUploading(false);
     setEducationImageUploading(false);
+    setPromoVideoUploading(false);
     setExamDocUploading("");
     const initial = config.fields.reduce((acc, key) => ({ ...acc, [key]: row[key] ?? "" }), {});
     if (isUserPasswordModule) initial.password = "";
@@ -510,6 +515,24 @@ export default function CrudListPage({ moduleKey }) {
       setError(err.message);
     } finally {
       setEducationImageUploading(false);
+    }
+  };
+
+  const handlePromoVideoUpload = async (file) => {
+    if (!file) return;
+    setPromoVideoUploading(true);
+    setError("");
+    try {
+      const result = await data.uploadEducationModuleVideo(file);
+      const uploadedPath = result?.path || "";
+      setForm((prev) => ({ ...prev, promoVideoPath: uploadedPath }));
+      if (!uploadedPath) {
+        setError("Video yüklendi ancak yol alınamadı. Lütfen tekrar deneyin.");
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setPromoVideoUploading(false);
     }
   };
 
@@ -865,7 +888,9 @@ export default function CrudListPage({ moduleKey }) {
 
             <div className="admin-modal__body">
               <div className={`admin-form-grid ${isEducationLikeModule || isExamQuestionsModule ? "admin-form-grid-single admin-form-grid--premium" : "admin-form-grid--premium"}`}>
-              {formFields.map((field) => (
+              {formFields
+                .filter((field) => !(field === "promoVideoUrl" && isEducationsModule))
+                .map((field) => (
                 <label key={field} className="admin-field">
                   <span className="admin-field__label">{config.labels[field]}</span>
                   {isExamQuestionsModule && field === "educationId" ? (
@@ -943,6 +968,41 @@ export default function CrudListPage({ moduleKey }) {
                         placeholder="Yüklenen görsel URL"
                       />
                       {educationImageUploading ? <small>Görsel yükleniyor...</small> : null}
+                    </div>
+                  ) : isEducationsModule && field === "promoVideoPath" ? (
+                    <div className="admin-field-stack">
+                      <input
+                        type="text"
+                        value={form.promoVideoUrl ?? ""}
+                        onChange={(event) => setForm((prev) => ({ ...prev, promoVideoUrl: event.target.value }))}
+                        placeholder="YouTube / Vimeo bağlantısı veya .mp4 adresi"
+                      />
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={(event) => handlePromoVideoUpload(event.target.files?.[0])}
+                        disabled={promoVideoUploading}
+                      />
+                      {promoVideoUploading ? (
+                        <small>Video yükleniyor ve web için optimize ediliyor (faststart), pencereyi kapatmayın...</small>
+                      ) : null}
+                      <input
+                        value={form.promoVideoPath ?? ""}
+                        onChange={(event) => setForm((prev) => ({ ...prev, promoVideoPath: event.target.value }))}
+                        placeholder="Yüklenen tanıtım videosu yolu"
+                      />
+                      {form.promoVideoPath ? (
+                        <button
+                          type="button"
+                          className="admin-resource-card__unlink"
+                          onClick={() => setForm((prev) => ({ ...prev, promoVideoPath: "" }))}
+                        >
+                          Yüklenen videoyu kaldır
+                        </button>
+                      ) : null}
+                      <small style={{ opacity: 0.85 }}>
+                        Yüklenen dosya varsa o oynatılır; yoksa bağlantı kullanılır. En fazla 2 GB.
+                      </small>
                     </div>
                   ) : isEducationLikeModule && field === "imageUrl" ? (
                     <div className="admin-field-stack">
@@ -1207,7 +1267,7 @@ export default function CrudListPage({ moduleKey }) {
                   type="submit"
                   className="btn btn--modal-primary"
                   disabled={
-                    logoUploading || educationImageUploading || Boolean(examDocUploading)
+                    logoUploading || educationImageUploading || promoVideoUploading || Boolean(examDocUploading)
                   }
                 >
                   Kaydet

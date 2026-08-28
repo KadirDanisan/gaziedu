@@ -58,6 +58,17 @@ const prepareEducationPayload = (payload) => {
   if (typeof payload.content_doc_path === "string") {
     payload.content_doc_path = normalizeUploadPath(payload.content_doc_path);
   }
+  if (typeof payload.promo_video_path === "string") {
+    payload.promo_video_path = normalizeUploadPath(payload.promo_video_path);
+  }
+  if (Object.hasOwn(payload, "promo_video_path")) {
+    const path = String(payload.promo_video_path || "").trim();
+    payload.promo_video_path = path || null;
+  }
+  if (Object.hasOwn(payload, "promo_video_url")) {
+    const url = String(payload.promo_video_url || "").trim();
+    payload.promo_video_url = url || null;
+  }
   delete payload.content_doc;
   delete payload.content_blocks;
   delete payload.content_html;

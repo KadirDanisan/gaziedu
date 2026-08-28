@@ -3,6 +3,8 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { publicApi, resolvePublicImageUrl, invalidateEducationReviewsCache } from "../api/publicApi";
 import { userApi } from "../api/userApi";
 import TrainingCurriculum from "../components/TrainingCurriculum";
+import PromoVideoModal from "../components/PromoVideoModal";
+import { describeVideoSource } from "../utils/moduleResources";
 import { useAuth } from "../context/AuthContext";
 
 const COURSE_ID_UUID =
@@ -338,6 +340,7 @@ function TrainingDetailPage() {
   const [apiCourse, setApiCourse] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [ratingLive, setRatingLive] = useState(null);
+  const [promoVideoOpen, setPromoVideoOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -380,6 +383,19 @@ function TrainingDetailPage() {
     return ratingLive ? { ...course, ...ratingLive } : course;
   }, [course, ratingLive]);
 
+  const activeCourse = displayCourse || course;
+  const promoVideoResource = useMemo(
+    () => ({
+      path: activeCourse?.promoVideoPath,
+      url: activeCourse?.promoVideoUrl,
+    }),
+    [activeCourse?.promoVideoPath, activeCourse?.promoVideoUrl],
+  );
+  const hasPromoVideo = useMemo(
+    () => describeVideoSource(promoVideoResource).type !== "none",
+    [promoVideoResource],
+  );
+
   useEffect(() => {
     if (!course?.id) return;
     const hash = (window.location.hash || "").replace(/^#/, "").trim();
@@ -397,7 +413,7 @@ function TrainingDetailPage() {
     return <section className="section"><h2>Eğitim bulunamadı.</h2></section>;
   }
 
-  const c = displayCourse || course;
+  const c = activeCourse;
   const visibleSectionTabs = buildVisibleSectionTabs(c);
 
   const institutionLogoSrc =
@@ -461,9 +477,27 @@ function TrainingDetailPage() {
           </p>
           <div className="training-detail-badges">
             <div className="training-badge">GUZEM</div>
+            {hasPromoVideo ? (
+              <button
+                type="button"
+                className="training-badge training-badge--promo"
+                onClick={() => setPromoVideoOpen(true)}
+                aria-haspopup="dialog"
+              >
+                <i className="fa-solid fa-play" aria-hidden />
+                <span>Tanıtım Videosunu İzle</span>
+              </button>
+            ) : null}
           </div>
         </div>
       </section>
+
+      <PromoVideoModal
+        open={promoVideoOpen}
+        onClose={() => setPromoVideoOpen(false)}
+        resource={promoVideoResource}
+        title={`${c.title} — Tanıtım Videosu`}
+      />
 
       <section className="training-detail-content section">
         <div className="training-detail-main">

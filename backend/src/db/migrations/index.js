@@ -689,11 +689,18 @@ const migrateInstructorImageColumn = async () => {
   await pool.query(`ALTER TABLE instructors ADD COLUMN IF NOT EXISTS image_url TEXT`);
 };
 
+/** Eğitim tanıtım videosu (detay sayfası hero). */
+const migrateEducationPromoVideoColumns = async () => {
+  await pool.query(`ALTER TABLE educations ADD COLUMN IF NOT EXISTS promo_video_path TEXT`);
+  await pool.query(`ALTER TABLE educations ADD COLUMN IF NOT EXISTS promo_video_url TEXT`);
+};
+
 export {
   migrateContactFormTimestampsToIstanbul,
   migrateInstitutionCodeColumn,
   migrateInstructorAdminLinkColumn,
   migrateInstructorImageColumn,
+  migrateEducationPromoVideoColumns,
   migrateEducationDocColumns,
   migrateEducationCalendarColumns,
   migrateEducationCategoryColumns,
@@ -762,4 +769,5 @@ export const migrations = [
   migrateEdevletExcelExportState,
   migrateContactFormTimestampsToIstanbul,
   migrateInstructorImageColumn,
+  migrateEducationPromoVideoColumns,
 ];

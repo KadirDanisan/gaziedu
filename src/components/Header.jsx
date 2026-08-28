@@ -18,6 +18,8 @@ function Header() {
   const [isMobileCoursesOpen, setIsMobileCoursesOpen] = useState(false);
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
   const [categoryItems, setCategoryItems] = useState([]);
+  const [isDesktopCoursesOpen, setIsDesktopCoursesOpen] = useState(false);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const categoriesLoadingRef = useRef(false);
   const categoriesLoadedRef = useRef(false);
   const { isLoggedIn, user, logout, favorites, loadFavorites } = useAuth();
@@ -39,11 +41,47 @@ function Header() {
     setIsMobileCoursesOpen(false);
   };
 
-  const handleDesktopDropdownMouseLeave = () => {
-    const activeElement = document.activeElement;
-    if (desktopDropdownRef.current?.contains(activeElement)) {
-      activeElement.blur();
+  const fetchCategories = useCallback(async () => {
+    if (categoriesLoadedRef.current) return true;
+    if (categoriesLoadingRef.current) return false;
+
+    categoriesLoadingRef.current = true;
+    setCategoriesLoading(true);
+    try {
+      const data = await publicApi.getCategories();
+      if (Array.isArray(data?.categories) && data.categories.length) {
+        const parsed = data.categories.map((item) => (typeof item === "string" ? item : item.name));
+        setCategoryItems(parsed.filter(Boolean));
+      } else {
+        setCategoryItems([]);
+      }
+      categoriesLoadedRef.current = true;
+      return true;
+    } catch {
+      setCategoryItems([]);
+      return false;
+    } finally {
+      categoriesLoadingRef.current = false;
+      setCategoriesLoading(false);
     }
+  }, []);
+
+  const toggleDesktopCategories = async () => {
+    if (isDesktopCoursesOpen) {
+      setIsDesktopCoursesOpen(false);
+      return;
+    }
+    const loaded = await fetchCategories();
+    if (loaded) setIsDesktopCoursesOpen(true);
+  };
+
+  const toggleMobileCategories = async () => {
+    if (isMobileCoursesOpen) {
+      setIsMobileCoursesOpen(false);
+      return;
+    }
+    const loaded = await fetchCategories();
+    if (loaded) setIsMobileCoursesOpen(true);
   };
 
   useEffect(() => {
@@ -102,25 +140,22 @@ function Header() {
     };
   }, [searchQuery, isSearchOpen]);
 
-  const loadCategories = useCallback(() => {
-    if (categoriesLoadedRef.current || categoriesLoadingRef.current) return;
-    categoriesLoadingRef.current = true;
-    publicApi
-      .getCategories()
-      .then((data) => {
-        if (Array.isArray(data?.categories) && data.categories.length) {
-          const parsed = data.categories.map((item) => (typeof item === "string" ? item : item.name));
-          setCategoryItems(parsed.filter(Boolean));
-        }
-        categoriesLoadedRef.current = true;
-      })
-      .catch(() => {
-        setCategoryItems([]);
-      })
-      .finally(() => {
-        categoriesLoadingRef.current = false;
-      });
-  }, []);
+  useEffect(() => {
+    if (!isDesktopCoursesOpen) return undefined;
+    const closeIfOutside = (event) => {
+      if (desktopDropdownRef.current?.contains(event.target)) return;
+      setIsDesktopCoursesOpen(false);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") setIsDesktopCoursesOpen(false);
+    };
+    document.addEventListener("mousedown", closeIfOutside);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", closeIfOutside);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [isDesktopCoursesOpen]);
 
   useEffect(() => {
     if (!isFavoritesOpen) return undefined;
@@ -172,8 +207,16 @@ function Header() {
           />
         </Link>
         <nav>
-          <div className="dropdown" ref={desktopDropdownRef} onMouseLeave={handleDesktopDropdownMouseLeave}>
-            <button className="dropdown-trigger" type="button" onClick={loadCategories}>
+          <div className={`dropdown ${isDesktopCoursesOpen ? "is-open" : ""}`} ref={desktopDropdownRef}>
+            <button
+              className="dropdown-trigger"
+              type="button"
+              onClick={toggleDesktopCategories}
+              aria-expanded={isDesktopCoursesOpen}
+              aria-haspopup="true"
+              aria-busy={categoriesLoading}
+              disabled={categoriesLoading}
+            >
               Eğitim Programları <i className="fa-solid fa-chevron-down" />
             </button>
             <div className="dropdown-menu categories-mega-menu" role="menu" aria-label="Eğitim kategorileri">
@@ -183,6 +226,7 @@ function Header() {
                   to={categoryLinkTo(item)}
                   role="menuitem"
                   className={item === "Tüm Eğitimler" ? "categories-mega-all" : undefined}
+                  onClick={() => setIsDesktopCoursesOpen(false)}
                 >
                   {item}
                 </Link>
@@ -342,11 +386,10 @@ function Header() {
             <button
               className="mobile-dropdown-trigger"
               type="button"
-              onClick={() => {
-                loadCategories();
-                setIsMobileCoursesOpen((prev) => !prev);
-              }}
+              onClick={toggleMobileCategories}
               aria-expanded={isMobileCoursesOpen}
+              aria-busy={categoriesLoading}
+              disabled={categoriesLoading}
             >
               Eğitim Programları <i className="fa-solid fa-chevron-down" />
             </button>

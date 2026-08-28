@@ -48,6 +48,8 @@ const formatPublicCourse = (row) => ({
   duration: row.duration || "Belirtilmedi",
   attendees: row.attendees || "Sınırsız Kontenjan",
   image: row.image_url || "https://istanbulinstitute.com/thumb.php?src=site/images/no_image.jpg&size=526x282",
+  promoVideoPath: row.promo_video_path ? String(row.promo_video_path).trim() : "",
+  promoVideoUrl: row.promo_video_url ? String(row.promo_video_url).trim() : "",
   description: row.description || "",
   content: row.content || "",
   contentDocPath: row.content_doc_path || "",
@@ -74,7 +76,7 @@ const loadPublicCategoryOptions = async () => {
   ];
 };
 
-const EDUCATION_DETAIL_SELECT = `e.id, e.name, e.description, e.content, e.image_url, e.code, e.duration, e.topic_headings, e.sales_filter, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
+const EDUCATION_DETAIL_SELECT = `e.id, e.name, e.description, e.content, e.image_url, e.promo_video_path, e.promo_video_url, e.code, e.duration, e.topic_headings, e.sales_filter, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
           ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email, ins.image_url AS instructor_image_url,
           NULL::text AS instructor_info, NULL::timestamptz AS calendar_date`;
 

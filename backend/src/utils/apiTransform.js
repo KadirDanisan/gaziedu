@@ -10,6 +10,8 @@ const dbToApiMap = {
   website_url: "websiteUrl",
   instructor_id: "instructorId",
   image_url: "imageUrl",
+  promo_video_path: "promoVideoPath",
+  promo_video_url: "promoVideoUrl",
   education_name: "educationName",
   instructor_info: "instructorInfo",
   calendar_date: "calendarDate",
