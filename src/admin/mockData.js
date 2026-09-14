@@ -5,7 +5,7 @@ const range = (count) => Array.from({ length: count }, (_, index) => index + 1);
 export const roles = [
   { id: "r-super", name: "Süper Admin", createdAt: now, updatedAt: now },
   { id: "r-admin", name: "Admin", createdAt: now, updatedAt: now },
-  { id: "r-auth", name: "Yetkili", createdAt: now, updatedAt: now },
+  { id: "r-auth", name: "Sertifika Yetkilisi", createdAt: now, updatedAt: now },
   { id: "r-instructor", name: "Eğitmen", createdAt: now, updatedAt: now },
 ];
 

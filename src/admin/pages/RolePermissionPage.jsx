@@ -10,6 +10,10 @@ const actionLabels = {
   canDelete: "Sil",
 };
 
+const roleDisplayNames = {
+  yetkili: "Sertifika Yetkilisi",
+};
+
 export default function RolePermissionPage() {
   const { roles, loadFormOptions, updatePermission } = useAdminData();
   const { allPermissions, loadAllPermissions } = useAdminAuth();
@@ -45,7 +49,7 @@ export default function RolePermissionPage() {
 
       {grouped.map((role) => (
         <article key={role.id} className="admin-panel-card">
-          <h3>{role.name}</h3>
+          <h3>{roleDisplayNames[role.code] || role.name}</h3>
           <div className="admin-table-wrap">
             <table className="admin-table">
               <thead>

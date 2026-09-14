@@ -2,7 +2,7 @@ INSERT INTO roles (code, name)
 VALUES
   ('superadmin', 'Süper Admin'),
   ('admin', 'Admin'),
-  ('yetkili', 'Yetkili'),
+  ('yetkili', 'Sertifika Yetkilisi'),
   ('egitmen', 'Eğitmen')
 ON CONFLICT (code) DO NOTHING;
 

@@ -695,12 +695,18 @@ const migrateEducationPromoVideoColumns = async () => {
   await pool.query(`ALTER TABLE educations ADD COLUMN IF NOT EXISTS promo_video_url TEXT`);
 };
 
+/** yetkili rol görünen adı: Sertifika Yetkilisi */
+const migrateYetkiliRoleDisplayName = async () => {
+  await pool.query(`UPDATE roles SET name = 'Sertifika Yetkilisi' WHERE code = 'yetkili'`);
+};
+
 export {
   migrateContactFormTimestampsToIstanbul,
   migrateInstitutionCodeColumn,
   migrateInstructorAdminLinkColumn,
   migrateInstructorImageColumn,
   migrateEducationPromoVideoColumns,
+  migrateYetkiliRoleDisplayName,
   migrateEducationDocColumns,
   migrateEducationCalendarColumns,
   migrateEducationCategoryColumns,
@@ -770,4 +776,5 @@ export const migrations = [
   migrateContactFormTimestampsToIstanbul,
   migrateInstructorImageColumn,
   migrateEducationPromoVideoColumns,
+  migrateYetkiliRoleDisplayName,
 ];

@@ -294,7 +294,7 @@ export default function CrudListPage({ moduleKey }) {
     { code: "superadmin", label: "Süper Admin" },
     { code: "admin", label: "Admin" },
     { code: "egitmen", label: "Eğitmen" },
-    { code: "yetkili", label: "Yetkili" },
+    { code: "yetkili", label: "Sertifika Yetkilisi" },
   ];
   const rolesById = Object.fromEntries((data.roles || []).map((role) => [role.id, role]));
   const institutionsById = Object.fromEntries((data.institutions || []).map((institution) => [institution.id, institution]));
