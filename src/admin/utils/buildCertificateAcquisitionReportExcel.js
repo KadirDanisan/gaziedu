@@ -9,7 +9,7 @@ const ACQUISITION_HEADERS = [
   "Sertifika No",
   "Vid. İzl.",
   "Ort. İzl. (%)",
-  "Ücr. Öd.",
+  "Eğt. Ücr. Öd.",
   "e-Devlet İşl.",
 ];
 
