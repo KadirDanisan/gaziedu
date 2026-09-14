@@ -209,12 +209,12 @@ const writeStyledWorkbook = ({
 
   worksheet["!cols"] = estimateColWidths(headers, minWidths, sheetRows, maxWidths);
   worksheet["!rows"] = [
-    { hpt: 28 },
-    ...dataRows.map(() => ({ hpt: 20 })),
-    { hpt: 16 },
-    { hpt: 22 },
+    { hpt: 36 },
+    ...dataRows.map(() => ({ hpt: 26 })),
     { hpt: 20 },
-    { hpt: 18 },
+    { hpt: 28 },
+    { hpt: 24 },
+    { hpt: 22 },
   ];
   worksheet["!autofilter"] = { ref: `A1:${lastCol}${dataLastRow}` };
   worksheet["!freeze"] = {
