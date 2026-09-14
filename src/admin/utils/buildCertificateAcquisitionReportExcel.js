@@ -2,9 +2,7 @@ import XLSX from "xlsx-js-style";
 import { toTrUpper } from "./turkishText";
 
 const ACQUISITION_HEADERS = [
-  "Eğitim Kodu",
-  "Eğitim Adı",
-  "TC Kimlik No",
+  "T.C. Kimlik No",
   "İsim Soyisim",
   "Aldığı Puan",
   "Eğitim Sınav Tarihi",
@@ -20,12 +18,12 @@ const EDEVLET_ISSUED_HEADERS = [
   "Eğitim Kodu",
   "Eğitim Adı",
   "Kullanıcı",
-  "Tc Kimlik No",
+  "T.C. Kimlik No",
   "Sınav Giriş Tarihi ve Saati",
 ];
 
 /** Kolon minimum genişlikleri (karakter) */
-const ACQUISITION_MIN_COL_WIDTHS = [18, 40, 16, 26, 14, 22, 20, 18, 28, 24, 20];
+const ACQUISITION_MIN_COL_WIDTHS = [16, 26, 14, 22, 20, 18, 28, 24, 20];
 const EDEVLET_ISSUED_MIN_COL_WIDTHS = [20, 18, 40, 26, 16, 26];
 
 /** 90–99 arası rastgele izlenme yüzdesi (örn. 90%, 93%, 99%) */
@@ -103,8 +101,6 @@ const colLetter = (index) => XLSX.utils.encode_col(index);
 
 export const buildCertificateAcquisitionReportRows = (rows = []) =>
   rows.map((row) => [
-    String(row.educationCode || "").trim(),
-    String(row.educationName || "").trim(),
     String(row.nationalId || "").replace(/\D/g, ""),
     String(row.participantName || "").trim() ? toTrUpper(row.participantName) : "",
     row.bestScore != null && row.bestScore !== "" ? Number(row.bestScore) : "",
@@ -238,7 +234,7 @@ export const downloadCertificateAcquisitionReportExcel = (
     headers: ACQUISITION_HEADERS,
     dataRows: buildCertificateAcquisitionReportRows(rows),
     minWidths: ACQUISITION_MIN_COL_WIDTHS,
-    centeredColIndexes: [2, 4, 7, 8, 9, 10],
+    centeredColIndexes: [0, 2, 5, 6, 7, 8],
     sheetName: "Sertifika Alım Raporu",
     fileName,
   });
