@@ -60,6 +60,22 @@ const centerBodyStyle = {
 
 const altRowFill = { patternType: "solid", fgColor: { rgb: "F0FDF4" } };
 
+const SIGNATURE_BLOCK = [
+  { title: "İmzalayan", name: "Prof. Dr. Selami Eryılmaz" },
+  { title: "Onaylayan", name: "Prof. Dr. Çelebi Ulusoy" },
+  { title: "Hazırlayan", name: "Ögr. Grv. Nail Akgün" },
+];
+
+const signatureTitleStyle = {
+  font: { bold: true, sz: 11, name: "Calibri", color: { rgb: "1F2937" } },
+  alignment: { horizontal: "center", vertical: "center", wrapText: true },
+};
+
+const signatureNameStyle = {
+  font: { sz: 10, name: "Calibri", color: { rgb: "1F2937" } },
+  alignment: { horizontal: "center", vertical: "center", wrapText: true },
+};
+
 const formatIstanbulDate = (value) => {
   if (!value) return "";
   const date = new Date(value);
@@ -114,6 +130,29 @@ const estimateColWidths = (headers, minWidths, sheetRows) =>
     return { wch: maxLen };
   });
 
+const appendSignatureBlock = (worksheet, colCount, dataRowCount) => {
+  // Veri bitince 1 boş satır; ardından unvan satırı + isim satırı (son 3 kolon)
+  const titleExcelRow = dataRowCount + 3; // header(1) + data + blank(1) + titles
+  const nameExcelRow = titleExcelRow + 1;
+  const startCol = Math.max(0, colCount - 3);
+
+  SIGNATURE_BLOCK.forEach((item, offset) => {
+    const colIndex = startCol + offset;
+    worksheet[`${colLetter(colIndex)}${titleExcelRow}`] = {
+      t: "s",
+      v: item.title,
+      s: signatureTitleStyle,
+    };
+    worksheet[`${colLetter(colIndex)}${nameExcelRow}`] = {
+      t: "s",
+      v: item.name,
+      s: signatureNameStyle,
+    };
+  });
+
+  return nameExcelRow;
+};
+
 const writeStyledWorkbook = ({
   headers,
   dataRows,
@@ -125,7 +164,7 @@ const writeStyledWorkbook = ({
   const sheetRows = [headers, ...dataRows];
   const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
   const lastCol = colLetter(headers.length - 1);
-  const lastRow = sheetRows.length;
+  const dataLastRow = sheetRows.length;
   const centered = new Set(centeredColIndexes);
 
   headers.forEach((title, colIndex) => {
@@ -153,9 +192,18 @@ const writeStyledWorkbook = ({
     });
   });
 
+  const signatureLastRow = appendSignatureBlock(worksheet, headers.length, dataRows.length);
+  worksheet["!ref"] = `A1:${lastCol}${signatureLastRow}`;
+
   worksheet["!cols"] = estimateColWidths(headers, minWidths, sheetRows);
-  worksheet["!rows"] = [{ hpt: 32 }, ...dataRows.map(() => ({ hpt: 22 }))];
-  worksheet["!autofilter"] = { ref: `A1:${lastCol}${lastRow}` };
+  worksheet["!rows"] = [
+    { hpt: 32 },
+    ...dataRows.map(() => ({ hpt: 22 })),
+    { hpt: 18 },
+    { hpt: 24 },
+    { hpt: 22 },
+  ];
+  worksheet["!autofilter"] = { ref: `A1:${lastCol}${dataLastRow}` };
   worksheet["!freeze"] = {
     xSplit: 0,
     ySplit: 1,
