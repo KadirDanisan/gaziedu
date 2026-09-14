@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { adminApi } from "../api";
 import AdminDateRangeFilter from "../components/AdminDateRangeFilter";
 import { DEFAULT_DATE_RANGE_PERIOD } from "../utils/dateRangePeriod";
+import { formatPersonName } from "../utils/turkishText";
 
 const formatIstanbul = (value) => {
   if (!value) return "-";
@@ -90,7 +91,7 @@ export default function ExamPortalAccessPage() {
   const handleResetLimit = async (row) => {
     if (
       !window.confirm(
-        `${row.participantName || "—"} · ${row.educationCode} / ${row.nationalId} için tüm sınav oturumları (${row.startCount} kayıt) silinecek. Devam?`,
+        `${formatPersonName(row.participantName)} · ${row.educationCode} / ${row.nationalId} için tüm sınav oturumları (${row.startCount} kayıt) silinecek. Devam?`,
       )
     ) {
       return;
@@ -190,7 +191,7 @@ export default function ExamPortalAccessPage() {
                           "-"
                         )}
                       </td>
-                      <td>{row.participantName || "—"}</td>
+                      <td>{formatPersonName(row.participantName)}</td>
                       <td>{row.educationCode || "-"}</td>
                       <td>{row.nationalId || "-"}</td>
                       <td>{formatIstanbul(row.createdAt)}</td>
@@ -290,7 +291,7 @@ export default function ExamPortalAccessPage() {
                     const key = `${row.educationCode}-${row.nationalId}`;
                     return (
                       <tr key={key}>
-                        <td>{row.participantName || "—"}</td>
+                        <td>{formatPersonName(row.participantName)}</td>
                         <td>{row.educationCode}</td>
                         <td>{row.nationalId}</td>
                         <td>{row.startCount}</td>

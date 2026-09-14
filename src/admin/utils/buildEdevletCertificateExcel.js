@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { toTrUpper } from "./turkishText";
 
 const NULL_CELL = "NULL";
 
@@ -6,8 +7,6 @@ const cell = (value) => {
   const safe = value == null ? "" : String(value).trim();
   return safe === "" ? NULL_CELL : safe;
 };
-
-const toTrUpper = (value) => String(value || "").trim().toLocaleUpperCase("tr-TR");
 
 const splitParticipantName = (fullName) => {
   const safe = String(fullName || "").trim();

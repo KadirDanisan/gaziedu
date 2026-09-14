@@ -1,4 +1,5 @@
 import XLSX from "xlsx-js-style";
+import { toTrUpper } from "./turkishText";
 
 const ACQUISITION_HEADERS = [
   "Eğitim Kodu",
@@ -61,9 +62,9 @@ const centerBodyStyle = {
 const altRowFill = { patternType: "solid", fgColor: { rgb: "F0FDF4" } };
 
 const SIGNATURE_BLOCK = [
-  { title: "İmzalayan", name: "Prof. Dr. Selami Eryılmaz" },
-  { title: "Onaylayan", name: "Prof. Dr. Çelebi Ulusoy" },
-  { title: "Hazırlayan", name: "Ögr. Grv. Nail Akgün" },
+  { title: "Hazırlayan", name: "Ögr. Grv. Nail Akgün", role: "Yetkili" },
+  { title: "İmzalayan", name: "Prof. Dr. Selami Eryılmaz", role: "GUZEM Md. Yrd." },
+  { title: "Onaylayan", name: "Prof. Dr. Çelebi Uluyol", role: "GUZEM Md." },
 ];
 
 const signatureTitleStyle = {
@@ -73,6 +74,11 @@ const signatureTitleStyle = {
 
 const signatureNameStyle = {
   font: { sz: 10, name: "Calibri", color: { rgb: "1F2937" } },
+  alignment: { horizontal: "center", vertical: "center", wrapText: true },
+};
+
+const signatureRoleStyle = {
+  font: { sz: 9, name: "Calibri", color: { rgb: "4B5563" } },
   alignment: { horizontal: "center", vertical: "center", wrapText: true },
 };
 
@@ -100,7 +106,7 @@ export const buildCertificateAcquisitionReportRows = (rows = []) =>
     String(row.educationCode || "").trim(),
     String(row.educationName || "").trim(),
     String(row.nationalId || "").replace(/\D/g, ""),
-    String(row.participantName || "").trim(),
+    String(row.participantName || "").trim() ? toTrUpper(row.participantName) : "",
     row.bestScore != null && row.bestScore !== "" ? Number(row.bestScore) : "",
     formatIstanbulDate(row.bestRecordedAt),
     String(row.documentNumber || "").trim(),
@@ -115,7 +121,7 @@ export const buildEdevletIssuedCertificateRows = (rows = []) =>
     String(row.documentNumber || "").trim(),
     String(row.educationCode || "").trim(),
     String(row.educationName || "").trim(),
-    String(row.participantName || "").trim(),
+    String(row.participantName || "").trim() ? toTrUpper(row.participantName) : "",
     String(row.nationalId || "").replace(/\D/g, ""),
     formatIstanbulDate(row.bestRecordedAt || row.lastAttemptAt),
   ]);
@@ -131,9 +137,10 @@ const estimateColWidths = (headers, minWidths, sheetRows) =>
   });
 
 const appendSignatureBlock = (worksheet, colCount, dataRowCount) => {
-  // Veri bitince 1 boş satır; ardından unvan satırı + isim satırı (son 3 kolon)
+  // Veri bitince 1 boş satır; ardından unvan + isim + görev (son 3 kolon)
   const titleExcelRow = dataRowCount + 3; // header(1) + data + blank(1) + titles
   const nameExcelRow = titleExcelRow + 1;
+  const roleExcelRow = nameExcelRow + 1;
   const startCol = Math.max(0, colCount - 3);
 
   SIGNATURE_BLOCK.forEach((item, offset) => {
@@ -148,9 +155,14 @@ const appendSignatureBlock = (worksheet, colCount, dataRowCount) => {
       v: item.name,
       s: signatureNameStyle,
     };
+    worksheet[`${colLetter(colIndex)}${roleExcelRow}`] = {
+      t: "s",
+      v: item.role,
+      s: signatureRoleStyle,
+    };
   });
 
-  return nameExcelRow;
+  return roleExcelRow;
 };
 
 const writeStyledWorkbook = ({
@@ -202,6 +214,7 @@ const writeStyledWorkbook = ({
     { hpt: 18 },
     { hpt: 24 },
     { hpt: 22 },
+    { hpt: 20 },
   ];
   worksheet["!autofilter"] = { ref: `A1:${lastCol}${dataLastRow}` };
   worksheet["!freeze"] = {

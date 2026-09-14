@@ -4,6 +4,7 @@ import AdminDateRangeFilter from "../components/AdminDateRangeFilter";
 import { DEFAULT_DATE_RANGE_PERIOD } from "../utils/dateRangePeriod";
 import { downloadEdevletCertificateExcel } from "../utils/buildEdevletCertificateExcel";
 import { downloadCertificateAcquisitionReportExcel, downloadEdevletIssuedCertificateExcel } from "../utils/buildCertificateAcquisitionReportExcel";
+import { formatPersonName } from "../utils/turkishText";
 
 const formatIstanbul = (value) => {
   if (!value) return "-";
@@ -603,10 +604,10 @@ export default function CertificateListPage() {
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleRow(id)}
-                          aria-label={`${row.participantName || row.nationalId} seç`}
+                          aria-label={`${formatPersonName(row.participantName, row.nationalId || "")} seç`}
                         />
                       </td>
-                      <td>{row.participantName || "—"}</td>
+                      <td>{formatPersonName(row.participantName)}</td>
                       <td>{row.nationalId}</td>
                       <td>{row.educationCode}</td>
                       <td>{row.educationName || "—"}</td>
@@ -692,7 +693,7 @@ export default function CertificateListPage() {
                   Sertifika PDF olarak oluşturulacaktır. Onaylıyor musunuz?
                 </p>
                 <p className="admin-modal__subtitle admin-modal__subtitle--dense" style={{ marginTop: 8 }}>
-                  <strong>{confirmRow.participantName || "—"}</strong> · T.C. {confirmRow.nationalId}
+                  <strong>{formatPersonName(confirmRow.participantName)}</strong> · T.C. {confirmRow.nationalId}
                   <br />
                   {confirmRow.educationCode} — {confirmRow.educationName || "Eğitim adı yok"}
                 </p>

@@ -3,6 +3,7 @@ import { adminApi } from "../api";
 import AdminDateRangeFilter from "../components/AdminDateRangeFilter";
 import { useAdminAuth } from "../context/AdminAuthContext";
 import { DEFAULT_DATE_RANGE_PERIOD } from "../utils/dateRangePeriod";
+import { formatPersonName } from "../utils/turkishText";
 
 const formatIstanbul = (value) => {
   if (!value) return "-";
@@ -179,7 +180,7 @@ export default function ExamSuccessPaymentsPage() {
                   const paid = Boolean(row.paymentReceived);
                   return (
                     <tr key={row.id}>
-                      <td>{row.participantName || "—"}</td>
+                      <td>{formatPersonName(row.participantName)}</td>
                       <td>{row.educationCode}</td>
                       <td>{row.educationName || "—"}</td>
                       <td>{row.nationalId}</td>
