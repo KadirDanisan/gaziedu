@@ -22,15 +22,16 @@ const EDEVLET_ISSUED_HEADERS = [
   "Sınav Tarihi/Saati",
 ];
 
-/** Kolon minimum genişlikleri (karakter) */
-const ACQUISITION_MIN_COL_WIDTHS = [16, 26, 14, 22, 20, 18, 28, 24, 20];
+/** Kolon minimum / maksimum genişlikleri (karakter) */
+const ACQUISITION_MIN_COL_WIDTHS = [12, 16, 10, 14, 12, 9, 11, 9, 12];
+const ACQUISITION_MAX_COL_WIDTHS = [13, 20, 11, 18, 16, 10, 12, 10, 13];
 const EDEVLET_ISSUED_MIN_COL_WIDTHS = [20, 18, 40, 26, 16, 26];
 
 /** 90–99 arası rastgele izlenme yüzdesi (örn. 90%, 93%, 99%) */
 const randomWatchPercent = () => `${Math.floor(Math.random() * 10) + 90}%`;
 
 const headerStyle = {
-  font: { bold: true, sz: 13, color: { rgb: "FFFFFF" }, name: "Calibri" },
+  font: { bold: true, sz: 11, color: { rgb: "FFFFFF" }, name: "Calibri" },
   fill: { patternType: "solid", fgColor: { rgb: "15803D" } },
   alignment: { horizontal: "center", vertical: "center", wrapText: true },
   border: {
@@ -122,14 +123,16 @@ export const buildEdevletIssuedCertificateRows = (rows = []) =>
     formatIstanbulDate(row.bestRecordedAt || row.lastAttemptAt),
   ]);
 
-const estimateColWidths = (headers, minWidths, sheetRows) =>
+const estimateColWidths = (headers, minWidths, sheetRows, maxWidths = []) =>
   headers.map((_, colIndex) => {
-    let maxLen = minWidths[colIndex] || 14;
+    const minLen = minWidths[colIndex] || 10;
+    const maxCap = maxWidths[colIndex] || 50;
+    let maxLen = minLen;
     sheetRows.forEach((row) => {
       const value = row[colIndex] == null ? "" : String(row[colIndex]);
-      maxLen = Math.max(maxLen, Math.min(value.length + 2, 50));
+      maxLen = Math.max(maxLen, Math.min(value.length + 1, maxCap));
     });
-    return { wch: maxLen };
+    return { wch: Math.min(Math.max(maxLen, minLen), maxCap) };
   });
 
 const appendSignatureBlock = (worksheet, colCount, dataRowCount) => {
@@ -165,6 +168,7 @@ const writeStyledWorkbook = ({
   headers,
   dataRows,
   minWidths,
+  maxWidths,
   centeredColIndexes,
   sheetName,
   fileName,
@@ -203,14 +207,14 @@ const writeStyledWorkbook = ({
   const signatureLastRow = appendSignatureBlock(worksheet, headers.length, dataRows.length);
   worksheet["!ref"] = `A1:${lastCol}${signatureLastRow}`;
 
-  worksheet["!cols"] = estimateColWidths(headers, minWidths, sheetRows);
+  worksheet["!cols"] = estimateColWidths(headers, minWidths, sheetRows, maxWidths);
   worksheet["!rows"] = [
-    { hpt: 32 },
-    ...dataRows.map(() => ({ hpt: 22 })),
-    { hpt: 18 },
-    { hpt: 24 },
+    { hpt: 28 },
+    ...dataRows.map(() => ({ hpt: 20 })),
+    { hpt: 16 },
     { hpt: 22 },
     { hpt: 20 },
+    { hpt: 18 },
   ];
   worksheet["!autofilter"] = { ref: `A1:${lastCol}${dataLastRow}` };
   worksheet["!freeze"] = {
@@ -234,6 +238,7 @@ export const downloadCertificateAcquisitionReportExcel = (
     headers: ACQUISITION_HEADERS,
     dataRows: buildCertificateAcquisitionReportRows(rows),
     minWidths: ACQUISITION_MIN_COL_WIDTHS,
+    maxWidths: ACQUISITION_MAX_COL_WIDTHS,
     centeredColIndexes: [0, 2, 5, 6, 7, 8],
     sheetName: "Sertifika Alım Raporu",
     fileName,
