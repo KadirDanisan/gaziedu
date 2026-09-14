@@ -62,9 +62,9 @@ const centerBodyStyle = {
 const altRowFill = { patternType: "solid", fgColor: { rgb: "F0FDF4" } };
 
 const SIGNATURE_BLOCK = [
-  { title: "Hazırlayan", name: "Ögr. Grv. Nail Akgün", role: "Yetkili" },
-  { title: "İmzalayan", name: "Prof. Dr. Selami Eryılmaz", role: "GUZEM Md. Yrd." },
-  { title: "Onaylayan", name: "Prof. Dr. Çelebi Uluyol", role: "GUZEM Md." },
+  { title: "Hazırlayan", name: "Öğr. Gör. Nail Akgün", role: "" },
+  { title: "Onaylayan", name: "Prof. Dr. Çelebi Uluyol", role: "GUZEM Md. Yrd." },
+  { title: "İmzalayan", name: "Prof. Dr. Selami Eryılmaz", role: "GUZEM Müdür." },
 ];
 
 const signatureTitleStyle = {
