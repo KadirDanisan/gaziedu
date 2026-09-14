@@ -140,14 +140,8 @@ router.get("/api/admin/dashboard", auth, checkPermission("dashboard", "can_view"
   }
 });
 
-router.get("/api/admin/activity-logs", auth, async (req, res, next) => {
+router.get("/api/admin/activity-logs", auth, checkPermission("activityLogs", "can_view"), async (req, res, next) => {
   try {
-    const permissionResult = await pool.query(
-      `SELECT can_view FROM permissions WHERE role_id = $1 AND module_name = 'dashboard' LIMIT 1`,
-      [req.user.roleId],
-    );
-    if (!permissionResult.rows[0]?.can_view) return res.status(403).json({ message: "Yetkiniz yok." });
-
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.max(1, Number(req.query.pageSize || 100));
     const offset = (page - 1) * pageSize;

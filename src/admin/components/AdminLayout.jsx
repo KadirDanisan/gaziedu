@@ -95,7 +95,7 @@ export default function AdminLayout() {
           />
         </div>
         <nav className="admin-side-nav">
-          {ADMIN_MODULES.filter((module) => module.key === "activityLogs" || hasPermission(module.key, "canView")).map((module) => (
+          {ADMIN_MODULES.filter((module) => hasPermission(module.key, "canView")).map((module) => (
             <SidebarLink key={module.key} item={module} />
           ))}
         </nav>

@@ -98,7 +98,7 @@ function App() {
                 <Route path="/admin/sertifika-listesi" element={<ModulePermissionGuard moduleKey="certificateList"><CertificateListPage /></ModulePermissionGuard>} />
                 <Route path="/admin/yonetici-sohbeti" element={<ModulePermissionGuard moduleKey="adminMessaging"><AdminMessagingPage /></ModulePermissionGuard>} />
                 <Route path="/admin/sinav-olusturucu" element={<ModulePermissionGuard moduleKey="examQuestions"><ExamGeneratorPage /></ModulePermissionGuard>} />
-                <Route path="/admin/aktivite-listesi" element={<ActivityLogsPage />} />
+                <Route path="/admin/aktivite-listesi" element={<ModulePermissionGuard moduleKey="activityLogs"><ActivityLogsPage /></ModulePermissionGuard>} />
                 <Route path="/admin/rol-yetki" element={<ModulePermissionGuard moduleKey="roles"><RolePermissionPage /></ModulePermissionGuard>} />
                 <Route path="/admin/yetki-yok" element={<NoAccessPage />} />
                 <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
