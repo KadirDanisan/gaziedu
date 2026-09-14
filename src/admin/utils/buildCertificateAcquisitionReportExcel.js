@@ -3,14 +3,14 @@ import { toTrUpper } from "./turkishText";
 
 const ACQUISITION_HEADERS = [
   "T.C. Kimlik No",
-  "İsim Soyisim",
-  "Aldığı Puan",
-  "Eğitim Sınav Tarihi",
+  "Ad Soyad",
+  "Sınav Puanı",
+  "Sınav Tarihi",
   "Sertifika No",
-  "Videolar İzlendi mi",
-  "Videoların Ort. İzlenme Sür. %",
-  "Eğitim Ücreti Ödendi mi",
-  "E-devlete İşlendi mi",
+  "Vid. İzl.",
+  "Ort. İzl. (%)",
+  "Ücr. Öd.",
+  "e-Devlet İşl.",
 ];
 
 const EDEVLET_ISSUED_HEADERS = [
@@ -19,7 +19,7 @@ const EDEVLET_ISSUED_HEADERS = [
   "Eğitim Adı",
   "Kullanıcı",
   "T.C. Kimlik No",
-  "Sınav Giriş Tarihi ve Saati",
+  "Sınav Tarihi/Saati",
 ];
 
 /** Kolon minimum genişlikleri (karakter) */
