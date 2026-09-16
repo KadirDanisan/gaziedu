@@ -36,6 +36,7 @@ import CertificateListPage from "./admin/pages/CertificateListPage";
 import AdminMessagingPage from "./admin/pages/AdminMessagingPage";
 import NoAccessPage from "./admin/pages/NoAccessPage";
 import ActivityLogsPage from "./admin/pages/ActivityLogsPage";
+import EducationApplicationsPage from "./admin/pages/EducationApplicationsPage";
 
 function App() {
   return (
@@ -89,6 +90,7 @@ function App() {
                 <Route path="/admin/egitim-listesi" element={<ModulePermissionGuard moduleKey="educations"><CrudListPage moduleKey="educations" /></ModulePermissionGuard>} />
                 <Route path="/admin/egitmen-listesi" element={<ModulePermissionGuard moduleKey="instructors"><CrudListPage moduleKey="instructors" /></ModulePermissionGuard>} />
                 <Route path="/admin/egitim-takvimi-listesi" element={<ModulePermissionGuard moduleKey="educationCalendar"><CrudListPage moduleKey="educationCalendar" /></ModulePermissionGuard>} />
+                <Route path="/admin/egitim-basvuru-formu" element={<ModulePermissionGuard moduleKey="educationApplications"><EducationApplicationsPage /></ModulePermissionGuard>} />
                 <Route path="/admin/bulten-kayitlari" element={<ModulePermissionGuard moduleKey="newsletter"><CrudListPage moduleKey="newsletter" /></ModulePermissionGuard>} />
                 <Route path="/admin/iletisim-formlari" element={<ModulePermissionGuard moduleKey="contactForms"><CrudListPage moduleKey="contactForms" /></ModulePermissionGuard>} />
                 <Route path="/admin/sinav-sorulari" element={<ModulePermissionGuard moduleKey="examQuestions"><CrudListPage moduleKey="examQuestions" /></ModulePermissionGuard>} />

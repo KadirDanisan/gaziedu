@@ -700,6 +700,73 @@ const migrateYetkiliRoleDisplayName = async () => {
   await pool.query(`UPDATE roles SET name = 'Sertifika Yetkilisi' WHERE code = 'yetkili'`);
 };
 
+/** Ücretli eğitim online başvuruları */
+const migrateEducationApplicationsTable = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS education_applications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES normal_users(id) ON DELETE CASCADE,
+      education_id UUID NOT NULL REFERENCES educations(id) ON DELETE CASCADE,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      national_id TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      address_line1 TEXT NOT NULL,
+      city TEXT NOT NULL,
+      district TEXT,
+      payment_method TEXT NOT NULL DEFAULT 'havale',
+      payment_note TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, education_id)
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS education_applications_education_id_idx
+      ON education_applications (education_id)
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS education_applications_created_at_idx
+      ON education_applications (created_at DESC)
+  `);
+  await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS graduation_doc_path TEXT`);
+  await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS kvkk_doc_path TEXT`);
+  await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS institution_doc_path TEXT`);
+  await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS info_confirmed BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS birth_date DATE`);
+  await pool.query(`ALTER TABLE education_applications ALTER COLUMN address_line1 DROP NOT NULL`);
+  await pool.query(`ALTER TABLE education_applications ALTER COLUMN city DROP NOT NULL`);
+};
+
+/** Ücretli eğitim fiyat / indirim alanları */
+const migrateEducationPriceColumns = async () => {
+  await pool.query(`ALTER TABLE educations ADD COLUMN IF NOT EXISTS price NUMERIC(12,2)`);
+  await pool.query(`ALTER TABLE educations ADD COLUMN IF NOT EXISTS has_discount BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE educations ADD COLUMN IF NOT EXISTS discount_rate NUMERIC(5,2)`);
+};
+
+/** Eğitim başvuruları onay / ücret anlık görüntüsü */
+const migrateEducationApplicationAdminColumns = async () => {
+  await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS approved_by UUID`);
+  await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS price_snapshot NUMERIC(12,2)`);
+  await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS has_discount_snapshot BOOLEAN`);
+  await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS discount_rate_snapshot NUMERIC(5,2)`);
+  await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS payable_amount NUMERIC(12,2)`);
+};
+
+const migrateEducationApplicationsPermissions = async () => {
+  await pool.query(`
+    INSERT INTO permissions (role_id, module_name, can_view, can_create, can_update, can_delete)
+    SELECT r.id, 'educationApplications', p.can_view, FALSE, p.can_update, FALSE
+    FROM roles r
+    INNER JOIN permissions p ON p.role_id = r.id AND p.module_name = 'educations'
+    ON CONFLICT (role_id, module_name) DO NOTHING
+  `);
+};
+
 export {
   migrateContactFormTimestampsToIstanbul,
   migrateInstitutionCodeColumn,
@@ -707,6 +774,10 @@ export {
   migrateInstructorImageColumn,
   migrateEducationPromoVideoColumns,
   migrateYetkiliRoleDisplayName,
+  migrateEducationApplicationsTable,
+  migrateEducationPriceColumns,
+  migrateEducationApplicationAdminColumns,
+  migrateEducationApplicationsPermissions,
   migrateEducationDocColumns,
   migrateEducationCalendarColumns,
   migrateEducationCategoryColumns,
@@ -777,4 +848,8 @@ export const migrations = [
   migrateInstructorImageColumn,
   migrateEducationPromoVideoColumns,
   migrateYetkiliRoleDisplayName,
+  migrateEducationApplicationsTable,
+  migrateEducationPriceColumns,
+  migrateEducationApplicationAdminColumns,
+  migrateEducationApplicationsPermissions,
 ];

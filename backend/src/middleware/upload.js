@@ -62,4 +62,33 @@ const uploadModuleVideo = multer({
   },
 });
 
-export { upload, uploadDoc, uploadModuleFile, uploadModuleVideo, MODULE_FILE_EXTENSIONS };
+const APPLICATION_DOC_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png", ".webp", ".doc", ".docx"];
+
+const applicationDocStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadsDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    const safeExt = APPLICATION_DOC_EXTENSIONS.includes(ext) ? ext : ".pdf";
+    cb(null, `education-application-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
+  },
+});
+
+const uploadApplicationDoc = multer({
+  storage: applicationDocStorage,
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    if (APPLICATION_DOC_EXTENSIONS.includes(ext)) cb(null, true);
+    else cb(new Error("Yalnızca PDF, görsel veya Word dosyaları yüklenebilir."));
+  },
+});
+
+export {
+  upload,
+  uploadDoc,
+  uploadModuleFile,
+  uploadModuleVideo,
+  uploadApplicationDoc,
+  MODULE_FILE_EXTENSIONS,
+  APPLICATION_DOC_EXTENSIONS,
+};

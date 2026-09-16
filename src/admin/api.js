@@ -305,6 +305,20 @@ export const adminApi = {
     invalidateAdminCachePrefix("admin-exam-success-payments:");
     return request(`/admin/exam-results/${id}`, { method: "DELETE" });
   },
+  getEducationApplications: ({ page = 1, pageSize = 20, period = "all", educationId = "", nationalId = "", status = "" } = {}) => {
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+      period: String(period || "all"),
+    });
+    if (educationId) params.set("educationId", educationId);
+    if (nationalId) params.set("nationalId", nationalId);
+    if (status) params.set("status", status);
+    return request(`/admin/education-applications?${params.toString()}`);
+  },
+  getEducationApplicationEducations: () => request("/admin/education-applications/educations"),
+  approveEducationApplication: (id) =>
+    request(`/admin/education-applications/${id}/approve`, { method: "PATCH", body: JSON.stringify({}) }),
   markExamSuccessPaymentReceived: (id) => {
     invalidateAdminCachePrefix("admin-exam-success-payments:");
     invalidateAdminCachePrefix("admin-exam-results:");

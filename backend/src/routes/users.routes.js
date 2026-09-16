@@ -4,11 +4,15 @@ import jwt from "jsonwebtoken";
 import pool from "../db/pool.js";
 import { jwtSecret } from "../config/env.js";
 import { userAuth } from "../middleware/auth.js";
+import { isUuidParam } from "../middleware/auth.js";
+import { uploadApplicationDoc } from "../middleware/upload.js";
 import { isValidTurkishNationalId } from "../utils/nationalId.js";
+import { fixUploadedFileName } from "../utils/fileName.js";
 import { formatNormalUserMeResponse } from "../services/users/format.js";
 import { formatPublicCourse } from "../services/education/publicCourses.js";
 import { formatEducationReviewRow, formatRatingAggregateFields } from "../services/education/publicCourses.js";
 import { extractEducationContentHtml } from "../services/education/content.js";
+import { loadEducationModules } from "../services/education/modules.js";
 
 const router = Router();
 
@@ -540,6 +544,235 @@ router.post("/api/users/education-reviews", userAuth, async (req, res, next) => 
       ...formatRatingAggregateFields(aggRow || {}),
     });
   } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/api/users/education-applications/access/:educationId", userAuth, async (req, res, next) => {
+  try {
+    const educationId = String(req.params.educationId || "").trim();
+    if (!isUuidParam(educationId)) {
+      return res.status(400).json({ message: "Geçersiz eğitim." });
+    }
+
+    const education = await pool.query(
+      `SELECT id, sales_filter FROM educations WHERE id = $1 LIMIT 1`,
+      [educationId],
+    );
+    if (!education.rows[0]) {
+      return res.status(404).json({ message: "Eğitim bulunamadı." });
+    }
+    if (String(education.rows[0].sales_filter || "").toLowerCase() !== "guzem-ucretli") {
+      return res.json({ hasAccess: true, status: "open", curriculumLocked: false });
+    }
+
+    const userRow = await pool.query(`SELECT email FROM normal_users WHERE id = $1 LIMIT 1`, [req.user.id]);
+    if (!userRow.rows[0]) {
+      return res.status(401).json({ message: "Kullanıcı bulunamadı." });
+    }
+
+    const app = await pool.query(
+      `SELECT id, status
+       FROM education_applications
+       WHERE user_id = $1 AND education_id = $2
+       LIMIT 1`,
+      [req.user.id, educationId],
+    );
+    const row = app.rows[0];
+    if (!row) {
+      return res.json({ hasAccess: false, status: "none", curriculumLocked: true });
+    }
+
+    const approved = String(row.status || "") === "approved";
+    return res.json({
+      hasAccess: approved,
+      status: approved ? "approved" : String(row.status || "pending"),
+      curriculumLocked: !approved,
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/api/users/education-applications/:educationId/modules", userAuth, async (req, res, next) => {
+  try {
+    const educationId = String(req.params.educationId || "").trim();
+    if (!isUuidParam(educationId)) {
+      return res.status(400).json({ message: "Geçersiz eğitim." });
+    }
+
+    const education = await pool.query(
+      `SELECT id, sales_filter FROM educations WHERE id = $1 LIMIT 1`,
+      [educationId],
+    );
+    if (!education.rows[0]) {
+      return res.status(404).json({ message: "Eğitim bulunamadı." });
+    }
+    if (String(education.rows[0].sales_filter || "").toLowerCase() !== "guzem-ucretli") {
+      return res.json({ modules: await loadEducationModules(educationId) });
+    }
+
+    const app = await pool.query(
+      `SELECT status FROM education_applications WHERE user_id = $1 AND education_id = $2 LIMIT 1`,
+      [req.user.id, educationId],
+    );
+    const row = app.rows[0];
+    const hasAccess = row && String(row.status || "") === "approved";
+
+    if (!hasAccess) {
+      return res.status(403).json({ message: "Bu eğitimin müfredatına erişim yetkiniz yok." });
+    }
+
+    return res.json({ modules: await loadEducationModules(educationId) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/api/users/education-applications/upload", userAuth, uploadApplicationDoc.single("file"), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: "Yüklenecek dosya bulunamadı." });
+    const publicPath = `/uploads/${req.file.filename}`;
+    return res.status(201).json({
+      fileName: fixUploadedFileName(req.file.originalname),
+      path: publicPath,
+      url: `${req.protocol}://${req.get("host")}${publicPath}`,
+      size: req.file.size,
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/api/users/education-applications", userAuth, async (req, res, next) => {
+  try {
+    const {
+      educationId,
+      firstName,
+      lastName,
+      nationalId,
+      phone,
+      birthDate,
+      graduationDocPath,
+      kvkkDocPath,
+      institutionDocPath,
+      infoConfirmed,
+      paymentMethod,
+      paymentNote,
+    } = req.body || {};
+
+    const eId = String(educationId || "").trim();
+    if (!isUuidParam(eId)) {
+      return res.status(400).json({ message: "Geçerli bir eğitim seçiniz." });
+    }
+
+    const education = await pool.query(
+      `SELECT id, name, code, sales_filter, price, has_discount, discount_rate FROM educations WHERE id = $1 LIMIT 1`,
+      [eId],
+    );
+    if (!education.rows[0]) {
+      return res.status(404).json({ message: "Eğitim bulunamadı." });
+    }
+    if (String(education.rows[0].sales_filter || "").toLowerCase() !== "guzem-ucretli") {
+      return res.status(400).json({ message: "Bu eğitim için online başvuru açılamaz." });
+    }
+
+    const fn = String(firstName || "").trim();
+    const ln = String(lastName || "").trim();
+    const account = await pool.query(`SELECT email FROM normal_users WHERE id = $1 LIMIT 1`, [req.user.id]);
+    const em = String(account.rows[0]?.email || "").trim().toLowerCase();
+    const tc = String(nationalId || "").replace(/\D/g, "");
+    let tel = String(phone || "").replace(/\D/g, "");
+    if (tel.startsWith("0")) tel = tel.slice(1);
+    tel = tel.slice(0, 10);
+    const birth = String(birthDate || "").trim();
+    const gradPath = String(graduationDocPath || "").trim();
+    const kvkkPath = String(kvkkDocPath || "").trim();
+    const instPath = String(institutionDocPath || "").trim();
+
+    if (!fn || !ln || !em || !tel || !birth) {
+      return res.status(400).json({ message: "Zorunlu başvuru alanlarını doldurunuz." });
+    }
+    if (tel.length !== 10) {
+      return res.status(400).json({ message: "Telefon numarası 10 haneli olmalıdır." });
+    }
+    if (tc.length !== 11 || !isValidTurkishNationalId(tc)) {
+      return res.status(400).json({ message: "Geçerli bir T.C. kimlik numarası giriniz." });
+    }
+    const birthDateObj = new Date(birth);
+    if (Number.isNaN(birthDateObj.getTime()) || birthDateObj > new Date()) {
+      return res.status(400).json({ message: "Geçerli bir doğum tarihi giriniz." });
+    }
+    if (!gradPath || !kvkkPath || !instPath) {
+      return res.status(400).json({ message: "Başvuru formundaki tüm belgeleri yükleyiniz." });
+    }
+    if (!infoConfirmed) {
+      return res.status(400).json({ message: "Bilgilerinizi onaylamanız gerekmektedir." });
+    }
+
+    const existing = await pool.query(
+      `SELECT id FROM education_applications WHERE user_id = $1 AND education_id = $2 LIMIT 1`,
+      [req.user.id, eId],
+    );
+    if (existing.rows[0]) {
+      return res.status(409).json({
+        message: "Bu eğitime daha önce başvurdunuz.",
+        application: { id: existing.rows[0].id },
+      });
+    }
+
+    const edu = education.rows[0];
+    const priceSnap = edu.price != null ? Number(edu.price) : null;
+    const hasDiscSnap = Boolean(edu.has_discount);
+    const discRateSnap = edu.discount_rate != null ? Number(edu.discount_rate) : null;
+    let payableSnap = priceSnap;
+    if (priceSnap != null && hasDiscSnap && discRateSnap != null && discRateSnap > 0) {
+      payableSnap = Math.round(priceSnap * (1 - Math.min(100, discRateSnap) / 100) * 100) / 100;
+    }
+
+    const inserted = await pool.query(
+      `INSERT INTO education_applications (
+         user_id, education_id, first_name, last_name, email, national_id, phone, birth_date,
+         graduation_doc_path, kvkk_doc_path, institution_doc_path, info_confirmed,
+         payment_method, payment_note, status,
+         price_snapshot, has_discount_snapshot, discount_rate_snapshot, payable_amount
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::date,$9,$10,$11,TRUE,$12,$13,'pending',$14,$15,$16,$17)
+       RETURNING id, status, created_at`,
+      [
+        req.user.id,
+        eId,
+        fn,
+        ln,
+        em,
+        tc,
+        tel,
+        birth,
+        gradPath,
+        kvkkPath,
+        instPath,
+        String(paymentMethod || "tek-cekim").trim() || "tek-cekim",
+        String(paymentNote || "").trim() || null,
+        priceSnap,
+        hasDiscSnap,
+        discRateSnap,
+        payableSnap,
+      ],
+    );
+
+    return res.status(201).json({
+      ok: true,
+      application: {
+        id: inserted.rows[0].id,
+        status: inserted.rows[0].status,
+        createdAt: inserted.rows[0].created_at,
+        educationName: education.rows[0].name,
+        educationCode: education.rows[0].code,
+      },
+    });
+  } catch (error) {
+    if (error?.code === "23505") {
+      return res.status(409).json({ message: "Bu eğitime daha önce başvurdunuz." });
+    }
     return next(error);
   }
 });

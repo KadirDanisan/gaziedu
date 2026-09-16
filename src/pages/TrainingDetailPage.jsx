@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { publicApi, resolvePublicImageUrl, invalidateEducationReviewsCache } from "../api/publicApi";
 import { userApi } from "../api/userApi";
 import TrainingCurriculum from "../components/TrainingCurriculum";
 import PromoVideoModal from "../components/PromoVideoModal";
+import PaidApplicationModal from "../components/PaidApplicationModal";
 import { describeVideoSource } from "../utils/moduleResources";
 import { useAuth } from "../context/AuthContext";
+import { normalizeSalesFilter } from "../constants/salesFilters";
 
 const COURSE_ID_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -336,11 +338,22 @@ function TrainingInstructorBlock({ course }) {
 function TrainingDetailPage() {
   const { slug } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { isLoggedIn, isReady, user } = useAuth();
   const stateCourse = location.state?.course;
   const [apiCourse, setApiCourse] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [ratingLive, setRatingLive] = useState(null);
   const [promoVideoOpen, setPromoVideoOpen] = useState(false);
+  const [applyOpen, setApplyOpen] = useState(false);
+  const [curriculumAccess, setCurriculumAccess] = useState({
+    loading: false,
+    hasAccess: false,
+    status: "none",
+  });
+  const [unlockedModules, setUnlockedModules] = useState(null);
+  const [accessRefreshTick, setAccessRefreshTick] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -405,6 +418,64 @@ function TrainingDetailPage() {
     return () => window.clearTimeout(timer);
   }, [course?.id, slug, course, displayCourse]);
 
+  const isPaidGuzem = normalizeSalesFilter(activeCourse?.salesFilter) === "guzem-ucretli";
+
+  useEffect(() => {
+    if (!isPaidGuzem || !activeCourse?.id || activeCourse.sourceType === "calendar") {
+      setCurriculumAccess({ loading: false, hasAccess: true, status: "open" });
+      setUnlockedModules(null);
+      return undefined;
+    }
+
+    if (!isReady) return undefined;
+
+    if (!isLoggedIn) {
+      setCurriculumAccess({ loading: false, hasAccess: false, status: "none" });
+      setUnlockedModules(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setCurriculumAccess((prev) => ({ ...prev, loading: true }));
+
+    (async () => {
+      try {
+        const access = await userApi.getEducationApplicationAccess(activeCourse.id);
+        if (cancelled) return;
+        const hasAccess = Boolean(access?.hasAccess);
+        setCurriculumAccess({
+          loading: false,
+          hasAccess,
+          status: access?.status || (hasAccess ? "approved" : "none"),
+        });
+        if (hasAccess) {
+          const mods = await userApi.getEducationApplicationModules(activeCourse.id);
+          if (!cancelled) setUnlockedModules(Array.isArray(mods?.modules) ? mods.modules : []);
+        } else {
+          setUnlockedModules(null);
+        }
+      } catch {
+        if (cancelled) return;
+        setCurriculumAccess({ loading: false, hasAccess: false, status: "none" });
+        setUnlockedModules(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isPaidGuzem, activeCourse?.id, activeCourse?.sourceType, isReady, isLoggedIn, user?.email, accessRefreshTick]);
+
+  useEffect(() => {
+    if (!isReady || !isPaidGuzem) return;
+    if (searchParams.get("basvuru") !== "1") return;
+    if (!isLoggedIn) return;
+    setApplyOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("basvuru");
+    setSearchParams(next, { replace: true });
+  }, [isReady, isLoggedIn, isPaidGuzem, searchParams, setSearchParams]);
+
   if (isLoading && !course) {
     return <section className="section"><h2>Yükleniyor...</h2></section>;
   }
@@ -421,6 +492,16 @@ function TrainingDetailPage() {
       ? resolvePublicImageUrl(c.institutionLogo)
       : null;
   const institutionSiteHref = buildInstitutionCourseUrl(c.institutionWebsite, c.code);
+
+  const openPaidApplication = () => {
+    if (!isReady) return;
+    if (!isLoggedIn) {
+      const nextPath = `${location.pathname}?basvuru=1`;
+      navigate(`/kullanici-islemleri?next=${encodeURIComponent(nextPath)}`);
+      return;
+    }
+    setApplyOpen(true);
+  };
 
   return (
     <>
@@ -580,7 +661,33 @@ function TrainingDetailPage() {
 
           {Array.isArray(c.modules) && c.modules.length ? (
             <div id="moduller" className="training-detail-box rbt-shadow-box training-detail-box--curriculum">
-              <TrainingCurriculum modules={c.modules} />
+              <TrainingCurriculum
+                modules={
+                  isPaidGuzem && curriculumAccess.hasAccess && Array.isArray(unlockedModules)
+                    ? unlockedModules
+                    : c.modules
+                }
+                locked={Boolean(
+                  isPaidGuzem &&
+                    !(curriculumAccess.hasAccess && Array.isArray(unlockedModules)),
+                )}
+                lockStatus={
+                  isPaidGuzem
+                    ? curriculumAccess.loading
+                      ? curriculumAccess.status || "none"
+                      : curriculumAccess.status
+                    : "open"
+                }
+                onLoginClick={
+                  isPaidGuzem && !isLoggedIn
+                    ? () => {
+                        const nextPath = `${location.pathname}${location.hash || "#moduller"}`;
+                        navigate(`/kullanici-islemleri?next=${encodeURIComponent(nextPath)}`);
+                      }
+                    : undefined
+                }
+                onApplyClick={isPaidGuzem ? openPaidApplication : undefined}
+              />
             </div>
           ) : null}
 
@@ -621,7 +728,15 @@ function TrainingDetailPage() {
           <Link className="btn btn-outline training-detail-btn" to="/iletisim">
             Bilgi Talep Et
           </Link>
-          {institutionSiteHref ? (
+          {isPaidGuzem ? (
+            <button
+              type="button"
+              className="btn btn-outline training-detail-btn"
+              onClick={openPaidApplication}
+            >
+              Başvuru Formunu Doldur
+            </button>
+          ) : institutionSiteHref ? (
             <a
               className="btn btn-outline training-detail-btn training-detail-btn-external"
               href={institutionSiteHref}
@@ -660,6 +775,14 @@ function TrainingDetailPage() {
           </div>
         </aside>
       </section>
+
+      <PaidApplicationModal
+        open={applyOpen}
+        onClose={() => setApplyOpen(false)}
+        course={c}
+        user={user}
+        onSubmitted={() => setAccessRefreshTick((tick) => tick + 1)}
+      />
     </>
   );
 }

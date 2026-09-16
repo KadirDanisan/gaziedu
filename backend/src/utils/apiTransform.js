@@ -12,6 +12,8 @@ const dbToApiMap = {
   image_url: "imageUrl",
   promo_video_path: "promoVideoPath",
   promo_video_url: "promoVideoUrl",
+  has_discount: "hasDiscount",
+  discount_rate: "discountRate",
   education_name: "educationName",
   instructor_info: "instructorInfo",
   calendar_date: "calendarDate",

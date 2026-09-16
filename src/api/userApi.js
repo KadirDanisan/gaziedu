@@ -4,13 +4,14 @@ const getUserToken = () => localStorage.getItem("userToken");
 
 async function request(path, options = {}) {
   const token = getUserToken();
+  const headers = {
+    ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers || {}),
+  };
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
-    },
     ...options,
+    headers,
   });
 
   const data = await response.json().catch(() => null);
@@ -39,4 +40,15 @@ export const userApi = {
   },
   submitEducationReview: (payload) =>
     request("/users/education-reviews", { method: "POST", body: JSON.stringify(payload) }),
+  uploadEducationApplicationDoc: (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request("/users/education-applications/upload", { method: "POST", body: formData });
+  },
+  submitEducationApplication: (payload) =>
+    request("/users/education-applications", { method: "POST", body: JSON.stringify(payload) }),
+  getEducationApplicationAccess: (educationId) =>
+    request(`/users/education-applications/access/${encodeURIComponent(educationId)}`),
+  getEducationApplicationModules: (educationId) =>
+    request(`/users/education-applications/${encodeURIComponent(educationId)}/modules`),
 };

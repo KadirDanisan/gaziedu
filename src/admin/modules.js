@@ -8,6 +8,7 @@ export const ADMIN_MODULES = [
   { key: "educations", label: "Eğitim Listesi", icon: "fa-solid fa-graduation-cap", route: "/admin/egitim-listesi" },
   { key: "instructors", label: "Eğitmen Listesi", icon: "fa-solid fa-chalkboard-user", route: "/admin/egitmen-listesi" },
   { key: "educationCalendar", label: "Eğitim Takvimi", icon: "fa-solid fa-calendar-days", route: "/admin/egitim-takvimi-listesi" },
+  { key: "educationApplications", label: "Eğitim Başvuru Formu", icon: "fa-solid fa-file-signature", route: "/admin/egitim-basvuru-formu" },
   { key: "newsletter", label: "Bülten Kayıtları", icon: "fa-solid fa-envelope-circle-check", route: "/admin/bulten-kayitlari" },
   { key: "contactForms", label: "İletişim Formları", icon: "fa-solid fa-comments", route: "/admin/iletisim-formlari" },
   { key: "examQuestions", label: "Sınav Soruları", icon: "fa-solid fa-file-pen", route: "/admin/sinav-sorulari" },

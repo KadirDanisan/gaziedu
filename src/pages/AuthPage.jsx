@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { isValidTurkishNationalId, normalizeTurkishNationalId } from "../utils/turkishNationalId";
 import {
@@ -8,8 +8,16 @@ import {
   setRememberLogin,
 } from "../utils/rememberLoginCookie";
 
+function safeInternalPath(raw) {
+  const value = String(raw || "").trim();
+  if (!value.startsWith("/") || value.startsWith("//")) return "";
+  return value;
+}
+
 function AuthPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo = safeInternalPath(searchParams.get("next"));
   const { loginUser, registerUser } = useAuth();
   const [isResetMode, setIsResetMode] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
@@ -84,7 +92,7 @@ function AuthPage() {
         clearRememberLogin();
         setHasSavedLogin(false);
       }
-      navigate("/hesabim/hesap-bilgilerim");
+      navigate(returnTo || "/hesabim/hesap-bilgilerim");
     } catch (error) {
       setLoginError(error.message);
     } finally {

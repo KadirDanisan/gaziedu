@@ -77,6 +77,33 @@ const loadEducationModules = async (educationId) => {
   return result.rows.map(toApiModule);
 };
 
+/** Ücretli eğitimlerde herkese açık yanıtta içerik URL'lerini gizle; yalnızca başlık iskeleti. */
+const lockEducationModulesForPublic = (modules) => {
+  if (!Array.isArray(modules)) return [];
+  return modules.map((moduleRow) => {
+    const resources = Array.isArray(moduleRow?.resources) ? moduleRow.resources : [];
+    const legacyItems = Array.isArray(moduleRow?.items) ? moduleRow.items : [];
+    const lockedResources = [];
+    resources.forEach((resource) => {
+      const kind = String(resource?.kind || "").toLowerCase();
+      if (kind === "video" || kind === "pdf" || kind === "text") {
+        lockedResources.push({ kind, title: resource.title || "", locked: true });
+      }
+    });
+    if (!lockedResources.length && legacyItems.length) {
+      lockedResources.push({ kind: "text", title: "", locked: true });
+    }
+    return {
+      id: moduleRow.id,
+      title: moduleRow.title || "",
+      sortOrder: moduleRow.sortOrder,
+      items: [],
+      resources: lockedResources,
+      locked: true,
+    };
+  });
+};
+
 const syncEducationModules = async (educationId, modules) => {
   if (!educationId) return [];
   await pool.query(`DELETE FROM education_modules WHERE education_id = $1`, [educationId]);
@@ -113,6 +140,7 @@ export {
   normalizeModuleResources,
   normalizeTopicHeadings,
   loadEducationModules,
+  lockEducationModulesForPublic,
   syncEducationModules,
   stripNonTableFields,
 };

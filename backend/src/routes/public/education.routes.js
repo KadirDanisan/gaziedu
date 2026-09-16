@@ -14,8 +14,8 @@ import {
   EDUCATION_DETAIL_SELECT,
   CALENDAR_DETAIL_SELECT,
 } from "../../services/education/publicCourses.js";
-import { loadEducationModules } from "../../services/education/modules.js";
-import { SALES_FILTERS } from "../../config/salesFilters.js";
+import { loadEducationModules, lockEducationModulesForPublic } from "../../services/education/modules.js";
+import { normalizeSalesFilter, SALES_FILTERS } from "../../config/salesFilters.js";
 
 const router = Router();
 
@@ -255,9 +255,12 @@ router.get("/api/public/educations/detail/:slug", async (req, res, next) => {
       return res.status(404).json({ message: "Eğitim bulunamadı." });
     }
 
+    const fullModules = row.source_type === "education" ? await loadEducationModules(row.id) : [];
+    const isPaidGuzem = normalizeSalesFilter(row.sales_filter) === "guzem-ucretli";
     const withContent = {
       ...row,
-      modules: row.source_type === "education" ? await loadEducationModules(row.id) : [],
+      modules: isPaidGuzem ? lockEducationModulesForPublic(fullModules) : fullModules,
+      curriculumLocked: isPaidGuzem,
     };
     return res.json({ course: formatPublicCourse(withContent) });
   } catch (error) {

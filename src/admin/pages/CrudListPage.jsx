@@ -10,7 +10,7 @@ import {
 } from "../components/EducationContentFields";
 import { normalizeEducationCode, parseEducationCode } from "../utils/educationCode";
 import { lookupCodeMatches, normalizeLookupCode, parseApprovedEducationExcelBuffer } from "../utils/parseApprovedEducationExcel";
-import { DEFAULT_SALES_FILTER, SALES_FILTERS, salesFilterLabel, salesFilterRequiresInstitution } from "../../constants/salesFilters";
+import { DEFAULT_SALES_FILTER, SALES_FILTERS, normalizeSalesFilter, salesFilterLabel, salesFilterRequiresInstitution } from "../../constants/salesFilters";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
@@ -59,7 +59,7 @@ const moduleConfig = {
   },
   educations: {
     title: "Eğitim Listesi",
-    fields: ["code", "name", "categoryId", "salesFilter", "institutionId", "instructorId", "description", "content", "topicHeadings", "imageUrl", "promoVideoPath", "promoVideoUrl", "duration"],
+    fields: ["code", "name", "categoryId", "salesFilter", "institutionId", "instructorId", "description", "content", "topicHeadings", "imageUrl", "promoVideoPath", "promoVideoUrl", "price", "hasDiscount", "discountRate", "duration"],
     labels: {
       code: "Eğitim Kodu (onaylı listeden)",
       name: "Eğitim Adı",
@@ -73,6 +73,9 @@ const moduleConfig = {
       imageUrl: "Görsel URL",
       promoVideoPath: "Tanıtım Videosu",
       promoVideoUrl: "Tanıtım Videosu (harici bağlantı)",
+      price: "Ücret (TL)",
+      hasDiscount: "İndirim mevcut mu",
+      discountRate: "İndirim oranı (%)",
       duration: "Eğitim Saati",
     },
   },
@@ -180,6 +183,16 @@ const renderTableCellValue = (field, value, maps = {}) => {
     return <img src={normalizeAssetUrl(value)} alt="Yüklenen görsel" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8 }} />;
   }
   if (field === "salesFilter") return salesFilterLabel(value) || value || "-";
+  if (field === "price") {
+    if (value == null || value === "") return "-";
+    const n = Number(value);
+    return Number.isFinite(n) ? `${n.toLocaleString("tr-TR")} TL` : String(value);
+  }
+  if (field === "hasDiscount") return value === true || value === "true" || value === 1 || value === "1" ? "Evet" : "Hayır";
+  if (field === "discountRate") {
+    if (value == null || value === "") return "-";
+    return `%${value}`;
+  }
   if (field === "roleId") return maps.rolesById?.[value]?.name || value || "-";
   if (field === "categoryId") return maps.educationCategoriesById?.[value]?.categoryName || value || "-";
   if (field === "institutionId") return maps.institutionsById?.[value]?.name || value || "-";
@@ -209,18 +222,6 @@ const renderTableCellValue = (field, value, maps = {}) => {
   }
   return renderFieldValue(field, value);
 };
-
-const educationDurationOptions = [
-  "30 dk",
-  "45 dk",
-  "60 dk (1 saat)",
-  "90 dk (1.5 saat)",
-  "120 dk (2 saat)",
-  "180 dk (3 saat)",
-  "240 dk (4 saat)",
-  "300 dk (5 saat)",
-  "360 dk (6 saat)",
-];
 
 const toDatetimeLocalValue = (value) => {
   if (!value) return "";
@@ -304,10 +305,20 @@ export default function CrudListPage({ moduleKey }) {
   const lockEducationFromApproved = isEducationsModule && Boolean(String(form._approvedEducationId || "").trim());
   const isSalesFilterModule = isApprovedEducationsModule || isEducationsModule;
   const formNeedsInstitution = salesFilterRequiresInstitution(form.salesFilter);
+  const formIsPaidGuzem = isEducationsModule && normalizeSalesFilter(form.salesFilter) === "guzem-ucretli";
   const formFields = isContactFormsModule
     ? config.fields.filter((field) => field !== "createdAt" && field !== "isRead")
     : isSalesFilterModule
-      ? config.fields.filter((field) => field !== "institutionId" || formNeedsInstitution)
+      ? config.fields.filter((field) => {
+          if (field === "institutionId" && !formNeedsInstitution) return false;
+          if (isEducationsModule && ["price", "hasDiscount", "discountRate"].includes(field) && !formIsPaidGuzem) {
+            return false;
+          }
+          if (field === "discountRate" && formIsPaidGuzem && !(form.hasDiscount === true || form.hasDiscount === "true" || form.hasDiscount === "1")) {
+            return false;
+          }
+          return true;
+        })
       : isInstructorsModule
         ? ["firstName", "lastName", "email", "password", "title", "department", "about", "imageUrl"]
         : config.fields;
@@ -397,6 +408,9 @@ export default function CrudListPage({ moduleKey }) {
       initialForm.salesFilter = "";
       initialForm.topicHeadings = [];
       initialForm.modules = [];
+      initialForm.price = "";
+      initialForm.hasDiscount = false;
+      initialForm.discountRate = "";
     }
     if (isEducationCalendarModule) {
       initialForm.topicHeadings = [];
@@ -419,6 +433,9 @@ export default function CrudListPage({ moduleKey }) {
       initial._approvedEducationId = match?.id || "";
       initial.salesFilter = row.salesFilter || match?.salesFilter || "";
       initial.topicHeadings = Array.isArray(row.topicHeadings) ? row.topicHeadings : [];
+      initial.price = row.price != null && row.price !== "" ? String(row.price) : "";
+      initial.hasDiscount = Boolean(row.hasDiscount);
+      initial.discountRate = row.discountRate != null && row.discountRate !== "" ? String(row.discountRate) : "";
       initial.modules = [];
       try {
         const res = await adminApi.getEducationModules(row.id);
@@ -446,6 +463,14 @@ export default function CrudListPage({ moduleKey }) {
     if (isEducationsModule) {
       payload.modules = Array.isArray(form.modules) ? form.modules : [];
       payload.topicHeadings = Array.isArray(form.topicHeadings) ? form.topicHeadings : [];
+      if (normalizeSalesFilter(form.salesFilter) === "guzem-ucretli") {
+        payload.hasDiscount = form.hasDiscount === true || form.hasDiscount === "true" || form.hasDiscount === "1";
+        if (!payload.hasDiscount) payload.discountRate = null;
+      } else {
+        payload.price = null;
+        payload.hasDiscount = false;
+        payload.discountRate = null;
+      }
     } else {
       delete payload.modules;
     }
@@ -1075,6 +1100,50 @@ export default function CrudListPage({ moduleKey }) {
                             : "Kurum seçimi yalnızca “İş Birliği ve Sertifika Programları” türünde istenir."}
                         </small>
                       </div>
+                    ) : isEducationsModule && field === "price" ? (
+                      <div className="admin-field-stack">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={form.price ?? ""}
+                          onChange={(event) => setForm((prev) => ({ ...prev, price: event.target.value }))}
+                          placeholder="Örn. 2500"
+                          required
+                        />
+                        <small style={{ opacity: 0.85 }}>Kayıt ücreti (TL). Başvuru formunda gösterilir.</small>
+                      </div>
+                    ) : isEducationsModule && field === "hasDiscount" ? (
+                      <div className="admin-field-stack">
+                        <select
+                          value={form.hasDiscount === true || form.hasDiscount === "true" || form.hasDiscount === "1" ? "true" : "false"}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              hasDiscount: event.target.value === "true",
+                              discountRate: event.target.value === "true" ? prev.discountRate : "",
+                            }))
+                          }
+                          required
+                        >
+                          <option value="false">Hayır</option>
+                          <option value="true">Evet</option>
+                        </select>
+                      </div>
+                    ) : isEducationsModule && field === "discountRate" ? (
+                      <div className="admin-field-stack">
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          step="1"
+                          value={form.discountRate ?? ""}
+                          onChange={(event) => setForm((prev) => ({ ...prev, discountRate: event.target.value }))}
+                          placeholder="Örn. 20"
+                          required
+                        />
+                        <small style={{ opacity: 0.85 }}>İndirim oranı yüzde olarak girilir (ör. 20 → %20).</small>
+                      </div>
                     ) : (isEducationLikeModule || isApprovedEducationsModule) && field === "categoryId" ? (
                       <select
                         value={form[field] ?? ""}
@@ -1209,16 +1278,13 @@ export default function CrudListPage({ moduleKey }) {
                         required
                       />
                     ) : isEducationLikeModule && field === "duration" ? (
-                      <select value={form[field] ?? ""} onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))} required>
-                        <option value="" disabled>
-                          Eğitim Süresi Seçin
-                        </option>
-                        {educationDurationOptions.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
+                      <input
+                        type="text"
+                        value={form[field] ?? ""}
+                        onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
+                        placeholder="Örn. 20 Saat"
+                        required
+                      />
                     ) : isEducationCalendarModule && field === "calendarDate" ? (
                       <input
                         type="datetime-local"

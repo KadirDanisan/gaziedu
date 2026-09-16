@@ -233,8 +233,8 @@ function TextBlock({ resource }) {
   );
 }
 
-function ModuleSection({ moduleRow, index, defaultOpen }) {
-  const [open, setOpen] = useState(defaultOpen);
+function ModuleSection({ moduleRow, index, defaultOpen, locked = false }) {
+  const [open, setOpen] = useState(Boolean(defaultOpen) && !locked);
   const blocks = useMemo(() => moduleBlocks(moduleRow), [moduleRow]);
   const counts = useMemo(() => countResourcesByKind(blocks), [blocks]);
   const title = moduleRow.title || `Modül ${index + 1}`;
@@ -245,26 +245,33 @@ function ModuleSection({ moduleRow, index, defaultOpen }) {
   if (counts.text) metaParts.push(`${counts.text} okuma`);
 
   return (
-    <section className={`curriculum-module${open ? " is-open" : ""}`}>
+    <section className={`curriculum-module${open && !locked ? " is-open" : ""}${locked ? " is-locked" : ""}`}>
       <button
         type="button"
         className="curriculum-module__head"
-        onClick={() => setOpen((prev) => !prev)}
-        aria-expanded={open}
+        onClick={() => {
+          if (locked) return;
+          setOpen((prev) => !prev);
+        }}
+        aria-expanded={locked ? false : open}
+        aria-disabled={locked || undefined}
+        disabled={locked}
       >
         <span className="curriculum-module__index" aria-hidden>
           {String(index + 1).padStart(2, "0")}
         </span>
         <span className="curriculum-module__heading">
           <span className="curriculum-module__title">{title}</span>
-          <span className="curriculum-module__meta">{metaParts.join(" · ") || "İçerik hazırlanıyor"}</span>
+          <span className="curriculum-module__meta">
+            {locked ? "Kilitli içerik" : metaParts.join(" · ") || "İçerik hazırlanıyor"}
+          </span>
         </span>
         <span className="curriculum-module__chevron" aria-hidden>
-          <i className={`fa-solid fa-chevron-${open ? "up" : "down"}`} />
+          <i className={`fa-solid ${locked ? "fa-lock" : `fa-chevron-${open ? "up" : "down"}`}`} />
         </span>
       </button>
 
-      {open ? (
+      {!locked && open ? (
         <div className="curriculum-module__body">
           {!blocks.length ? (
             <p className="training-detail-empty-note">Bu modülün içeriği henüz yayınlanmadı.</p>
@@ -282,7 +289,13 @@ function ModuleSection({ moduleRow, index, defaultOpen }) {
   );
 }
 
-function TrainingCurriculum({ modules = [] }) {
+function TrainingCurriculum({
+  modules = [],
+  locked = false,
+  lockStatus = "none",
+  onLoginClick,
+  onApplyClick,
+}) {
   const list = Array.isArray(modules) ? modules : [];
 
   const totals = useMemo(
@@ -302,38 +315,73 @@ function TrainingCurriculum({ modules = [] }) {
 
   if (!list.length) return null;
 
+  const lockMessage =
+    lockStatus === "pending"
+      ? "Başvurunuz inceleniyor. Onaylandıktan sonra bu hesapla giriş yaparak müfredata erişebilirsiniz."
+      : "Ücretli eğitim müfredatı, başvurunuz onaylandıktan ve başvuru yaptığınız hesapla giriş yaptıktan sonra açılır.";
+
   return (
-    <div className="curriculum">
+    <div className={`curriculum${locked ? " curriculum--locked" : ""}`}>
       <div className="curriculum__head">
         <div>
           <h3>Eğitim Müfredatı</h3>
           <p className="curriculum__subtitle">
             {list.length} modül
-            {totals.video ? ` · ${totals.video} video` : ""}
-            {totals.pdf ? ` · ${totals.pdf} indirilebilir doküman` : ""}
-            {totals.text ? ` · ${totals.text} okuma` : ""}
+            {!locked && totals.video ? ` · ${totals.video} video` : ""}
+            {!locked && totals.pdf ? ` · ${totals.pdf} indirilebilir doküman` : ""}
+            {!locked && totals.text ? ` · ${totals.text} okuma` : ""}
+            {locked ? " · Erişim kilitli" : ""}
           </p>
         </div>
-        <div className="curriculum__legend" aria-hidden>
-          <span className="curriculum__legend-item">
-            <i className="fa-solid fa-play" /> Video
-          </span>
-          <span className="curriculum__legend-item">
-            <i className="fa-regular fa-file-pdf" /> Doküman
-          </span>
-          <span className="curriculum__legend-item">
-            <i className="fa-regular fa-file-lines" /> Okuma
-          </span>
-        </div>
+        {!locked ? (
+          <div className="curriculum__legend" aria-hidden>
+            <span className="curriculum__legend-item">
+              <i className="fa-solid fa-play" /> Video
+            </span>
+            <span className="curriculum__legend-item">
+              <i className="fa-regular fa-file-pdf" /> Doküman
+            </span>
+            <span className="curriculum__legend-item">
+              <i className="fa-regular fa-file-lines" /> Okuma
+            </span>
+          </div>
+        ) : (
+          <div className="curriculum__lock-badge" aria-hidden>
+            <i className="fa-solid fa-lock" />
+            Kilitli
+          </div>
+        )}
       </div>
 
-      <div className="curriculum__list">
+      {locked ? (
+        <div className="curriculum__lock-panel">
+          <div className="curriculum__lock-icon" aria-hidden>
+            <i className="fa-solid fa-lock" />
+          </div>
+          <p>{lockMessage}</p>
+          <div className="curriculum__lock-actions">
+            {typeof onLoginClick === "function" ? (
+              <button type="button" className="btn btn-outline" onClick={onLoginClick}>
+                Giriş yap
+              </button>
+            ) : null}
+            {typeof onApplyClick === "function" && lockStatus !== "pending" ? (
+              <button type="button" className="btn" onClick={onApplyClick}>
+                Başvuru Formunu Doldur
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      <div className={`curriculum__list${locked ? " curriculum__list--locked" : ""}`} aria-hidden={locked || undefined}>
         {list.map((moduleRow, index) => (
           <ModuleSection
             key={moduleRow.id || `module-${index}`}
             moduleRow={moduleRow}
             index={index}
-            defaultOpen={index === 0}
+            defaultOpen={!locked && index === 0}
+            locked={locked}
           />
         ))}
       </div>

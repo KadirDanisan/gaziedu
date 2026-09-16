@@ -55,8 +55,20 @@ const formatPublicCourse = (row) => ({
   contentDocPath: row.content_doc_path || "",
   topicHeadings: normalizeTopicHeadings(row.topic_headings),
   modules: Array.isArray(row.modules) ? row.modules : [],
+  curriculumLocked: Boolean(row.curriculumLocked),
   contentHtml: "",
   code: row.code || "",
+  price: row.price != null && row.price !== "" ? Number(row.price) : null,
+  hasDiscount: Boolean(row.has_discount),
+  discountRate: row.discount_rate != null && row.discount_rate !== "" ? Number(row.discount_rate) : null,
+  payableAmount: (() => {
+    const price = row.price != null && row.price !== "" ? Number(row.price) : null;
+    if (price == null || Number.isNaN(price)) return null;
+    if (!row.has_discount) return price;
+    const rate = row.discount_rate != null && row.discount_rate !== "" ? Number(row.discount_rate) : 0;
+    if (!Number.isFinite(rate) || rate <= 0) return price;
+    return Math.round(price * (1 - Math.min(100, rate) / 100) * 100) / 100;
+  })(),
   salesFilter: normalizeSalesFilter(row.sales_filter),
   salesFilterLabel: salesFilterLabel(row.sales_filter),
   sourceType: row.source_type || "education",
@@ -76,7 +88,7 @@ const loadPublicCategoryOptions = async () => {
   ];
 };
 
-const EDUCATION_DETAIL_SELECT = `e.id, e.name, e.description, e.content, e.image_url, e.promo_video_path, e.promo_video_url, e.code, e.duration, e.topic_headings, e.sales_filter, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
+const EDUCATION_DETAIL_SELECT = `e.id, e.name, e.description, e.content, e.image_url, e.promo_video_path, e.promo_video_url, e.code, e.duration, e.topic_headings, e.sales_filter, e.price, e.has_discount, e.discount_rate, e.category_id, e.institution_id, e.instructor_id, e.rating_average, e.rating_count, c.category_name, 'education'::text AS source_type, i.name AS institution_name, i.logo_url AS institution_logo_url, i.website_url AS institution_website_url,
           ins.first_name AS instructor_first_name, ins.last_name AS instructor_last_name, ins.title AS instructor_title, ins.department AS instructor_department, ins.about AS instructor_about, ins.email AS instructor_email, ins.image_url AS instructor_image_url,
           NULL::text AS instructor_info, NULL::timestamptz AS calendar_date`;
 

@@ -27,6 +27,7 @@ const permissionModules = [
   "educations",
   "instructors",
   "educationCalendar",
+  "educationApplications",
   "newsletter",
   "contactForms",
   "examQuestions",
