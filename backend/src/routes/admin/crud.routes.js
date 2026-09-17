@@ -182,7 +182,7 @@ router.post("/api/admin/:moduleName", auth, async (req, res, next) => {
     const payload = toDbObject(req.body);
     if (config.table === "educations" || config.table === "education_calendar" || config.table === "approved_educations") {
       try {
-        prepareEducationPayload(payload);
+        prepareEducationPayload(payload, { table: config.table });
       } catch (error) {
         return res.status(400).json({ message: error.message });
       }
@@ -290,7 +290,7 @@ router.put("/api/admin/:moduleName/:id", auth, async (req, res, next) => {
     const payload = toDbObject(req.body);
     if (config.table === "educations" || config.table === "education_calendar" || config.table === "approved_educations") {
       try {
-        prepareEducationPayload(payload);
+        prepareEducationPayload(payload, { table: config.table });
       } catch (error) {
         return res.status(400).json({ message: error.message });
       }

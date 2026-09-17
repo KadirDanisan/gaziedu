@@ -54,7 +54,9 @@ const normalizeJsonbStringArray = (value) => {
   return [];
 };
 
-const prepareEducationPayload = (payload) => {
+const prepareEducationPayload = (payload, { table } = {}) => {
+  const isEducationsTable = table === "educations";
+
   if (typeof payload.content_doc_path === "string") {
     payload.content_doc_path = normalizeUploadPath(payload.content_doc_path);
   }
@@ -92,50 +94,57 @@ const prepareEducationPayload = (payload) => {
     if (!salesFilterRequiresInstitution(salesFilter)) {
       payload.institution_id = null;
     }
-    if (salesFilter !== "guzem-ucretli") {
+    if (isEducationsTable && salesFilter !== "guzem-ucretli") {
       payload.price = null;
       payload.has_discount = false;
       payload.discount_rate = null;
     }
   }
 
-  if (Object.hasOwn(payload, "price")) {
-    if (payload.price === "" || payload.price === null || payload.price === undefined) {
-      payload.price = null;
-    } else {
-      const n = Number(payload.price);
-      if (!Number.isFinite(n) || n < 0) {
-        throw new Error("Ücret geçerli bir sayı olmalıdır.");
+  // Ücret alanları yalnızca eğitim listesinde (educations) tutulur.
+  if (!isEducationsTable) {
+    delete payload.price;
+    delete payload.has_discount;
+    delete payload.discount_rate;
+  } else {
+    if (Object.hasOwn(payload, "price")) {
+      if (payload.price === "" || payload.price === null || payload.price === undefined) {
+        payload.price = null;
+      } else {
+        const n = Number(payload.price);
+        if (!Number.isFinite(n) || n < 0) {
+          throw new Error("Ücret geçerli bir sayı olmalıdır.");
+        }
+        payload.price = n;
       }
-      payload.price = n;
     }
-  }
 
-  if (Object.hasOwn(payload, "has_discount")) {
-    payload.has_discount =
-      payload.has_discount === true ||
-      payload.has_discount === "true" ||
-      payload.has_discount === 1 ||
-      payload.has_discount === "1";
-  }
+    if (Object.hasOwn(payload, "has_discount")) {
+      payload.has_discount =
+        payload.has_discount === true ||
+        payload.has_discount === "true" ||
+        payload.has_discount === 1 ||
+        payload.has_discount === "1";
+    }
 
-  if (Object.hasOwn(payload, "discount_rate")) {
-    if (!payload.has_discount) {
-      payload.discount_rate = null;
-    } else if (payload.discount_rate === "" || payload.discount_rate === null || payload.discount_rate === undefined) {
-      throw new Error("İndirim oranını giriniz.");
-    } else {
-      const n = Number(payload.discount_rate);
-      if (!Number.isFinite(n) || n < 1 || n > 100) {
-        throw new Error("İndirim oranı 1–100 arasında olmalıdır.");
+    if (Object.hasOwn(payload, "discount_rate")) {
+      if (!payload.has_discount) {
+        payload.discount_rate = null;
+      } else if (payload.discount_rate === "" || payload.discount_rate === null || payload.discount_rate === undefined) {
+        throw new Error("İndirim oranını giriniz.");
+      } else {
+        const n = Number(payload.discount_rate);
+        if (!Number.isFinite(n) || n < 1 || n > 100) {
+          throw new Error("İndirim oranı 1–100 arasında olmalıdır.");
+        }
+        payload.discount_rate = n;
       }
-      payload.discount_rate = n;
     }
-  }
 
-  if (payload.sales_filter === "guzem-ucretli") {
-    if (payload.price == null) {
-      throw new Error("Ücretli eğitimler için ücret giriniz.");
+    if (payload.sales_filter === "guzem-ucretli") {
+      if (payload.price == null) {
+        throw new Error("Ücretli eğitimler için ücret giriniz.");
+      }
     }
   }
 
