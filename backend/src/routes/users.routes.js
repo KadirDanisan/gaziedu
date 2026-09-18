@@ -13,6 +13,7 @@ import { formatPublicCourse } from "../services/education/publicCourses.js";
 import { formatEducationReviewRow, formatRatingAggregateFields } from "../services/education/publicCourses.js";
 import { extractEducationContentHtml } from "../services/education/content.js";
 import { loadEducationModules } from "../services/education/modules.js";
+import { signExamPortalLink } from "../examPortalLinkToken.js";
 
 const router = Router();
 
@@ -624,6 +625,109 @@ router.get("/api/users/education-applications/:educationId/modules", userAuth, a
     }
 
     return res.json({ modules: await loadEducationModules(educationId) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/** Onaylı ücretli eğitim için sınav portalı JWT bağlantısı (ec + tc + pn). */
+router.post("/api/users/educations/:educationId/exam-portal-link", userAuth, async (req, res, next) => {
+  try {
+    const educationId = String(req.params.educationId || "").trim();
+    if (!isUuidParam(educationId)) {
+      return res.status(400).json({ message: "Geçersiz eğitim." });
+    }
+
+    const education = await pool.query(
+      `SELECT id, code, name, sales_filter FROM educations WHERE id = $1 LIMIT 1`,
+      [educationId],
+    );
+    if (!education.rows[0]) {
+      return res.status(404).json({ message: "Eğitim bulunamadı." });
+    }
+
+    const edu = education.rows[0];
+    const isPaid = String(edu.sales_filter || "").toLowerCase() === "guzem-ucretli";
+    if (isPaid) {
+      const app = await pool.query(
+        `SELECT status, first_name, last_name, national_id
+         FROM education_applications
+         WHERE user_id = $1 AND education_id = $2
+         LIMIT 1`,
+        [req.user.id, educationId],
+      );
+      const row = app.rows[0];
+      if (!row || String(row.status || "") !== "approved") {
+        return res.status(403).json({ message: "Sınav portalına erişim için başvurunuzun onaylanması gerekir." });
+      }
+
+      const nationalId = String(row.national_id || "").replace(/\D/g, "");
+      if (nationalId.length !== 11 || !isValidTurkishNationalId(nationalId)) {
+        return res.status(400).json({ message: "Başvurudaki T.C. kimlik numarası geçersiz." });
+      }
+      const participantName = `${String(row.first_name || "").trim()} ${String(row.last_name || "").trim()}`.trim();
+      if (!participantName) {
+        return res.status(400).json({ message: "Başvurudaki ad soyad eksik." });
+      }
+
+      let token;
+      try {
+        token = signExamPortalLink({
+          educationCode: edu.code,
+          nationalId,
+          participantName,
+        });
+      } catch (e) {
+        return res.status(400).json({ message: e.message || "Sınav bağlantısı oluşturulamadı." });
+      }
+
+      const path = `/sinavportali/${encodeURIComponent(token)}`;
+      return res.json({
+        portalToken: token,
+        path,
+        educationCode: String(edu.code || "").toUpperCase(),
+        participantName,
+      });
+    }
+
+    // Ücretsiz / diğer türler: profil bilgisiyle token
+    const profile = await pool.query(
+      `SELECT u.first_name, u.last_name, d.national_id
+       FROM normal_users u
+       LEFT JOIN normal_user_details d ON d.user_id = u.id
+       WHERE u.id = $1
+       LIMIT 1`,
+      [req.user.id],
+    );
+    const p = profile.rows[0];
+    if (!p) return res.status(401).json({ message: "Kullanıcı bulunamadı." });
+    const nationalId = String(p.national_id || "").replace(/\D/g, "");
+    if (nationalId.length !== 11 || !isValidTurkishNationalId(nationalId)) {
+      return res.status(400).json({ message: "Sınav için hesap profilinizde geçerli T.C. kimlik numarası olmalıdır." });
+    }
+    const participantName = `${String(p.first_name || "").trim()} ${String(p.last_name || "").trim()}`.trim();
+    if (!participantName) {
+      return res.status(400).json({ message: "Sınav için hesap ad soyad bilgisi eksik." });
+    }
+
+    let token;
+    try {
+      token = signExamPortalLink({
+        educationCode: edu.code,
+        nationalId,
+        participantName,
+      });
+    } catch (e) {
+      return res.status(400).json({ message: e.message || "Sınav bağlantısı oluşturulamadı." });
+    }
+
+    const path = `/sinavportali/${encodeURIComponent(token)}`;
+    return res.json({
+      portalToken: token,
+      path,
+      educationCode: String(edu.code || "").toUpperCase(),
+      participantName,
+    });
   } catch (error) {
     return next(error);
   }

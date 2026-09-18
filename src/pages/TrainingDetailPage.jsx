@@ -354,6 +354,8 @@ function TrainingDetailPage() {
   });
   const [unlockedModules, setUnlockedModules] = useState(null);
   const [accessRefreshTick, setAccessRefreshTick] = useState(0);
+  const [examPortalBusy, setExamPortalBusy] = useState(false);
+  const [examPortalError, setExamPortalError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -501,6 +503,29 @@ function TrainingDetailPage() {
       return;
     }
     setApplyOpen(true);
+  };
+
+  const curriculumUnlocked =
+    !isPaidGuzem || (curriculumAccess.hasAccess && Array.isArray(unlockedModules));
+
+  const goToExamPortal = async () => {
+    if (!activeCourse?.id || !curriculumUnlocked) return;
+    if (!isLoggedIn) {
+      const nextPath = `${location.pathname}${location.hash || "#moduller"}`;
+      navigate(`/kullanici-islemleri?next=${encodeURIComponent(nextPath)}`);
+      return;
+    }
+    setExamPortalBusy(true);
+    setExamPortalError("");
+    try {
+      const res = await userApi.getExamPortalLink(activeCourse.id);
+      const path = res?.path || (res?.portalToken ? `/sinavportali/${encodeURIComponent(res.portalToken)}` : "");
+      if (!path) throw new Error("Sınav bağlantısı alınamadı.");
+      window.location.assign(path);
+    } catch (e) {
+      setExamPortalError(e?.message || "Sınav portalına yönlendirilemedi.");
+      setExamPortalBusy(false);
+    }
   };
 
   return (
@@ -687,7 +712,12 @@ function TrainingDetailPage() {
                     : undefined
                 }
                 onApplyClick={isPaidGuzem ? openPaidApplication : undefined}
+                onExamPortalClick={
+                  isPaidGuzem && curriculumUnlocked ? goToExamPortal : undefined
+                }
+                examPortalBusy={examPortalBusy}
               />
+              {examPortalError ? <p className="admin-form-error" style={{ margin: "12px 20px 16px" }}>{examPortalError}</p> : null}
             </div>
           ) : null}
 

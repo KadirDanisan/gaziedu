@@ -51,4 +51,9 @@ export const userApi = {
     request(`/users/education-applications/access/${encodeURIComponent(educationId)}`),
   getEducationApplicationModules: (educationId) =>
     request(`/users/education-applications/${encodeURIComponent(educationId)}/modules`),
+  getExamPortalLink: (educationId) =>
+    request(`/users/educations/${encodeURIComponent(educationId)}/exam-portal-link`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
 };

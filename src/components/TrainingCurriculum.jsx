@@ -295,6 +295,8 @@ function TrainingCurriculum({
   lockStatus = "none",
   onLoginClick,
   onApplyClick,
+  onExamPortalClick,
+  examPortalBusy = false,
 }) {
   const list = Array.isArray(modules) ? modules : [];
 
@@ -385,6 +387,15 @@ function TrainingCurriculum({
           />
         ))}
       </div>
+
+      {!locked && typeof onExamPortalClick === "function" ? (
+        <div className="curriculum__exam-cta">
+          <p className="curriculum__exam-cta-text">Müfredatı tamamladıktan sonra sınava başlayabilirsiniz.</p>
+          <button type="button" className="btn curriculum__exam-cta-btn" disabled={examPortalBusy} onClick={onExamPortalClick}>
+            {examPortalBusy ? "Hazırlanıyor…" : "Sınav Portalına Git"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

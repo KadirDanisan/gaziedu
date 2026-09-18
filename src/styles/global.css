@@ -7523,6 +7523,29 @@ textarea {
   display: grid;
 }
 
+.curriculum__exam-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 16px 20px 20px;
+  border-top: 1px solid #e6eaf4;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+}
+
+.curriculum__exam-cta-text {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #475569;
+  max-width: 28rem;
+}
+
+.curriculum__exam-cta-btn {
+  white-space: nowrap;
+}
+
 .curriculum-module + .curriculum-module {
   border-top: 1px solid #eef1f8;
 }
