@@ -17,7 +17,8 @@ const moduleLabelMap = {
   examResults: "Sınav Sonuçları",
   examSuccessPayments: "Sınav Başarılı Ödemeler",
   certificateList: "Sertifika Çıkartma",
-  adminMessaging: "Yönetici sohbeti",
+  certificateNotifications: "Sertifika Bildirim",
+  adminMessaging: "Yönetici Sohbeti",
   roles: "Rol ve Yetki",
 };
 

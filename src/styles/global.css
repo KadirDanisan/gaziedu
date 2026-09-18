@@ -512,6 +512,28 @@ html {
   color: #fff;
 }
 
+.admin-side-link__label {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-side-link__badge {
+  margin-left: auto;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
 .admin-main {
   min-width: 0;
 }
@@ -8810,4 +8832,59 @@ textarea {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+.cert-notify-file {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.cert-notify-file__label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1d2740;
+}
+
+.cert-notify-file__control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px dashed #c7d2e8;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.cert-notify-file__control input[type="file"] {
+  font-size: 0.85rem;
+}
+
+.cert-notify-file__name {
+  font-size: 0.82rem;
+  color: #64748b;
+  word-break: break-all;
+}
+
+.cert-notify-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #eef1f8;
+}
+
+.cert-notify-checks .admin-checkbox {
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1d2740;
+}
+
+.cert-notify-checks input {
+  width: 16px;
+  height: 16px;
 }

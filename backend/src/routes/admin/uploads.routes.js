@@ -1,7 +1,7 @@
 import { Router } from "express";
 import path from "path";
 import { auth } from "../../middleware/auth.js";
-import { upload, uploadDoc, uploadModuleFile, uploadModuleVideo } from "../../middleware/upload.js";
+import { upload, uploadDoc, uploadModuleFile, uploadModuleVideo, uploadCertNotifyFile } from "../../middleware/upload.js";
 import { parseExamQuestionsFromDocx } from "../../services/exam/docxTable.js";
 import { uploadsDir } from "../../config/env.js";
 import { fixUploadedFileName } from "../../utils/fileName.js";
@@ -95,6 +95,21 @@ router.post("/api/admin/uploads/education-module-video", auth, uploadModuleVideo
     const absolutePath = path.join(uploadsDir, req.file.filename);
     const optimized = await optimizeVideoForStreaming(absolutePath);
     return respondWithModuleAsset(req, res, { size: optimized.size || req.file.size });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/api/admin/uploads/certificate-notification-file", auth, uploadCertNotifyFile.single("file"), (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: "Yüklenecek dosya bulunamadı." });
+    const publicPath = `/uploads/${req.file.filename}`;
+    return res.status(201).json({
+      fileName: fixUploadedFileName(req.file.originalname),
+      size: req.file.size,
+      path: publicPath,
+      url: `${req.protocol}://${req.get("host")}${publicPath}`,
+    });
   } catch (error) {
     return next(error);
   }

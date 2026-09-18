@@ -767,6 +767,51 @@ const migrateEducationApplicationsPermissions = async () => {
   `);
 };
 
+/** E-Devlet sertifika bildirim / onay kuyruğu */
+const migrateCertificateNotificationsTable = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS certificate_notifications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      status TEXT NOT NULL DEFAULT 'pending_superadmin',
+      priced_excel_path TEXT NOT NULL,
+      priced_excel_name TEXT,
+      unpaid_excel_path TEXT NOT NULL,
+      unpaid_excel_name TEXT,
+      receipt_pdf_path TEXT NOT NULL,
+      receipt_pdf_name TEXT,
+      submitted_by UUID REFERENCES admin_users(id) ON DELETE SET NULL,
+      submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      superadmin_approved_by UUID REFERENCES admin_users(id) ON DELETE SET NULL,
+      superadmin_approved_at TIMESTAMPTZ,
+      yetkili_accepted_by UUID REFERENCES admin_users(id) ON DELETE SET NULL,
+      yetkili_accepted_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS certificate_notifications_status_idx
+      ON certificate_notifications (status, created_at DESC)
+  `);
+};
+
+const migrateCertificateNotificationsPermissions = async () => {
+  await pool.query(`
+    INSERT INTO permissions (role_id, module_name, can_view, can_create, can_update, can_delete)
+    SELECT r.id,
+           'certificateNotifications',
+           CASE WHEN r.code IN ('superadmin', 'admin', 'yetkili') THEN TRUE ELSE FALSE END,
+           CASE WHEN r.code IN ('superadmin', 'admin') THEN TRUE ELSE FALSE END,
+           CASE WHEN r.code IN ('superadmin', 'yetkili') THEN TRUE ELSE FALSE END,
+           FALSE
+    FROM roles r
+    ON CONFLICT (role_id, module_name) DO UPDATE SET
+      can_view = EXCLUDED.can_view,
+      can_create = EXCLUDED.can_create,
+      can_update = EXCLUDED.can_update
+  `);
+};
+
 export {
   migrateContactFormTimestampsToIstanbul,
   migrateInstitutionCodeColumn,
@@ -778,6 +823,8 @@ export {
   migrateEducationPriceColumns,
   migrateEducationApplicationAdminColumns,
   migrateEducationApplicationsPermissions,
+  migrateCertificateNotificationsTable,
+  migrateCertificateNotificationsPermissions,
   migrateEducationDocColumns,
   migrateEducationCalendarColumns,
   migrateEducationCategoryColumns,
@@ -852,4 +899,6 @@ export const migrations = [
   migrateEducationPriceColumns,
   migrateEducationApplicationAdminColumns,
   migrateEducationApplicationsPermissions,
+  migrateCertificateNotificationsTable,
+  migrateCertificateNotificationsPermissions,
 ];

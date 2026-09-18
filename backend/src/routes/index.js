@@ -9,6 +9,7 @@ import adminBootstrapRoutes from "./admin/bootstrap.routes.js";
 import adminExamRoutes from "./admin/exam.routes.js";
 import adminMessagingRoutes from "./admin/messaging.routes.js";
 import adminEducationApplicationsRoutes from "./admin/educationApplications.routes.js";
+import adminCertificateNotificationsRoutes from "./admin/certificateNotifications.routes.js";
 import adminCrudRoutes from "./admin/crud.routes.js";
 import adminPermissionsRoutes from "./admin/permissions.routes.js";
 import adminEducationModulesRoutes from "./admin/educationModules.routes.js";
@@ -27,6 +28,7 @@ export function registerRoutes(app) {
   app.use(adminMessagingRoutes);
   app.use(adminEducationModulesRoutes);
   app.use(adminEducationApplicationsRoutes);
+  app.use(adminCertificateNotificationsRoutes);
   app.use(adminCrudRoutes);
   app.use(adminPermissionsRoutes);
 }

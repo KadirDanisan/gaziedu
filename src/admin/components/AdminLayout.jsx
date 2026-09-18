@@ -1,14 +1,21 @@
-import { useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { ADMIN_MODULES } from "../modules";
 import { useAdminAuth } from "../context/AdminAuthContext";
 import { adminApi } from "../api";
 
-function SidebarLink({ item }) {
+const CERT_NOTIFY_POPUP_KEY = "certNotifyPendingPopupShown";
+
+function SidebarLink({ item, badgeCount = 0 }) {
   return (
     <NavLink to={item.route} className={({ isActive }) => `admin-side-link ${isActive ? "is-active" : ""}`}>
       <i className={item.icon} />
-      <span>{item.label}</span>
+      <span className="admin-side-link__label">{item.label}</span>
+      {badgeCount > 0 ? (
+        <span className="admin-side-link__badge" aria-label={`${badgeCount} bekleyen bildirim`}>
+          {badgeCount > 99 ? "99+" : badgeCount}
+        </span>
+      ) : null}
     </NavLink>
   );
 }
@@ -16,6 +23,7 @@ function SidebarLink({ item }) {
 export default function AdminLayout() {
   const { session, logout, hasPermission, updateAdminSession } = useAdminAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [firstName, setFirstName] = useState("");
@@ -26,6 +34,58 @@ export default function AdminLayout() {
   const [newPassword2, setNewPassword2] = useState("");
   const [settingsError, setSettingsError] = useState("");
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [certNotifyCount, setCertNotifyCount] = useState(0);
+  const [certNotifyPopupOpen, setCertNotifyPopupOpen] = useState(false);
+  const certNotifyPopupTried = useRef(false);
+
+  const canViewCertNotify = hasPermission("certificateNotifications", "canView");
+  const roleCode = String(session?.user?.roleCode || "").toLowerCase();
+  const userId = session?.user?.id || "";
+
+  useEffect(() => {
+    if (!canViewCertNotify) {
+      setCertNotifyCount(0);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const refreshCount = async () => {
+      try {
+        const res = await adminApi.getCertificateNotificationsCount();
+        const count = Number(res?.count) || 0;
+        if (cancelled) return;
+        setCertNotifyCount(count);
+
+        if (count > 0 && !certNotifyPopupTried.current && ["superadmin", "yetkili"].includes(roleCode)) {
+          const storageKey = `${CERT_NOTIFY_POPUP_KEY}:${userId}`;
+          if (!sessionStorage.getItem(storageKey)) {
+            certNotifyPopupTried.current = true;
+            sessionStorage.setItem(storageKey, "1");
+            setCertNotifyPopupOpen(true);
+          } else {
+            certNotifyPopupTried.current = true;
+          }
+        }
+      } catch {
+        if (!cancelled) setCertNotifyCount(0);
+      }
+    };
+
+    refreshCount();
+    const timer = window.setInterval(refreshCount, 30000);
+    const onChanged = () => refreshCount();
+    window.addEventListener("certificate-notifications:changed", onChanged);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("certificate-notifications:changed", onChanged);
+    };
+  }, [canViewCertNotify, location.pathname, roleCode, userId]);
+
+  useEffect(() => {
+    certNotifyPopupTried.current = false;
+  }, [userId]);
 
   useEffect(() => {
     if (!settingsOpen || !session?.user) return;
@@ -96,7 +156,11 @@ export default function AdminLayout() {
         </div>
         <nav className="admin-side-nav">
           {ADMIN_MODULES.filter((module) => hasPermission(module.key, "canView")).map((module) => (
-            <SidebarLink key={module.key} item={module} />
+            <SidebarLink
+              key={module.key}
+              item={module}
+              badgeCount={module.key === "certificateNotifications" ? certNotifyCount : 0}
+            />
           ))}
         </nav>
       </aside>
@@ -118,7 +182,14 @@ export default function AdminLayout() {
               <button type="button" className="btn btn-outline" onClick={() => setSettingsOpen(true)}>
                 Ayarlar
               </button>
-              <button type="button" className="btn btn-outline" onClick={logout}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => {
+                  if (userId) sessionStorage.removeItem(`${CERT_NOTIFY_POPUP_KEY}:${userId}`);
+                  logout();
+                }}
+              >
                 Çıkış
               </button>
             </div>
@@ -128,6 +199,57 @@ export default function AdminLayout() {
           <Outlet />
         </main>
       </div>
+
+      {certNotifyPopupOpen ? (
+        <div
+          className="admin-modal-backdrop"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setCertNotifyPopupOpen(false);
+          }}
+        >
+          <div
+            className="admin-modal admin-modal--confirm"
+            style={{ maxWidth: 440, width: "min(440px, 94vw)" }}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="cert-notify-pending-title"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <header className="admin-modal__header admin-modal__header--confirm">
+              <div className="admin-modal__confirm-icon" aria-hidden>
+                <i className="fa-solid fa-bell" style={{ fontSize: "1.5rem", color: "#0d47a1" }} />
+              </div>
+              <div className="admin-modal__header-text">
+                <h3 id="cert-notify-pending-title" className="admin-modal__title">
+                  Onay bekleyen sertifikalar var
+                </h3>
+                <p className="admin-modal__subtitle admin-modal__subtitle--dense">
+                  {certNotifyCount} adet sertifika bildirimi onayınızı bekliyor. İncelemek için Sertifika Bildirim
+                  sayfasına gidebilirsiniz.
+                </p>
+              </div>
+            </header>
+            <footer className="admin-modal__footer">
+              <div className="admin-modal-actions admin-modal-actions--stretch">
+                <button type="button" className="btn btn-outline btn--modal-secondary" onClick={() => setCertNotifyPopupOpen(false)}>
+                  Daha sonra
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--modal-primary"
+                  onClick={() => {
+                    setCertNotifyPopupOpen(false);
+                    navigate("/admin/sertifika-bildirim");
+                  }}
+                >
+                  Bildirimlere git
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      ) : null}
 
       {settingsOpen ? (
         <div className="admin-modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && !settingsSaving && setSettingsOpen(false)}>

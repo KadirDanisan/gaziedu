@@ -156,6 +156,25 @@ export const adminApi = {
     formData.append("file", file);
     return request("/admin/uploads/education-module-video", { method: "POST", body: formData });
   },
+  uploadCertificateNotificationFile: (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request("/admin/uploads/certificate-notification-file", { method: "POST", body: formData });
+  },
+  getCertificateNotifications: () => request("/admin/certificate-notifications"),
+  getCertificateNotificationsCount: () => request("/admin/certificate-notifications/count"),
+  createCertificateNotification: (payload) =>
+    request("/admin/certificate-notifications", { method: "POST", body: JSON.stringify(payload) }),
+  approveCertificateNotificationSuperadmin: (id) =>
+    request(`/admin/certificate-notifications/${id}/superadmin-approve`, {
+      method: "PATCH",
+      body: JSON.stringify({}),
+    }),
+  acceptCertificateNotificationYetkili: (id) =>
+    request(`/admin/certificate-notifications/${id}/yetkili-accept`, {
+      method: "PATCH",
+      body: JSON.stringify({}),
+    }),
   getExamPortalVisits: ({ page = 1, search = "", period = "all" } = {}) => {
     const params = new URLSearchParams();
     params.set("page", String(page));

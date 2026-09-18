@@ -37,6 +37,7 @@ import AdminMessagingPage from "./admin/pages/AdminMessagingPage";
 import NoAccessPage from "./admin/pages/NoAccessPage";
 import ActivityLogsPage from "./admin/pages/ActivityLogsPage";
 import EducationApplicationsPage from "./admin/pages/EducationApplicationsPage";
+import CertificateNotificationsPage from "./admin/pages/CertificateNotificationsPage";
 
 function App() {
   return (
@@ -98,6 +99,7 @@ function App() {
                 <Route path="/admin/sinav-sonuclari" element={<ModulePermissionGuard moduleKey="examResults"><ExamResultsPage /></ModulePermissionGuard>} />
                 <Route path="/admin/sinav-basarili-odemeler" element={<ModulePermissionGuard moduleKey="examSuccessPayments"><ExamSuccessPaymentsPage /></ModulePermissionGuard>} />
                 <Route path="/admin/sertifika-listesi" element={<ModulePermissionGuard moduleKey="certificateList"><CertificateListPage /></ModulePermissionGuard>} />
+                <Route path="/admin/sertifika-bildirim" element={<ModulePermissionGuard moduleKey="certificateNotifications"><CertificateNotificationsPage /></ModulePermissionGuard>} />
                 <Route path="/admin/yonetici-sohbeti" element={<ModulePermissionGuard moduleKey="adminMessaging"><AdminMessagingPage /></ModulePermissionGuard>} />
                 <Route path="/admin/sinav-olusturucu" element={<ModulePermissionGuard moduleKey="examQuestions"><ExamGeneratorPage /></ModulePermissionGuard>} />
                 <Route path="/admin/aktivite-listesi" element={<ModulePermissionGuard moduleKey="activityLogs"><ActivityLogsPage /></ModulePermissionGuard>} />

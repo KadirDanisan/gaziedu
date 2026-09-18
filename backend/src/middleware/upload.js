@@ -83,12 +83,35 @@ const uploadApplicationDoc = multer({
   },
 });
 
+const CERT_NOTIFY_EXTENSIONS = [".xlsx", ".xls", ".pdf"];
+
+const certNotifyStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadsDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    const safeExt = CERT_NOTIFY_EXTENSIONS.includes(ext) ? ext : ".bin";
+    cb(null, `cert-notify-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
+  },
+});
+
+const uploadCertNotifyFile = multer({
+  storage: certNotifyStorage,
+  limits: { fileSize: 30 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    if (CERT_NOTIFY_EXTENSIONS.includes(ext)) cb(null, true);
+    else cb(new Error("Yalnızca Excel (.xlsx/.xls) veya PDF yüklenebilir."));
+  },
+});
+
 export {
   upload,
   uploadDoc,
   uploadModuleFile,
   uploadModuleVideo,
   uploadApplicationDoc,
+  uploadCertNotifyFile,
   MODULE_FILE_EXTENSIONS,
   APPLICATION_DOC_EXTENSIONS,
+  CERT_NOTIFY_EXTENSIONS,
 };
