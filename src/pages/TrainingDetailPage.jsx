@@ -521,9 +521,10 @@ function TrainingDetailPage() {
       const res = await userApi.getExamPortalLink(activeCourse.id);
       const path = res?.path || (res?.portalToken ? `/sinavportali/${encodeURIComponent(res.portalToken)}` : "");
       if (!path) throw new Error("Sınav bağlantısı alınamadı.");
-      window.location.assign(path);
+      window.open(path, "_blank", "noopener,noreferrer");
     } catch (e) {
       setExamPortalError(e?.message || "Sınav portalına yönlendirilemedi.");
+    } finally {
       setExamPortalBusy(false);
     }
   };
