@@ -251,11 +251,11 @@ export const adminApi = {
       body: JSON.stringify({ ids }),
     });
   },
-  markCertificateEdevletProcessed: (id) => {
+  markCertificateEdevletProcessed: (id, edevletProcessed = true) => {
     invalidateAdminCachePrefix("admin-certificate-list:");
     return request(`/admin/certificate-list/${id}/edevlet-processed`, {
       method: "PATCH",
-      body: JSON.stringify({ edevletProcessed: true }),
+      body: JSON.stringify({ edevletProcessed: Boolean(edevletProcessed) }),
     });
   },
   generateCertificatePdf: async (id) => {

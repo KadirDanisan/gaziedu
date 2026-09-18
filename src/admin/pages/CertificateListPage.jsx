@@ -21,7 +21,7 @@ const formatIstanbul = (value) => {
   }).format(date);
 };
 
-function EdevletProcessedPill({ processed, interactive, busy, onRequestConfirm }) {
+function EdevletProcessedPill({ processed, busy, onRequestConfirm }) {
   const track = (
     <span
       className={`exam-results-payment-pill__track ${
@@ -42,29 +42,17 @@ function EdevletProcessedPill({ processed, interactive, busy, onRequestConfirm }
     </span>
   );
 
-  if (interactive) {
-    return (
-      <button
-        type="button"
-        className="exam-results-payment-pill"
-        disabled={busy}
-        onClick={onRequestConfirm}
-        aria-label="E-devlete işlendi bilgisini güncelle"
-        aria-busy={busy}
-      >
-        {track}
-      </button>
-    );
-  }
-
   return (
-    <span
-      className="exam-results-payment-pill exam-results-payment-pill--static"
-      role="status"
-      aria-label={processed ? "E-devlete işlendi: Evet" : "E-devlete işlendi: Hayır"}
+    <button
+      type="button"
+      className="exam-results-payment-pill"
+      disabled={busy}
+      onClick={onRequestConfirm}
+      aria-label={processed ? "E-devlete işlendi: Evet. Hayır yapmak için tıklayın" : "E-devlete işlendi: Hayır. Evet yapmak için tıklayın"}
+      aria-busy={busy}
     >
       {track}
-    </span>
+    </button>
   );
 }
 
@@ -85,7 +73,7 @@ export default function CertificateListPage() {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [selectingAll, setSelectingAll] = useState(false);
   const [busyEdevletId, setBusyEdevletId] = useState("");
-  const [edevletConfirmId, setEdevletConfirmId] = useState(null);
+  const [edevletConfirm, setEdevletConfirm] = useState(null);
   const [excelExportConfirm, setExcelExportConfirm] = useState(null);
   const [bulkPdfProgress, setBulkPdfProgress] = useState(null);
   const [exportingAcquisitionReport, setExportingAcquisitionReport] = useState(false);
@@ -351,13 +339,14 @@ export default function CertificateListPage() {
   };
 
   const submitEdevletProcessed = async () => {
-    const id = edevletConfirmId;
+    const id = edevletConfirm?.id;
     if (!id) return;
+    const nextValue = Boolean(edevletConfirm.nextProcessed);
     setBusyEdevletId(id);
     setError("");
     try {
-      await adminApi.markCertificateEdevletProcessed(id);
-      setEdevletConfirmId(null);
+      await adminApi.markCertificateEdevletProcessed(id, nextValue);
+      setEdevletConfirm(null);
       await load();
     } catch (e) {
       setError(e.message || "E-devlet durumu güncellenemedi.");
@@ -622,9 +611,10 @@ export default function CertificateListPage() {
                       <td>
                         <EdevletProcessedPill
                           processed={processed}
-                          interactive={!processed}
                           busy={busyEdevletId === row.id}
-                          onRequestConfirm={() => setEdevletConfirmId(row.id)}
+                          onRequestConfirm={() =>
+                            setEdevletConfirm({ id: row.id, nextProcessed: !processed })
+                          }
                         />
                       </td>
                       <td>
@@ -723,12 +713,12 @@ export default function CertificateListPage() {
         </div>
       ) : null}
 
-      {edevletConfirmId ? (
+      {edevletConfirm ? (
         <div
           className="admin-modal-backdrop"
           role="presentation"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget && !busyEdevletId) setEdevletConfirmId(null);
+            if (e.target === e.currentTarget && !busyEdevletId) setEdevletConfirm(null);
           }}
         >
           <div
@@ -745,11 +735,12 @@ export default function CertificateListPage() {
               </div>
               <div className="admin-modal__header-text">
                 <h3 id="certificate-edevlet-confirm-title" className="admin-modal__title">
-                  E-devlet onayı
+                  E-devlet durumu
                 </h3>
                 <p className="admin-modal__subtitle admin-modal__subtitle--dense">
-                  Sertifika E-devlete işlendi olarak işaretlensin mi? Onayladığınızda kayıt tamamlanır ve sertifika
-                  tekrar hazırlanamaz.
+                  {edevletConfirm.nextProcessed
+                    ? "Sertifika E-devlete işlendi olarak işaretlensin mi? Onayladığınızda sertifika tekrar hazırlanamaz."
+                    : "E-devlete işlendi işaretini kaldırmak istiyor musunuz? Hayır yapıldığında sertifika yeniden hazırlanabilir."}
                 </p>
               </div>
             </header>
@@ -758,18 +749,18 @@ export default function CertificateListPage() {
                 <button
                   type="button"
                   className="btn btn-outline btn--modal-secondary"
-                  onClick={() => setEdevletConfirmId(null)}
+                  onClick={() => setEdevletConfirm(null)}
                   disabled={Boolean(busyEdevletId)}
                 >
-                  Hayır
+                  Vazgeç
                 </button>
                 <button
                   type="button"
-                  className="btn btn--success-fill"
+                  className={edevletConfirm.nextProcessed ? "btn btn--success-fill" : "btn btn--modal-primary"}
                   onClick={submitEdevletProcessed}
                   disabled={Boolean(busyEdevletId)}
                 >
-                  {busyEdevletId ? "…" : "Evet"}
+                  {busyEdevletId ? "…" : edevletConfirm.nextProcessed ? "Evet, işaretle" : "Evet, Hayır yap"}
                 </button>
               </div>
             </footer>

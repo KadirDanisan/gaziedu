@@ -451,10 +451,11 @@ router.get("/api/admin/certificate-list", auth, checkPermission("certificateList
 router.patch("/api/admin/certificate-list/:id/edevlet-processed", auth, checkPermission("certificateList", "can_view"), async (req, res, next) => {
   try {
     const id = String(req.params.id || "").trim();
-    const markProcessed = req.body?.edevletProcessed === true || req.body?.edevletProcessed === "true";
-    if (!markProcessed) {
-      return res.status(400).json({ message: "Yalnızca E-devlete işlendi olarak işaretlenebilir (edevletProcessed: true)." });
+    const raw = req.body?.edevletProcessed;
+    if (raw !== true && raw !== false && raw !== "true" && raw !== "false") {
+      return res.status(400).json({ message: "edevletProcessed true veya false olmalıdır." });
     }
+    const markProcessed = raw === true || raw === "true";
     const previousResult = await pool.query(
       `SELECT * FROM exam_portal_best_scores
        WHERE id = $1 AND payment_received = TRUE AND best_score >= 60
@@ -465,15 +466,15 @@ router.patch("/api/admin/certificate-list/:id/edevlet-processed", auth, checkPer
     if (!previous) {
       return res.status(404).json({ message: "Kayıt bulunamadı veya sertifika için uygun değil." });
     }
-    if (previous.edevlet_processed === true) {
+    if (Boolean(previous.edevlet_processed) === markProcessed) {
       return res.json(toApiObject(previous));
     }
     const result = await pool.query(
       `UPDATE exam_portal_best_scores
-       SET edevlet_processed = TRUE, updated_at = NOW()
+       SET edevlet_processed = $2, updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
-      [id],
+      [id, markProcessed],
     );
     const row = result.rows[0];
     await writeActivityLog({
