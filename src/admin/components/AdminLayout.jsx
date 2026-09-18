@@ -150,7 +150,7 @@ export default function AdminLayout() {
         <div className="admin-brand">
           <img
             className="admin-brand-logo"
-            src="/Guzem-05.png"
+            src="/Guzem-050.png"
             alt="Gazi Üniversitesi"
           />
         </div>
