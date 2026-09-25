@@ -87,6 +87,24 @@ async function request(path, options = {}) {
   return data;
 }
 
+async function requestBlob(path, fallbackMessage) {
+  const token = getToken();
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) {
+    let message = fallbackMessage;
+    try {
+      const data = await response.json();
+      if (data?.message) message = data.message;
+    } catch {
+      /* boş gövde */
+    }
+    throw new Error(message);
+  }
+  return response.blob();
+}
+
 export const adminApi = {
   login: (email, password) => request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   patchAdminProfile: (payload) => request("/auth/admin/me", { method: "PATCH", body: JSON.stringify(payload) }),
@@ -117,6 +135,11 @@ export const adminApi = {
   deleteItem: (moduleName, id) => {
     invalidateAdminCachePrefix(`admin-module:${moduleName}:`);
     return request(`/admin/${moduleName}/${id}`, { method: "DELETE" });
+  },
+  downloadNormalUsersBulkTemplate: () => requestBlob("/admin/normal-users/bulk-template", "Şablon indirilemedi."),
+  bulkImportNormalUsers: (rows) => {
+    invalidateAdminCachePrefix("admin-module:normalUsers:");
+    return request("/admin/normal-users/bulk-import", { method: "POST", body: JSON.stringify({ rows }) });
   },
   updatePermission: (id, payload) => {
     invalidateAdminCache("admin-all-permissions", "admin-my-permissions");
@@ -336,6 +359,10 @@ export const adminApi = {
     return request(`/admin/education-applications?${params.toString()}`);
   },
   getEducationApplicationEducations: () => request("/admin/education-applications/educations"),
+  getBulkApplicationEducations: () => request("/admin/education-applications/bulk-educations"),
+  downloadBulkApplicationsTemplate: () => requestBlob("/admin/education-applications/bulk-template", "Şablon indirilemedi."),
+  bulkImportEducationApplications: (educationId, rows) =>
+    request("/admin/education-applications/bulk-import", { method: "POST", body: JSON.stringify({ educationId, rows }) }),
   approveEducationApplication: (id) =>
     request(`/admin/education-applications/${id}/approve`, { method: "PATCH", body: JSON.stringify({}) }),
   markExamSuccessPaymentReceived: (id) => {

@@ -10,6 +10,8 @@ import {
 } from "../components/EducationContentFields";
 import { normalizeEducationCode, parseEducationCode } from "../utils/educationCode";
 import { lookupCodeMatches, normalizeLookupCode, parseApprovedEducationExcelBuffer } from "../utils/parseApprovedEducationExcel";
+import { parseBulkUsersExcelBuffer } from "../utils/parseBulkUsersExcel";
+import { downloadBlob } from "../utils/downloadBlob";
 import { DEFAULT_SALES_FILTER, SALES_FILTERS, normalizeSalesFilter, salesFilterLabel, salesFilterRequiresInstitution } from "../../constants/salesFilters";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
@@ -283,6 +285,9 @@ export default function CrudListPage({ moduleKey }) {
   const [excelImportConflict, setExcelImportConflict] = useState(null);
   const excelImportChoiceRef = useRef(null);
   const approvedExcelInputRef = useRef(null);
+  const [bulkUsers, setBulkUsers] = useState(null);
+  const bulkUsersInputRef = useRef(null);
+  const isNormalUsersModule = moduleKey === "normalUsers";
   const isContactFormsModule = moduleKey === "contactForms";
   const isInstructorsModule = moduleKey === "instructors";
   const isEducationsModule = moduleKey === "educations";
@@ -704,6 +709,60 @@ export default function CrudListPage({ moduleKey }) {
     }
   };
 
+  const BULK_USERS_CHUNK_SIZE = 50;
+
+  const openBulkUsers = () => {
+    setBulkUsers({ step: "select", fileName: "", rows: [], error: "", processed: 0, results: [] });
+  };
+
+  const closeBulkUsers = () => {
+    if (bulkUsers?.step === "uploading") return;
+    setBulkUsers(null);
+  };
+
+  const downloadBulkUsersTemplate = async () => {
+    try {
+      downloadBlob(await adminApi.downloadNormalUsersBulkTemplate(), "TopluKullaniciEkleme.xlsx");
+    } catch (err) {
+      setBulkUsers((prev) => (prev ? { ...prev, error: err?.message || "Şablon indirilemedi." } : prev));
+    }
+  };
+
+  const handleBulkUsersFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const { rows: parsedRows, error: parseErr } = parseBulkUsersExcelBuffer(await file.arrayBuffer());
+    if (parseErr) {
+      setBulkUsers((prev) => ({ ...prev, step: "select", fileName: file.name, rows: [], error: parseErr }));
+      return;
+    }
+    if (!parsedRows.length) {
+      setBulkUsers((prev) => ({ ...prev, step: "select", fileName: file.name, rows: [], error: "Excel'de başlık altında dolu satır bulunamadı." }));
+      return;
+    }
+    setBulkUsers((prev) => ({ ...prev, step: "ready", fileName: file.name, rows: parsedRows, error: "", processed: 0, results: [] }));
+  };
+
+  const runBulkUsersImport = async () => {
+    const allRows = bulkUsers?.rows || [];
+    if (!allRows.length) return;
+    setBulkUsers((prev) => ({ ...prev, step: "uploading", processed: 0, results: [], error: "" }));
+    const collected = [];
+    try {
+      for (let i = 0; i < allRows.length; i += BULK_USERS_CHUNK_SIZE) {
+        const chunk = allRows.slice(i, i + BULK_USERS_CHUNK_SIZE);
+        const response = await adminApi.bulkImportNormalUsers(chunk);
+        collected.push(...(response?.results || []));
+        setBulkUsers((prev) => ({ ...prev, processed: Math.min(allRows.length, i + chunk.length), results: [...collected] }));
+      }
+      setBulkUsers((prev) => ({ ...prev, step: "done", results: collected }));
+    } catch (err) {
+      setBulkUsers((prev) => ({ ...prev, step: "done", results: collected, error: err?.message || "Toplu yükleme sırasında hata oluştu." }));
+    }
+    await loadRows();
+  };
+
   const handleApprovedExcelInputChange = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -743,6 +802,11 @@ export default function CrudListPage({ moduleKey }) {
                   Excel ile toplu ekle
                 </button>
               </>
+            ) : null}
+            {isNormalUsersModule ? (
+              <button type="button" className="btn btn-outline" onClick={openBulkUsers}>
+                Toplu Ekle
+              </button>
             ) : null}
           </div>
         )}
@@ -1517,6 +1581,137 @@ export default function CrudListPage({ moduleKey }) {
           </div>
         </div>
       ) : null}
+
+      {bulkUsers && (
+        <div className="admin-modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && closeBulkUsers()}>
+          <div className="admin-modal admin-modal--form admin-modal-scrollable" role="dialog" aria-modal="true" aria-labelledby="bulk-users-title" onMouseDown={(e) => e.stopPropagation()}>
+            <header className="admin-modal__header">
+              <div className="admin-modal__header-text">
+                <p className="admin-modal__eyebrow">{config.title}</p>
+                <h3 id="bulk-users-title" className="admin-modal__title">Toplu kullanıcı ekleme</h3>
+                <p className="admin-modal__subtitle">Excel'deki her satır yeni bir üye olarak kaydedilir.</p>
+              </div>
+              <button type="button" className="admin-modal__close" onClick={closeBulkUsers} disabled={bulkUsers.step === "uploading"} aria-label="Kapat">
+                <svg viewBox="0 0 24 24" aria-hidden="true" width={20} height={20}>
+                  <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.42 1.42L10.59 13.4 4.29 19.7 2.87 18.28 9.17 12 2.87 5.71 4.29 4.29l6.3 6.31 6.29-6.3 1.42 1.41z" />
+                </svg>
+              </button>
+            </header>
+
+            <div className="admin-modal__body">
+              <div className="admin-modal-panel">
+                <h4 className="admin-modal-panel__title">
+                  <i className="fa-solid fa-circle-info" /> Önemli not
+                </h4>
+                <p style={{ margin: "0 0 10px", lineHeight: 1.55 }}>
+                  Toplu yükleme için lütfen aşağıdaki Excel şablonunu indiriniz ve yüklemeyi bu şablona göre yapınız.
+                  Sütun sırası sabittir: <strong>1. T.C. Kimlik No</strong>, <strong>2. Ad Soyad</strong>, <strong>3. E-Posta</strong>.
+                  İlk satır başlıktır; her alt satır bir üyeyi temsil eder.
+                </p>
+                <p style={{ margin: "0 0 12px", lineHeight: 1.55, color: "#647086" }}>
+                  Kullanıcı şifresi, T.C. kimlik numarasının <strong>son 6 hanesi</strong> olarak otomatik atanır.
+                  Aynı e-posta veya T.C. kimlik numarasıyla kayıtlı üyeler atlanır.
+                </p>
+                <button type="button" className="btn btn-outline" onClick={downloadBulkUsersTemplate}>
+                  <i className="fa-solid fa-file-excel" /> Şablonu indir (TopluKullaniciEkleme.xlsx)
+                </button>
+              </div>
+
+              <div className="admin-modal-panel">
+                <h4 className="admin-modal-panel__title">Excel dosyasını yükleyin</h4>
+                <input
+                  ref={bulkUsersInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                  style={{ display: "none" }}
+                  onChange={handleBulkUsersFileChange}
+                />
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => bulkUsersInputRef.current?.click()}
+                    disabled={bulkUsers.step === "uploading"}
+                  >
+                    Dosya seç
+                  </button>
+                  <span style={{ color: "#647086" }}>{bulkUsers.fileName || "Henüz dosya seçilmedi."}</span>
+                </div>
+                {bulkUsers.step === "ready" && bulkUsers.rows.length > 0 ? (
+                  <p style={{ margin: "12px 0 0" }}>
+                    <strong>{bulkUsers.rows.length}</strong> satır okundu. Yüklemeyi başlatmak için “Yüklemeyi başlat” butonuna basın.
+                  </p>
+                ) : null}
+                {bulkUsers.step === "uploading" ? (
+                  <p style={{ margin: "12px 0 0" }}>
+                    Yükleniyor… <strong>{bulkUsers.processed}</strong> / {bulkUsers.rows.length}
+                  </p>
+                ) : null}
+                {bulkUsers.error ? <p className="admin-form-error" style={{ marginTop: 12 }}>{bulkUsers.error}</p> : null}
+              </div>
+
+              {bulkUsers.step === "done" || bulkUsers.results.length ? (
+                <div className="admin-modal-panel">
+                  <h4 className="admin-modal-panel__title">Sonuç</h4>
+                  <p style={{ margin: "0 0 10px" }}>
+                    <span style={{ color: "#16a34a" }}>Eklenen: <strong>{bulkUsers.results.filter((r) => r.status === "created").length}</strong></span>
+                    {" · "}
+                    <span style={{ color: "#b45309" }}>Atlanan: <strong>{bulkUsers.results.filter((r) => r.status === "skipped").length}</strong></span>
+                    {" · "}
+                    <span style={{ color: "#dc2626" }}>Hatalı: <strong>{bulkUsers.results.filter((r) => r.status === "failed").length}</strong></span>
+                  </p>
+                  {bulkUsers.results.some((r) => r.status !== "created") ? (
+                    <div className="admin-table-wrap">
+                      <table className="admin-table">
+                        <thead>
+                          <tr>
+                            <th>Satır</th>
+                            <th>T.C. Kimlik No</th>
+                            <th>Ad Soyad</th>
+                            <th>E-Posta</th>
+                            <th>Durum</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bulkUsers.results
+                            .filter((r) => r.status !== "created")
+                            .map((r, index) => (
+                              <tr key={`${r.sheetRow}-${index}`}>
+                                <td>{r.sheetRow ?? "-"}</td>
+                                <td>{r.nationalId || "-"}</td>
+                                <td>{r.fullName || "-"}</td>
+                                <td>{r.email || "-"}</td>
+                                <td style={{ color: r.status === "failed" ? "#dc2626" : "#b45309" }}>{r.reason}</td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            <footer className="admin-modal__footer">
+              <div className="admin-modal-actions">
+                <button type="button" className="btn btn-outline btn--modal-secondary" onClick={closeBulkUsers} disabled={bulkUsers.step === "uploading"}>
+                  {bulkUsers.step === "done" ? "Kapat" : "İptal"}
+                </button>
+                {bulkUsers.step !== "done" ? (
+                  <button
+                    type="button"
+                    className="btn btn--modal-primary"
+                    onClick={runBulkUsersImport}
+                    disabled={bulkUsers.step !== "ready"}
+                  >
+                    {bulkUsers.step === "uploading" ? "Yükleniyor…" : "Yüklemeyi başlat"}
+                  </button>
+                ) : null}
+              </div>
+            </footer>
+          </div>
+        </div>
+      )}
 
       {excelImportConflict && (
         <div className="admin-modal-backdrop admin-modal-backdrop--excel-conflict" role="presentation">

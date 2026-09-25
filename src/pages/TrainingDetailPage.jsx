@@ -421,9 +421,11 @@ function TrainingDetailPage() {
   }, [course?.id, slug, course, displayCourse]);
 
   const isPaidGuzem = normalizeSalesFilter(activeCourse?.salesFilter) === "guzem-ucretli";
+  const isKamuFree = normalizeSalesFilter(activeCourse?.salesFilter) === "guzem-kamu-yarari-ucretsiz";
+  const needsCurriculumAuth = isPaidGuzem || isKamuFree;
 
   useEffect(() => {
-    if (!isPaidGuzem || !activeCourse?.id || activeCourse.sourceType === "calendar") {
+    if (!needsCurriculumAuth || !activeCourse?.id || activeCourse.sourceType === "calendar") {
       setCurriculumAccess({ loading: false, hasAccess: true, status: "open" });
       setUnlockedModules(null);
       return undefined;
@@ -432,7 +434,7 @@ function TrainingDetailPage() {
     if (!isReady) return undefined;
 
     if (!isLoggedIn) {
-      setCurriculumAccess({ loading: false, hasAccess: false, status: "none" });
+      setCurriculumAccess({ loading: false, hasAccess: false, status: "login" });
       setUnlockedModules(null);
       return undefined;
     }
@@ -442,6 +444,14 @@ function TrainingDetailPage() {
 
     (async () => {
       try {
+        if (isKamuFree) {
+          const mods = await userApi.getEducationApplicationModules(activeCourse.id);
+          if (cancelled) return;
+          setCurriculumAccess({ loading: false, hasAccess: true, status: "open" });
+          setUnlockedModules(Array.isArray(mods?.modules) ? mods.modules : []);
+          return;
+        }
+
         const access = await userApi.getEducationApplicationAccess(activeCourse.id);
         if (cancelled) return;
         const hasAccess = Boolean(access?.hasAccess);
@@ -458,7 +468,7 @@ function TrainingDetailPage() {
         }
       } catch {
         if (cancelled) return;
-        setCurriculumAccess({ loading: false, hasAccess: false, status: "none" });
+        setCurriculumAccess({ loading: false, hasAccess: false, status: isKamuFree ? "login" : "none" });
         setUnlockedModules(null);
       }
     })();
@@ -466,7 +476,17 @@ function TrainingDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [isPaidGuzem, activeCourse?.id, activeCourse?.sourceType, isReady, isLoggedIn, user?.email, accessRefreshTick]);
+  }, [
+    needsCurriculumAuth,
+    isPaidGuzem,
+    isKamuFree,
+    activeCourse?.id,
+    activeCourse?.sourceType,
+    isReady,
+    isLoggedIn,
+    user?.email,
+    accessRefreshTick,
+  ]);
 
   useEffect(() => {
     if (!isReady || !isPaidGuzem) return;
@@ -506,7 +526,7 @@ function TrainingDetailPage() {
   };
 
   const curriculumUnlocked =
-    !isPaidGuzem || (curriculumAccess.hasAccess && Array.isArray(unlockedModules));
+    !needsCurriculumAuth || (curriculumAccess.hasAccess && Array.isArray(unlockedModules));
 
   const goToExamPortal = async () => {
     if (!activeCourse?.id || !curriculumUnlocked) return;
@@ -689,23 +709,23 @@ function TrainingDetailPage() {
             <div id="moduller" className="training-detail-box rbt-shadow-box training-detail-box--curriculum">
               <TrainingCurriculum
                 modules={
-                  isPaidGuzem && curriculumAccess.hasAccess && Array.isArray(unlockedModules)
+                  needsCurriculumAuth && curriculumAccess.hasAccess && Array.isArray(unlockedModules)
                     ? unlockedModules
                     : c.modules
                 }
                 locked={Boolean(
-                  isPaidGuzem &&
+                  needsCurriculumAuth &&
                     !(curriculumAccess.hasAccess && Array.isArray(unlockedModules)),
                 )}
                 lockStatus={
-                  isPaidGuzem
+                  needsCurriculumAuth
                     ? curriculumAccess.loading
-                      ? curriculumAccess.status || "none"
+                      ? curriculumAccess.status || (isKamuFree ? "login" : "none")
                       : curriculumAccess.status
                     : "open"
                 }
                 onLoginClick={
-                  isPaidGuzem && !isLoggedIn
+                  needsCurriculumAuth && !isLoggedIn
                     ? () => {
                         const nextPath = `${location.pathname}${location.hash || "#moduller"}`;
                         navigate(`/kullanici-islemleri?next=${encodeURIComponent(nextPath)}`);
@@ -714,7 +734,7 @@ function TrainingDetailPage() {
                 }
                 onApplyClick={isPaidGuzem ? openPaidApplication : undefined}
                 onExamPortalClick={
-                  isPaidGuzem && curriculumUnlocked ? goToExamPortal : undefined
+                  needsCurriculumAuth && curriculumUnlocked ? goToExamPortal : undefined
                 }
                 examPortalBusy={examPortalBusy}
               />

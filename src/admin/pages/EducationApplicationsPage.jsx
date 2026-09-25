@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { adminApi } from "../api";
 import AdminDateRangeFilter from "../components/AdminDateRangeFilter";
 import { useAdminAuth } from "../context/AdminAuthContext";
 import { PAGE_SIZE } from "../modules";
 import { DEFAULT_DATE_RANGE_PERIOD } from "../utils/dateRangePeriod";
 import { formatPersonName } from "../utils/turkishText";
+import { parseBulkApplicationsExcelBuffer } from "../utils/parseBulkUsersExcel";
+import { downloadBlob } from "../utils/downloadBlob";
+
+const BULK_CHUNK_SIZE = 100;
+const BULK_PAYMENT_METHOD = "toplu";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
@@ -68,6 +73,9 @@ export default function EducationApplicationsPage() {
   const [busyId, setBusyId] = useState("");
   const [detail, setDetail] = useState(null);
   const [approveConfirm, setApproveConfirm] = useState(null);
+  const [bulk, setBulk] = useState(null);
+  const [bulkEducations, setBulkEducations] = useState([]);
+  const bulkFileRef = useRef(null);
 
   const loadEducations = useCallback(async () => {
     try {
@@ -130,6 +138,70 @@ export default function EducationApplicationsPage() {
     }
   };
 
+  const openBulk = async () => {
+    setBulk({ step: "select", educationId: "", fileName: "", rows: [], error: "", processed: 0, results: [] });
+    try {
+      const res = await adminApi.getBulkApplicationEducations();
+      setBulkEducations(res.data || []);
+    } catch (e) {
+      setBulk((prev) => (prev ? { ...prev, error: e.message || "Eğitim listesi yüklenemedi." } : prev));
+    }
+  };
+
+  const closeBulk = () => {
+    if (bulk?.step === "uploading") return;
+    setBulk(null);
+  };
+
+  const downloadBulkTemplate = async () => {
+    try {
+      downloadBlob(await adminApi.downloadBulkApplicationsTemplate(), "TopluBasvuruFormu.xlsx");
+    } catch (e) {
+      setBulk((prev) => (prev ? { ...prev, error: e.message || "Şablon indirilemedi." } : prev));
+    }
+  };
+
+  const handleBulkFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const { rows: parsed, error: parseErr } = parseBulkApplicationsExcelBuffer(await file.arrayBuffer());
+    if (parseErr || !parsed.length) {
+      setBulk((prev) => ({
+        ...prev,
+        step: "select",
+        fileName: file.name,
+        rows: [],
+        error: parseErr || "Excel'de başlık altında dolu satır bulunamadı.",
+      }));
+      return;
+    }
+    setBulk((prev) => ({ ...prev, step: "ready", fileName: file.name, rows: parsed, error: "", processed: 0, results: [] }));
+  };
+
+  const runBulkImport = async () => {
+    if (!bulk?.educationId || !bulk.rows.length) return;
+    const { educationId: targetEducationId, rows: allRows } = bulk;
+    setBulk((prev) => ({ ...prev, step: "uploading", processed: 0, results: [], error: "" }));
+    const collected = [];
+    try {
+      for (let i = 0; i < allRows.length; i += BULK_CHUNK_SIZE) {
+        const chunk = allRows.slice(i, i + BULK_CHUNK_SIZE);
+        const res = await adminApi.bulkImportEducationApplications(targetEducationId, chunk);
+        collected.push(...(res?.results || []));
+        setBulk((prev) => ({ ...prev, processed: Math.min(allRows.length, i + chunk.length), results: [...collected] }));
+      }
+      setBulk((prev) => ({ ...prev, step: "done", results: collected }));
+    } catch (e) {
+      setBulk((prev) => ({ ...prev, step: "done", results: collected, error: e.message || "Toplu başvuru sırasında hata oluştu." }));
+    }
+    await Promise.all([load(), loadEducations()]);
+  };
+
+  const bulkCount = (status) => (bulk?.results || []).filter((r) => r.status === status).length;
+  const bulkNotFound = (bulk?.results || []).filter((r) => r.status === "notFound");
+  const bulkSkipped = (bulk?.results || []).filter((r) => r.status === "skipped");
+
   return (
     <section className="admin-page">
       <div className="admin-page-head">
@@ -137,6 +209,11 @@ export default function EducationApplicationsPage() {
           <h2>Eğitim Başvuru Formu</h2>
           <p>Ücretli eğitim başvuruları, belgeler ve ödeme bilgileri.</p>
         </div>
+        {canUpdate ? (
+          <button type="button" className="btn" onClick={openBulk}>
+            Toplu Başvuru Al
+          </button>
+        ) : null}
       </div>
 
       {error ? <p className="admin-form-error">{error}</p> : null}
@@ -330,7 +407,7 @@ export default function EducationApplicationsPage() {
                 </div>
                 <div>
                   <span>Ödeme türü</span>
-                  <strong>Tek Çekim</strong>
+                  <strong>{detail.paymentMethod === BULK_PAYMENT_METHOD ? "Toplu başvuru" : "Tek Çekim"}</strong>
                 </div>
                 <div>
                   <span>Başvuru tarihi</span>
@@ -339,6 +416,9 @@ export default function EducationApplicationsPage() {
               </div>
 
               <h4 style={{ margin: "18px 0 10px" }}>Belgeler</h4>
+              {detail.paymentMethod === BULK_PAYMENT_METHOD ? (
+                <p style={{ margin: 0, opacity: 0.8 }}>Toplu başvuru ile eklendi; belge istenmez.</p>
+              ) : (
               <ul className="edu-app-docs">
                 {[
                   { label: "Mezuniyet Belgesi", path: detail.graduationDocPath },
@@ -360,6 +440,7 @@ export default function EducationApplicationsPage() {
                   );
                 })}
               </ul>
+              )}
             </div>
             <footer className="admin-modal__footer">
               <div className="admin-modal-actions">
@@ -369,6 +450,197 @@ export default function EducationApplicationsPage() {
                 {canUpdate && detail.status !== "approved" ? (
                   <button type="button" className="btn" disabled={Boolean(busyId)} onClick={() => setApproveConfirm(detail)}>
                     Başvuruyu onayla
+                  </button>
+                ) : null}
+              </div>
+            </footer>
+          </div>
+        </div>
+      ) : null}
+
+      {bulk ? (
+        <div className="admin-modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && closeBulk()}>
+          <div
+            className="admin-modal admin-modal--form admin-modal-scrollable"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edu-app-bulk-title"
+            style={{ maxWidth: 760, width: "min(760px, 94vw)" }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <header className="admin-modal__header">
+              <div className="admin-modal__header-text">
+                <p className="admin-modal__eyebrow">Eğitim Başvuru Formu</p>
+                <h3 id="edu-app-bulk-title" className="admin-modal__title">Toplu başvuru al</h3>
+                <p className="admin-modal__subtitle">
+                  Kayıtlı kullanıcılar seçilen eğitime belge istenmeden, doğrudan <strong>onaylı</strong> başvuru olarak eklenir.
+                </p>
+              </div>
+              <button type="button" className="admin-modal__close" onClick={closeBulk} disabled={bulk.step === "uploading"} aria-label="Kapat">
+                <svg viewBox="0 0 24 24" aria-hidden="true" width={20} height={20}>
+                  <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.42 1.42L10.59 13.4 4.29 19.7 2.87 18.28 9.17 12 2.87 5.71 4.29 4.29l6.3 6.31 6.29-6.3 1.42 1.41z" />
+                </svg>
+              </button>
+            </header>
+
+            <div className="admin-modal__body">
+              <div className="admin-modal-panel">
+                <h4 className="admin-modal-panel__title">1. Eğitim seçin</h4>
+                <select
+                  value={bulk.educationId}
+                  disabled={bulk.step === "uploading"}
+                  onChange={(e) => setBulk((prev) => ({ ...prev, educationId: e.target.value }))}
+                  aria-label="Başvuru yapılacak eğitim"
+                  style={{ width: "100%" }}
+                >
+                  <option value="">Başvuru yapılacak eğitimi seçin</option>
+                  {bulkEducations.map((edu) => (
+                    <option key={edu.id} value={edu.id}>
+                      {edu.code ? `${edu.code} — ` : ""}
+                      {edu.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="admin-modal-panel">
+                <h4 className="admin-modal-panel__title">2. Excel şablonu</h4>
+                <p style={{ margin: "0 0 10px", lineHeight: 1.55 }}>
+                  Toplu başvuru için lütfen aşağıdaki Excel şablonunu indiriniz ve yüklemeyi bu şablona göre yapınız.
+                  Sütun sırası sabittir: <strong>1. T.C. Kimlik No</strong>, <strong>2. E-Posta</strong>. İlk satır başlıktır.
+                </p>
+                <p style={{ margin: "0 0 12px", lineHeight: 1.55, color: "#647086" }}>
+                  Yalnızca T.C. kimlik numarası <strong>ve</strong> e-postası aynı kayıtlı kullanıcıyla eşleşen satırlar eklenir;
+                  eşleşmeyenler aşağıda listelenir.
+                </p>
+                <button type="button" className="btn btn-outline" onClick={downloadBulkTemplate}>
+                  <i className="fa-solid fa-file-excel" /> Şablonu indir (TopluBasvuruFormu.xlsx)
+                </button>
+              </div>
+
+              <div className="admin-modal-panel">
+                <h4 className="admin-modal-panel__title">3. Excel dosyasını yükleyin</h4>
+                <input
+                  ref={bulkFileRef}
+                  type="file"
+                  accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                  style={{ display: "none" }}
+                  onChange={handleBulkFile}
+                />
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => bulkFileRef.current?.click()}
+                    disabled={bulk.step === "uploading" || !bulk.educationId}
+                    title={!bulk.educationId ? "Önce eğitim seçin" : undefined}
+                  >
+                    Dosya seç
+                  </button>
+                  <span style={{ color: "#647086" }}>
+                    {bulk.fileName || (bulk.educationId ? "Henüz dosya seçilmedi." : "Dosya seçmeden önce eğitim seçin.")}
+                  </span>
+                </div>
+                {bulk.step === "ready" && bulk.rows.length > 0 ? (
+                  <p style={{ margin: "12px 0 0" }}>
+                    <strong>{bulk.rows.length}</strong> satır okundu. Başlatmak için “Başvuruları yükle” butonuna basın.
+                  </p>
+                ) : null}
+                {bulk.step === "uploading" ? (
+                  <p style={{ margin: "12px 0 0" }}>
+                    Yükleniyor… <strong>{bulk.processed}</strong> / {bulk.rows.length}
+                  </p>
+                ) : null}
+                {bulk.error ? <p className="admin-form-error" style={{ marginTop: 12 }}>{bulk.error}</p> : null}
+              </div>
+
+              {bulk.step === "done" || bulk.results.length ? (
+                <div className="admin-modal-panel">
+                  <h4 className="admin-modal-panel__title">Sonuç</h4>
+                  <p style={{ margin: "0 0 10px" }}>
+                    <span style={{ color: "#16a34a" }}>Eklenen: <strong>{bulkCount("created")}</strong></span>
+                    {" · "}
+                    <span style={{ color: "#0d47a1" }}>Bekleyen başvurusu onaylanan: <strong>{bulkCount("approved")}</strong></span>
+                    {" · "}
+                    <span style={{ color: "#b45309" }}>Atlanan: <strong>{bulkSkipped.length}</strong></span>
+                    {" · "}
+                    <span style={{ color: "#dc2626" }}>Kayıtlı olmayan: <strong>{bulkNotFound.length}</strong></span>
+                  </p>
+
+                  {bulkNotFound.length ? (
+                    <>
+                      <h5 style={{ margin: "14px 0 8px" }}>Kayıtlı olmayan kullanıcılar (eklenmedi)</h5>
+                      <div className="admin-table-wrap">
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th>Satır</th>
+                              <th>T.C. Kimlik No</th>
+                              <th>E-Posta</th>
+                              <th>Neden</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {bulkNotFound.map((r, index) => (
+                              <tr key={`nf-${r.sheetRow}-${index}`}>
+                                <td>{r.sheetRow ?? "-"}</td>
+                                <td>{r.nationalId || "-"}</td>
+                                <td>{r.email || "-"}</td>
+                                <td style={{ color: "#dc2626" }}>{r.reason}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  ) : null}
+
+                  {bulkSkipped.length ? (
+                    <>
+                      <h5 style={{ margin: "14px 0 8px" }}>Atlanan satırlar</h5>
+                      <div className="admin-table-wrap">
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th>Satır</th>
+                              <th>Ad Soyad</th>
+                              <th>T.C. Kimlik No</th>
+                              <th>E-Posta</th>
+                              <th>Neden</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {bulkSkipped.map((r, index) => (
+                              <tr key={`sk-${r.sheetRow}-${index}`}>
+                                <td>{r.sheetRow ?? "-"}</td>
+                                <td>{r.fullName ? formatPersonName(r.fullName) : "-"}</td>
+                                <td>{r.nationalId || "-"}</td>
+                                <td>{r.email || "-"}</td>
+                                <td style={{ color: "#b45309" }}>{r.reason}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            <footer className="admin-modal__footer">
+              <div className="admin-modal-actions">
+                <button type="button" className="btn btn-outline btn--modal-secondary" onClick={closeBulk} disabled={bulk.step === "uploading"}>
+                  {bulk.step === "done" ? "Kapat" : "İptal"}
+                </button>
+                {bulk.step !== "done" ? (
+                  <button
+                    type="button"
+                    className="btn btn--modal-primary"
+                    onClick={runBulkImport}
+                    disabled={bulk.step !== "ready" || !bulk.educationId}
+                  >
+                    {bulk.step === "uploading" ? "Yükleniyor…" : "Başvuruları yükle"}
                   </button>
                 ) : null}
               </div>

@@ -256,11 +256,12 @@ router.get("/api/public/educations/detail/:slug", async (req, res, next) => {
     }
 
     const fullModules = row.source_type === "education" ? await loadEducationModules(row.id) : [];
-    const isPaidGuzem = normalizeSalesFilter(row.sales_filter) === "guzem-ucretli";
+    const salesFilter = normalizeSalesFilter(row.sales_filter);
+    const curriculumLoginGated = salesFilter === "guzem-ucretli" || salesFilter === "guzem-kamu-yarari-ucretsiz";
     const withContent = {
       ...row,
-      modules: isPaidGuzem ? lockEducationModulesForPublic(fullModules) : fullModules,
-      curriculumLocked: isPaidGuzem,
+      modules: curriculumLoginGated ? lockEducationModulesForPublic(fullModules) : fullModules,
+      curriculumLocked: curriculumLoginGated,
     };
     return res.json({ course: formatPublicCourse(withContent) });
   } catch (error) {
