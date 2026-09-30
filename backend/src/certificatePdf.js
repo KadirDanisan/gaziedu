@@ -273,13 +273,15 @@ const drawWrappedTextRight = (page, font, text, rightEdgeX, y, { size, maxWidth,
   return cursorY;
 };
 
-const buildLegalParagraphs = ({ programStartDate, programEndDate, educationName }) => {
+const buildLegalParagraphs = ({ programStartDate, programEndDate, educationName, educationHours }) => {
   const { tr: educationNameTr, en: educationNameEn } = splitBilingualLine(educationName);
   const educationNameEnText = educationNameEn || educationNameTr;
+  const hoursTr = educationHours ? ` ${educationHours} saat süreyle` : "";
+  const hoursEn = educationHours ? ` for a duration of ${educationHours} hours` : "";
 
   return {
-    left: `Yukarıda bilgileri verilen kursiyer; Gazi Üniversitesi Uzaktan Eğitim Uygulama ve Araştırma Merkezi tarafından ${programStartDate} ile ${programEndDate} tarihleri arasında çevrim içi olarak düzenlenen "${educationNameTr}" kursunun tüm koşullarını başarıyla tamamlayarak bu belgeyi almaya hak kazanmıştır.`,
-    right: `The trainee whose information is given above has successfully completed all requirements of the "${educationNameEnText}" course held online by Gazi University Distance Education Application and Research Center between ${programStartDate} and ${programEndDate}, and has earned the right to receive this certificate.`,
+    left: `Yukarıda bilgileri verilen kursiyer; Gazi Üniversitesi Uzaktan Eğitim Uygulama ve Araştırma Merkezi tarafından ${programStartDate} ile ${programEndDate} tarihleri arasında${hoursTr} çevrim içi olarak düzenlenen "${educationNameTr}" kursunun tüm koşullarını başarıyla tamamlayarak bu belgeyi almaya hak kazanmıştır.`,
+    right: `The trainee whose information is given above has successfully completed all requirements of the "${educationNameEnText}" course held online by Gazi University Distance Education Application and Research Center between ${programStartDate} and ${programEndDate}${hoursEn}, and has earned the right to receive this certificate.`,
   };
 };
 
@@ -489,6 +491,7 @@ export async function buildCertificatePdf(data) {
 
   const programEndDate = formatIsoDate(data.programEndDate || data.controlDate || new Date());
   const programHours = Number(data.programHours) || parseDurationHours(data.duration);
+  const educationHours = Number(data.programHours) || Number(String(data.duration || "").match(/\d+/)?.[0]) || null;
   const defaultStartDays = Math.max(14, Math.ceil(programHours / 2));
   const programStartDate = formatIsoDate(
     data.programStartDate || subtractDaysIso(programEndDate, defaultStartDays),
@@ -510,7 +513,7 @@ export async function buildCertificatePdf(data) {
   drawLegalParagraphRow(
     page1,
     legalFont,
-    buildLegalParagraphs({ programStartDate, programEndDate, educationName }),
+    buildLegalParagraphs({ programStartDate, programEndDate, educationName, educationHours }),
     page1Layout.legalParagraph,
     color,
   );
