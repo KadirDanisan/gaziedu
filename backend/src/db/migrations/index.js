@@ -767,6 +767,40 @@ const migrateEducationApplicationsPermissions = async () => {
   `);
 };
 
+/** Sanal POS ödeme denemeleri (Halkbank NestPay) */
+const migratePaymentsTable = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS payments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      provider TEXT NOT NULL DEFAULT 'halkbank',
+      user_id UUID NOT NULL REFERENCES normal_users(id) ON DELETE CASCADE,
+      education_id UUID REFERENCES educations(id) ON DELETE SET NULL,
+      application_id UUID REFERENCES education_applications(id) ON DELETE SET NULL,
+      oid TEXT NOT NULL UNIQUE,
+      amount NUMERIC(12,2) NOT NULL,
+      currency TEXT NOT NULL DEFAULT '949',
+      status TEXT NOT NULL DEFAULT 'pending',
+      md_status TEXT,
+      proc_return_code TEXT,
+      bank_response TEXT,
+      auth_code TEXT,
+      trans_id TEXT,
+      host_ref_num TEXT,
+      error_message TEXT,
+      response_data JSONB,
+      callback_count INT NOT NULL DEFAULT 0,
+      paid_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS payments_application_id_idx ON payments (application_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS payments_user_id_idx ON payments (user_id)`);
+  await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS payment_status TEXT`);
+  await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS payment_id UUID`);
+};
+
 /** E-Devlet sertifika bildirim / onay kuyruğu */
 const migrateCertificateNotificationsTable = async () => {
   await pool.query(`
@@ -901,4 +935,5 @@ export const migrations = [
   migrateEducationApplicationsPermissions,
   migrateCertificateNotificationsTable,
   migrateCertificateNotificationsPermissions,
+  migratePaymentsTable,
 ];

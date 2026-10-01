@@ -1,6 +1,7 @@
 import healthRoutes from "./health.routes.js";
 import authRoutes from "./auth.routes.js";
 import usersRoutes from "./users.routes.js";
+import paymentsRoutes from "./payments.routes.js";
 import contactRoutes from "./public/contact.routes.js";
 import publicEducationRoutes from "./public/education.routes.js";
 import examPortalRoutes from "./public/examPortal.routes.js";
@@ -20,6 +21,7 @@ export function registerRoutes(app) {
   app.use(healthRoutes);
   app.use(authRoutes);
   app.use(usersRoutes);
+  app.use(paymentsRoutes);
   app.use(contactRoutes);
   app.use(publicEducationRoutes);
   app.use(examPortalRoutes);

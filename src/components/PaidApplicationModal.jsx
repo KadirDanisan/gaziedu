@@ -50,7 +50,23 @@ const emptyForm = {
   paymentMethod: "tek-cekim",
 };
 
-const HALKBANK_PAYMENT_URL = "https://sanalpos.halkbank.com.tr/fim/est3Dgate";
+/** Kart bilgileri uygulamada toplanmaz; backend'in imzaladığı alanlar bankanın 3D ödeme sayfasına POST edilir. */
+const postToPaymentGateway = (gatewayUrl, fields) => {
+  const formEl = document.createElement("form");
+  formEl.method = "POST";
+  formEl.action = gatewayUrl;
+  formEl.acceptCharset = "UTF-8";
+  formEl.style.display = "none";
+  Object.entries(fields || {}).forEach(([name, value]) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value ?? "";
+    formEl.appendChild(input);
+  });
+  document.body.appendChild(formEl);
+  formEl.submit();
+};
 
 const formatMoneyTry = (value) => {
   const num = Number(value);
@@ -76,13 +92,12 @@ const phoneDigits = (value) => {
   return digits.slice(0, 10);
 };
 
-function PaidApplicationModal({ open, onClose, course, user, onSubmitted }) {
+function PaidApplicationModal({ open, onClose, course, user }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [uploadingKey, setUploadingKey] = useState("");
-  const [result, setResult] = useState(null);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -90,7 +105,6 @@ function PaidApplicationModal({ open, onClose, course, user, onSubmitted }) {
     setError("");
     setSubmitting(false);
     setUploadingKey("");
-    setResult(null);
     setForm({
       ...emptyForm,
       firstName: user?.firstName || "",
@@ -187,19 +201,10 @@ function PaidApplicationModal({ open, onClose, course, user, onSubmitted }) {
 
   const goBack = () => {
     setError("");
-    if (stepIndex > 0 && stepIndex < 3) setStepIndex((prev) => prev - 1);
+    if (stepIndex > 0) setStepIndex((prev) => prev - 1);
   };
 
-  const openPaymentScreen = () => {
-    window.open(HALKBANK_PAYMENT_URL, "_blank", "noopener,noreferrer");
-  };
-
-  const openPaymentAndSubmit = async () => {
-    openPaymentScreen();
-    await submitApplication();
-  };
-
-  const submitApplication = async () => {
+  const startPayment = async () => {
     if (!course?.id) {
       setError("Eğitim bilgisi bulunamadı.");
       return;
@@ -208,11 +213,10 @@ function PaidApplicationModal({ open, onClose, course, user, onSubmitted }) {
     setSubmitting(true);
     setError("");
     try {
-      const data = await userApi.submitEducationApplication({
+      const { gatewayUrl, fields } = await userApi.initiateHalkbankPayment({
         educationId: course.id,
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
-        email: form.email.trim(),
         nationalId: nationalIdDigits,
         phone: phoneDigits(form.phone),
         birthDate: form.birthDate,
@@ -220,15 +224,11 @@ function PaidApplicationModal({ open, onClose, course, user, onSubmitted }) {
         kvkkDocPath: form.kvkkDocPath,
         institutionDocPath: form.institutionDocPath,
         infoConfirmed: true,
-        paymentMethod: "tek-cekim",
-        paymentNote: "",
       });
-      setResult(data?.application || data);
-      setStepIndex(3);
-      onSubmitted?.(data?.application || data);
+      if (!gatewayUrl || !fields) throw new Error("Ödeme sayfası bilgisi alınamadı.");
+      postToPaymentGateway(gatewayUrl, fields);
     } catch (err) {
-      setError(err?.message || "Başvuru kaydedilemedi.");
-    } finally {
+      setError(err?.message || "Ödeme başlatılamadı.");
       setSubmitting(false);
     }
   };
@@ -418,36 +418,15 @@ function PaidApplicationModal({ open, onClose, course, user, onSubmitted }) {
               <button
                 type="button"
                 className="btn paid-apply-payment__cta"
-                onClick={openPaymentAndSubmit}
+                onClick={startPayment}
                 disabled={busy}
               >
-                {submitting ? "Kaydediliyor…" : "Ödeme Ekranı"}
-                <i className="fa-solid fa-arrow-up-right-from-square" aria-hidden />
+                {submitting ? "Ödeme sayfasına yönlendiriliyor…" : "Ödeme Ekranı"}
+                <i className="fa-solid fa-lock" aria-hidden />
               </button>
               <p className="paid-apply-payment__hint">
-                Güvenli ödeme için Halkbank 3D Gate ekranına yönlendirileceksiniz. Ödeme sonrası
-                kaydınız alınır.
-              </p>
-            </div>
-          ) : null}
-
-          {stepIndex === 3 ? (
-            <div className="paid-apply-result">
-              <div className="paid-apply-result__icon" aria-hidden>
-                <i className="fa-solid fa-circle-check" />
-              </div>
-              <h3>Kaydınız alınmıştır</h3>
-              <p>
-                {educationTitle} başvurusu başarıyla tamamlandı.
-                {result?.id ? (
-                  <>
-                    {" "}
-                    Başvuru no: <strong>{String(result.id).slice(0, 8).toUpperCase()}</strong>
-                  </>
-                ) : null}
-              </p>
-              <p className="paid-apply-result__muted">
-                Ödeme ve belge kontrolünden sonra size e-posta ile bilgilendirme yapılacaktır.
+                Güvenli ödeme için Halkbank 3D ödeme sayfasına yönlendirileceksiniz. Kart bilgileriniz yalnızca banka
+                sayfasında girilir. Ödeme sonrası bu siteye geri dönerek sonucu göreceksiniz.
               </p>
             </div>
           ) : null}
@@ -456,22 +435,14 @@ function PaidApplicationModal({ open, onClose, course, user, onSubmitted }) {
         </div>
 
         <div className="paid-apply-modal__footer">
-          {stepIndex < 3 ? (
-            <>
-              <button type="button" className="btn btn-outline" onClick={stepIndex === 0 ? onClose : goBack} disabled={busy}>
-                {stepIndex === 0 ? "İptal" : "Geri"}
-              </button>
-              {stepIndex < 2 ? (
-                <button type="button" className="btn" onClick={goNext} disabled={busy}>
-                  {uploadingKey ? "Yükleniyor…" : "Devam"}
-                </button>
-              ) : null}
-            </>
-          ) : (
-            <button type="button" className="btn" onClick={onClose}>
-              Kapat
+          <button type="button" className="btn btn-outline" onClick={stepIndex === 0 ? onClose : goBack} disabled={busy}>
+            {stepIndex === 0 ? "İptal" : "Geri"}
+          </button>
+          {stepIndex < 2 ? (
+            <button type="button" className="btn" onClick={goNext} disabled={busy}>
+              {uploadingKey ? "Yükleniyor…" : "Devam"}
             </button>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

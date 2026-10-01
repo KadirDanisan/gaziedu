@@ -45,8 +45,9 @@ export const userApi = {
     formData.append("file", file);
     return request("/users/education-applications/upload", { method: "POST", body: formData });
   },
-  submitEducationApplication: (payload) =>
-    request("/users/education-applications", { method: "POST", body: JSON.stringify(payload) }),
+  initiateHalkbankPayment: (payload) =>
+    request("/payments/halkbank/initiate", { method: "POST", body: JSON.stringify(payload) }),
+  getPaymentStatus: (paymentId) => request(`/payments/${encodeURIComponent(paymentId)}/status`),
   getEducationApplicationAccess: (educationId) =>
     request(`/users/education-applications/access/${encodeURIComponent(educationId)}`),
   getEducationApplicationModules: (educationId) =>

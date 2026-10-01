@@ -353,7 +353,6 @@ function TrainingDetailPage() {
     status: "none",
   });
   const [unlockedModules, setUnlockedModules] = useState(null);
-  const [accessRefreshTick, setAccessRefreshTick] = useState(0);
   const [examPortalBusy, setExamPortalBusy] = useState(false);
   const [examPortalError, setExamPortalError] = useState("");
 
@@ -485,7 +484,6 @@ function TrainingDetailPage() {
     isReady,
     isLoggedIn,
     user?.email,
-    accessRefreshTick,
   ]);
 
   useEffect(() => {
@@ -832,7 +830,6 @@ function TrainingDetailPage() {
         onClose={() => setApplyOpen(false)}
         course={c}
         user={user}
-        onSubmitted={() => setAccessRefreshTick((tick) => tick + 1)}
       />
     </>
   );

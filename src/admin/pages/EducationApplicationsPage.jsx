@@ -54,6 +54,19 @@ const statusLabel = (status) => {
   return "Beklemede";
 };
 
+const paymentStatusView = (row) => {
+  if (row.paymentMethod === BULK_PAYMENT_METHOD) return { label: "Toplu", tone: "ok" };
+  if (row.paymentStatus === "paid") return { label: "Ödendi", tone: "ok" };
+  if (row.paymentStatus === "unpaid") return { label: "Ödenmedi", tone: "wait" };
+  return { label: "—", tone: "" };
+};
+
+function PaymentStatusBadge({ row }) {
+  const { label, tone } = paymentStatusView(row);
+  if (!tone) return label;
+  return <span className={`edu-app-status edu-app-status--${tone}`}>{label}</span>;
+}
+
 export default function EducationApplicationsPage() {
   const { hasPermission } = useAdminAuth();
   const canUpdate = hasPermission("educationApplications", "canUpdate");
@@ -290,6 +303,7 @@ export default function EducationApplicationsPage() {
                   <th>T.C.</th>
                   <th>Telefon</th>
                   <th>Ödenen</th>
+                  <th>Ödeme</th>
                   <th>Durum</th>
                   <th />
                 </tr>
@@ -297,7 +311,7 @@ export default function EducationApplicationsPage() {
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={8}>Kayıt yok.</td>
+                    <td colSpan={9}>Kayıt yok.</td>
                   </tr>
                 ) : (
                   rows.map((row) => (
@@ -311,6 +325,9 @@ export default function EducationApplicationsPage() {
                       <td>{row.nationalId || "—"}</td>
                       <td>{formatPhone(row.phone)}</td>
                       <td>{formatMoneyTry(row.payableAmount)}</td>
+                      <td>
+                        <PaymentStatusBadge row={row} />
+                      </td>
                       <td>
                         <span className={`edu-app-status edu-app-status--${row.status === "approved" ? "ok" : "wait"}`}>
                           {statusLabel(row.status)}
@@ -408,6 +425,13 @@ export default function EducationApplicationsPage() {
                 <div>
                   <span>Ödeme türü</span>
                   <strong>{detail.paymentMethod === BULK_PAYMENT_METHOD ? "Toplu başvuru" : "Tek Çekim"}</strong>
+                </div>
+                <div>
+                  <span>Ödeme durumu</span>
+                  <strong>
+                    {paymentStatusView(detail).label}
+                    {detail.paidAt ? ` · ${formatIstanbul(detail.paidAt)}` : ""}
+                  </strong>
                 </div>
                 <div>
                   <span>Başvuru tarihi</span>

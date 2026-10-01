@@ -10,6 +10,7 @@ import ContactPage from "./pages/ContactPage";
 import KvkkNoticePage from "./pages/KvkkNoticePage";
 import TermsPrivacyPage from "./pages/TermsPrivacyPage";
 import TrainingDetailPage from "./pages/TrainingDetailPage";
+import PaymentResultPage from "./pages/PaymentResultPage";
 import ExamPortalPage from "./pages/ExamPortalPage";
 import ExamPortalLegacyPage from "./pages/ExamPortalLegacyPage";
 import AuthPage from "./pages/AuthPage";
@@ -56,6 +57,7 @@ function App() {
               <Route path="kullanim-kurallari-ve-gizlilik" element={<TermsPrivacyPage />} />
               <Route path="egitim-detay/:slug" element={<TrainingDetailPage />} />
               <Route path="kullanici-islemleri" element={<AuthPage />} />
+              <Route path="odeme-sonuc" element={<PaymentResultPage />} />
 
               <Route path="hesabim" element={<AccountLayout />}>
                 <Route path="hesap-bilgilerim" element={<AccountProfilePage />} />

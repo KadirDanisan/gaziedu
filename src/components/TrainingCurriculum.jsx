@@ -320,7 +320,9 @@ function TrainingCurriculum({
   const lockMessage =
     lockStatus === "pending"
       ? "Başvurunuz inceleniyor. Onaylandıktan sonra bu hesapla giriş yaparak müfredata erişebilirsiniz."
-      : lockStatus === "login"
+      : lockStatus === "unpaid"
+        ? "Başvurunuz kaydedildi ancak ödemeniz tamamlanmadı. Ödemeyi tamamladıktan sonra başvurunuz incelemeye alınır."
+        : lockStatus === "login"
         ? "Müfredata erişmek için oturum açmanız gerekir."
         : "Ücretli eğitim müfredatı, başvurunuz onaylandıktan ve başvuru yaptığınız hesapla giriş yaptıktan sonra açılır.";
 
@@ -371,7 +373,7 @@ function TrainingCurriculum({
             ) : null}
             {typeof onApplyClick === "function" && lockStatus !== "pending" && lockStatus !== "login" ? (
               <button type="button" className="btn" onClick={onApplyClick}>
-                Başvuru Formunu Doldur
+                {lockStatus === "unpaid" ? "Ödemeyi Tamamla" : "Başvuru Formunu Doldur"}
               </button>
             ) : null}
           </div>
