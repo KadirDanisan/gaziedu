@@ -61,7 +61,7 @@ const moduleConfig = {
   },
   educations: {
     title: "Eğitim Listesi",
-    fields: ["code", "name", "categoryId", "salesFilter", "institutionId", "instructorId", "description", "content", "topicHeadings", "imageUrl", "promoVideoPath", "promoVideoUrl", "price", "hasDiscount", "discountRate", "duration"],
+    fields: ["code", "name", "categoryId", "salesFilter", "institutionId", "instructorId", "description", "content", "topicHeadings", "imageUrl", "promoVideoPath", "promoVideoUrl", "price", "hasDiscount", "discountRate", "duration", "createdAt"],
     labels: {
       code: "Eğitim Kodu (onaylı listeden)",
       name: "Eğitim Adı",
@@ -79,6 +79,7 @@ const moduleConfig = {
       hasDiscount: "İndirim mevcut mu",
       discountRate: "İndirim oranı (%)",
       duration: "Eğitim Saati",
+      createdAt: "Oluşturulma Tarihi",
     },
   },
   instructors: {
@@ -316,6 +317,7 @@ export default function CrudListPage({ moduleKey }) {
     : isSalesFilterModule
       ? config.fields.filter((field) => {
           if (field === "institutionId" && !formNeedsInstitution) return false;
+          if (field === "createdAt" && editing === "new") return false;
           if (isEducationsModule && ["price", "hasDiscount", "discountRate"].includes(field) && !formIsPaidGuzem) {
             return false;
           }
@@ -466,6 +468,16 @@ export default function CrudListPage({ moduleKey }) {
       payload.institutionId = null;
     }
     if (isEducationsModule) {
+      if (editing === "new" || !String(form.createdAt || "").trim()) {
+        delete payload.createdAt;
+      } else {
+        const createdAtDate = new Date(form.createdAt);
+        if (Number.isNaN(createdAtDate.getTime())) {
+          setError("Oluşturulma tarihi geçerli değil.");
+          return;
+        }
+        payload.createdAt = createdAtDate.toISOString();
+      }
       payload.modules = Array.isArray(form.modules) ? form.modules : [];
       payload.topicHeadings = Array.isArray(form.topicHeadings) ? form.topicHeadings : [];
       if (normalizeSalesFilter(form.salesFilter) === "guzem-ucretli") {
@@ -1349,6 +1361,15 @@ export default function CrudListPage({ moduleKey }) {
                         placeholder="Örn. 20 Saat"
                         required
                       />
+                    ) : isEducationsModule && field === "createdAt" ? (
+                      <div className="admin-field-stack">
+                        <input
+                          type="datetime-local"
+                          value={toDatetimeLocalValue(form.createdAt)}
+                          onChange={(event) => setForm((prev) => ({ ...prev, createdAt: event.target.value }))}
+                        />
+                        <small style={{ opacity: 0.85 }}>Eğitim listelerindeki sıralama bu tarihe göre yapılır.</small>
+                      </div>
                     ) : isEducationCalendarModule && field === "calendarDate" ? (
                       <input
                         type="datetime-local"

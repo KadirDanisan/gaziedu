@@ -148,6 +148,19 @@ const prepareEducationPayload = (payload, { table } = {}) => {
     }
   }
 
+  if (Object.hasOwn(payload, "created_at")) {
+    const raw = String(payload.created_at ?? "").trim();
+    if (!isEducationsTable || !raw) {
+      delete payload.created_at;
+    } else {
+      const date = new Date(raw);
+      if (Number.isNaN(date.getTime())) {
+        throw new Error("Oluşturulma tarihi geçerli bir tarih olmalıdır.");
+      }
+      payload.created_at = date.toISOString();
+    }
+  }
+
   if (payload.institution_id === "") payload.institution_id = null;
   if (payload.instructor_id === "") payload.instructor_id = null;
   if (payload.category_id === "") payload.category_id = null;
