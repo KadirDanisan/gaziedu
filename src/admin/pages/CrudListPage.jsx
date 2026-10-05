@@ -1029,6 +1029,9 @@ export default function CrudListPage({ moduleKey }) {
                         Word tablosu 8 sütun olmalıdır (Modül, Soru Kökü, A–E şıkları, Doğru Cevap).
                         Modül sütunu yok sayılır; her satırdan yalnızca soru kökü, şıklar ve doğru cevap okunur.
                       </small>
+                      <a className="btn btn-outline" href="/ornek_soru_sablonu.docx" download="ornek_soru_sablonu.docx" style={{ alignSelf: "flex-start" }}>
+                        <i className="fa-solid fa-file-word" /> Örnek şablonu indir
+                      </a>
                     </div>
                   ) : isExamQuestionsModule && field === "generatedQuestions" ? (
                     <>
