@@ -67,6 +67,9 @@ export function AdminDataProvider({ children }) {
   const uploadEducationContentDoc = async (file) => adminApi.uploadEducationContentDoc(file);
   const uploadExamDoc = async (file) => adminApi.uploadExamDoc(file);
   const updatePermission = async (id, payload) => adminApi.updatePermission(id, payload);
+  const createRole = async (payload) => adminApi.createRole(payload);
+  const updateRole = async (id, payload) => adminApi.updateRole(id, payload);
+  const deleteRole = async (id) => adminApi.deleteRole(id);
   const getActivityLogs = async (page, pageSize) => adminApi.getActivityLogs(page, pageSize);
 
   const value = {
@@ -90,6 +93,9 @@ export function AdminDataProvider({ children }) {
     uploadEducationContentDoc,
     uploadExamDoc,
     updatePermission,
+    createRole,
+    updateRole,
+    deleteRole,
     getActivityLogs,
   };
 

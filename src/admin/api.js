@@ -145,6 +145,18 @@ export const adminApi = {
     invalidateAdminCache("admin-all-permissions", "admin-my-permissions");
     return request(`/admin-role-permissions/${id}`, { method: "PUT", body: JSON.stringify(payload) });
   },
+  createRole: (payload) => {
+    invalidateAdminCache("admin-all-permissions", "admin-form-options");
+    return request("/admin-roles", { method: "POST", body: JSON.stringify(payload) });
+  },
+  updateRole: (id, payload) => {
+    invalidateAdminCache("admin-all-permissions", "admin-form-options");
+    return request(`/admin-roles/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+  },
+  deleteRole: (id) => {
+    invalidateAdminCache("admin-all-permissions", "admin-form-options");
+    return request(`/admin-roles/${id}`, { method: "DELETE" });
+  },
   uploadInstitutionLogo: (file) => {
     const formData = new FormData();
     formData.append("file", file);

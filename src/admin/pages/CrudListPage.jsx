@@ -1134,10 +1134,17 @@ export default function CrudListPage({ moduleKey }) {
                           if (!role) return null;
                           return (
                             <option key={role.id} value={role.id}>
-                              {item.label}
+                              {role.name || item.label}
                             </option>
                           );
                         })}
+                        {(data.roles || [])
+                          .filter((role) => !roleOptions.some((item) => item.code === role.code))
+                          .map((role) => (
+                            <option key={role.id} value={role.id}>
+                              {role.name}
+                            </option>
+                          ))}
                       </select>
                     ) : moduleKey === "adminUsers" && field === "institutionId" ? (
                       <select value={form[field] ?? ""} onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))} required>
