@@ -257,10 +257,14 @@ router.get("/api/public/educations/detail/:slug", async (req, res, next) => {
 
     const fullModules = row.source_type === "education" ? await loadEducationModules(row.id) : [];
     const salesFilter = normalizeSalesFilter(row.sales_filter);
-    const curriculumLoginGated = salesFilter === "guzem-ucretli" || salesFilter === "guzem-kamu-yarari-ucretsiz";
+    const isPaidGuzem = salesFilter === "guzem-ucretli";
+    const isKamuFree = salesFilter === "guzem-kamu-yarari-ucretsiz";
+    const curriculumLoginGated = isPaidGuzem || isKamuFree;
     const withContent = {
       ...row,
-      modules: curriculumLoginGated ? lockEducationModulesForPublic(fullModules) : fullModules,
+      modules: curriculumLoginGated
+        ? lockEducationModulesForPublic(fullModules, { unlockFirst: isKamuFree })
+        : fullModules,
       curriculumLocked: curriculumLoginGated,
     };
     return res.json({ course: formatPublicCourse(withContent) });

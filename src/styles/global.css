@@ -6650,6 +6650,34 @@ textarea {
   text-decoration: none;
 }
 
+.training-redirect-dialog {
+  width: min(480px, 100%);
+  background: #fff;
+  border-radius: 14px;
+  padding: 22px 22px 18px;
+  box-shadow: 0 24px 60px rgba(8, 20, 49, 0.35);
+}
+
+.training-redirect-dialog h2 {
+  margin: 0 0 10px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1a2233;
+}
+
+.training-redirect-dialog p {
+  margin: 0 0 18px;
+  color: #3d4759;
+  line-height: 1.65;
+}
+
+.training-redirect-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .paid-apply-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -7377,7 +7405,7 @@ textarea {
   margin: 20px 0 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -7775,6 +7803,12 @@ textarea {
 
 .training-detail-box .curriculum-text ul.training-detail-bullets {
   margin: 0 0 0 18px;
+}
+
+@media (max-width: 980px) {
+  .training-detail-box ul.training-detail-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {

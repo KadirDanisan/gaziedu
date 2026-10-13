@@ -39,7 +39,7 @@ const sectionTabs = [
   { id: "genel-bilgi", label: "Genel Bilgi" },
   { id: "egitim-icerigi", label: "Eğitim İçeriği" },
   { id: "egitmen", label: "Eğitmen" },
-  { id: "kayit-bilgileri", label: "Kayıt Bilgileri" },
+  { id: "sinav-bilgisi", label: "Sınav Bilgisi" },
   { id: "yorumlar", label: "Yorumlar" },
 ];
 
@@ -53,7 +53,7 @@ function buildVisibleSectionTabs(course) {
       : []),
     ...(Array.isArray(course.modules) && course.modules.length ? [{ id: "moduller", label: "Modüller" }] : []),
     { id: "egitmen", label: "Eğitmen" },
-    { id: "kayit-bilgileri", label: "Kayıt Bilgileri" },
+    { id: "sinav-bilgisi", label: "Sınav Bilgisi" },
     { id: "yorumlar", label: "Yorumlar" },
   ];
 }
@@ -347,6 +347,7 @@ function TrainingDetailPage() {
   const [ratingLive, setRatingLive] = useState(null);
   const [promoVideoOpen, setPromoVideoOpen] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
+  const [partnerRedirectOpen, setPartnerRedirectOpen] = useState(false);
   const [curriculumAccess, setCurriculumAccess] = useState({
     loading: false,
     hasAccess: false,
@@ -680,6 +681,11 @@ function TrainingDetailPage() {
                 <span>Sertifika</span>
                 <strong>Gazi Üniversitesi</strong>
               </li>
+              <li>
+                <i className="fa-solid fa-photo-film" aria-hidden />
+                <span>Materyal</span>
+                <strong>PDF + Video İçerik</strong>
+              </li>
             </ul>
           </div>
 
@@ -712,7 +718,7 @@ function TrainingDetailPage() {
                     : c.modules
                 }
                 locked={Boolean(
-                  needsCurriculumAuth &&
+                  isPaidGuzem &&
                     !(curriculumAccess.hasAccess && Array.isArray(unlockedModules)),
                 )}
                 lockStatus={
@@ -745,11 +751,31 @@ function TrainingDetailPage() {
             <TrainingInstructorBlock course={c} />
           </div>
 
-          <div id="kayit-bilgileri" className="training-detail-box rbt-shadow-box">
-            <h3>Kayıt Bilgileri</h3>
+          <div id="sinav-bilgisi" className="training-detail-box rbt-shadow-box">
+            <h3>Eğitim Sonu Sınav Hakkında Bilgi</h3>
             <p>
-              Anlaşmalı olduğumuz kurumlar içerisinde eğitimlere ulaşıp sertifika için gerekli materyallerin tamamladıktan sonra Gazi Üniversitesi tarafından sertifika alabilirsiniz.
+              Eğitim içerikleri tamamlandıktan sonra uzaktan sınav portalı açılır. Sınav hakkı, geçme notu ve sertifika süreci aşağıda özetlenmiştir.
             </p>
+            <div className="training-detail-highlights">
+            <ul className="training-detail-highlight-grid">
+              <li>
+                <i className="fa-solid fa-circle-check" aria-hidden />
+                <span>Sınav portalına toplam <strong>5 giriş hakkı</strong> tanınır.</span>
+              </li>
+              <li>
+                <i className="fa-solid fa-circle-check" aria-hidden />
+                <span>Bu 5 haktan herhangi birinde <strong>60 ve üzeri</strong> not aldığınızda sınavı geçmiş sayılırsınız.</span>
+              </li>
+              <li>
+                <i className="fa-solid fa-circle-check" aria-hidden />
+                <span>Başarılı olduğunuzda Gazi Üniversitesi tarafından sertifika almaya hak kazanırsınız; sertifikanız <strong>e-Devlet</strong> sistemine yüklenir.</span>
+              </li>
+              <li>
+                <i className="fa-solid fa-circle-check" aria-hidden />
+                <span>5 hakkın tamamını kullanıp geçerli not alamamanız halinde eğitimi yeniden almanız gerekir.</span>
+              </li>
+            </ul>
+            </div>
           </div>
 
           <div id="yorumlar" className="training-detail-box rbt-shadow-box">
@@ -786,14 +812,13 @@ function TrainingDetailPage() {
               Başvuru Formunu Doldur
             </button>
           ) : institutionSiteHref ? (
-            <a
+            <button
+              type="button"
               className="btn btn-outline training-detail-btn training-detail-btn-external"
-              href={institutionSiteHref}
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={() => setPartnerRedirectOpen(true)}
             >
               Eğitimi Satın Al <i className="fa-solid fa-arrow-up-right-from-square" aria-hidden />
-            </a>
+            </button>
           ) : null}
           <ul className="training-detail-side-list">
             <li>
@@ -831,6 +856,42 @@ function TrainingDetailPage() {
         course={c}
         user={user}
       />
+
+      {partnerRedirectOpen && institutionSiteHref ? (
+        <div
+          className="promo-video-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => event.target === event.currentTarget && setPartnerRedirectOpen(false)}
+        >
+          <div
+            className="training-redirect-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="partner-redirect-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <h2 id="partner-redirect-title">Kurum sitesine yönlendirme</h2>
+            <p>
+              Şu anda anlaşmalı ve iş birliğimiz bulunan kurumun web sitesine yönlendiriliyorsunuz. Eğitim Gazi
+              Üniversitesi tarafından hazırlanmıştır; sınav hakkı Gazi Üniversitesi’ndedir.
+            </p>
+            <div className="training-redirect-dialog__actions">
+              <button type="button" className="btn btn-outline" onClick={() => setPartnerRedirectOpen(false)}>
+                İptal
+              </button>
+              <a
+                className="btn"
+                href={institutionSiteHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setPartnerRedirectOpen(false)}
+              >
+                Yönlendir
+              </a>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

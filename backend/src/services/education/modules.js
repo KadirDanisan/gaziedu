@@ -77,10 +77,13 @@ const loadEducationModules = async (educationId) => {
   return result.rows.map(toApiModule);
 };
 
-/** Ücretli eğitimlerde herkese açık yanıtta içerik URL'lerini gizle; yalnızca başlık iskeleti. */
-const lockEducationModulesForPublic = (modules) => {
+/** Herkese açık yanıtta içerik URL'lerini gizle; yalnızca başlık iskeleti. */
+const lockEducationModulesForPublic = (modules, { unlockFirst = false } = {}) => {
   if (!Array.isArray(modules)) return [];
-  return modules.map((moduleRow) => {
+  return modules.map((moduleRow, index) => {
+    if (unlockFirst && index === 0) {
+      return { ...moduleRow, locked: false };
+    }
     const resources = Array.isArray(moduleRow?.resources) ? moduleRow.resources : [];
     const legacyItems = Array.isArray(moduleRow?.items) ? moduleRow.items : [];
     const lockedResources = [];

@@ -317,6 +317,8 @@ function TrainingCurriculum({
 
   if (!list.length) return null;
 
+  const hasPreviewLocks = !locked && list.some((moduleRow) => moduleRow.locked);
+
   const lockMessage =
     lockStatus === "pending"
       ? "Başvurunuz inceleniyor. Onaylandıktan sonra bu hesapla giriş yaparak müfredata erişebilirsiniz."
@@ -336,7 +338,7 @@ function TrainingCurriculum({
             {!locked && totals.video ? ` · ${totals.video} video` : ""}
             {!locked && totals.pdf ? ` · ${totals.pdf} indirilebilir doküman` : ""}
             {!locked && totals.text ? ` · ${totals.text} okuma` : ""}
-            {locked ? " · Erişim kilitli" : ""}
+            {locked ? " · Erişim kilitli" : hasPreviewLocks ? " · İlk modül açık" : ""}
           </p>
         </div>
         {!locked ? (
@@ -381,18 +383,35 @@ function TrainingCurriculum({
       ) : null}
 
       <div className={`curriculum__list${locked ? " curriculum__list--locked" : ""}`} aria-hidden={locked || undefined}>
-        {list.map((moduleRow, index) => (
-          <ModuleSection
-            key={moduleRow.id || `module-${index}`}
-            moduleRow={moduleRow}
-            index={index}
-            defaultOpen={!locked && index === 0}
-            locked={locked}
-          />
-        ))}
+        {list.map((moduleRow, index) => {
+          const moduleLocked = Boolean(locked || moduleRow.locked);
+          return (
+            <ModuleSection
+              key={moduleRow.id || `module-${index}`}
+              moduleRow={moduleRow}
+              index={index}
+              defaultOpen={!moduleLocked && index === 0}
+              locked={moduleLocked}
+            />
+          );
+        })}
       </div>
 
-      {!locked && typeof onExamPortalClick === "function" ? (
+      {hasPreviewLocks && typeof onLoginClick === "function" ? (
+        <div className="curriculum__lock-panel">
+          <div className="curriculum__lock-icon" aria-hidden>
+            <i className="fa-solid fa-lock" />
+          </div>
+          <p>İlk modül herkese açıktır. Diğer modüllere erişmek için oturum açmanız gerekir.</p>
+          <div className="curriculum__lock-actions">
+            <button type="button" className="btn btn-outline" onClick={onLoginClick}>
+              Giriş yap
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {!locked && !hasPreviewLocks && typeof onExamPortalClick === "function" ? (
         <div className="curriculum__exam-cta">
           <p className="curriculum__exam-cta-text">Müfredatı tamamladıktan sonra sınava başlayabilirsiniz.</p>
           <button type="button" className="btn curriculum__exam-cta-btn" disabled={examPortalBusy} onClick={onExamPortalClick}>
