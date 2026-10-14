@@ -21,3 +21,13 @@ export const salesFilterLabel = (value) => salesFilterByKey[normalizeSalesFilter
 
 export const salesFilterRequiresInstitution = (value) =>
   Boolean(salesFilterByKey[normalizeSalesFilter(value)]?.requiresInstitution);
+
+/** Girişsiz ilk modül önizlemesi: 30 sn video, PDF/sunum yalnızca görüntüleme. */
+export const FIRST_MODULE_PREVIEW_FILTERS = [
+  "guzem-ucretli",
+  "guzem-kamu-yarari-ucretsiz",
+  "yok-mikro-yeterlilik",
+];
+
+export const usesFirstModulePreview = (value) =>
+  FIRST_MODULE_PREVIEW_FILTERS.includes(normalizeSalesFilter(value));

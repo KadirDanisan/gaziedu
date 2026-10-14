@@ -7,12 +7,46 @@ import {
   resolveAssetUrl,
 } from "../utils/moduleResources";
 
+const PREVIEW_SECONDS = 30;
+
 /** Eski kayıtlarda içerik modül üstündeki `items` alanındaydı; onu da bir metin bloğu gibi göster. */
 function moduleBlocks(moduleRow) {
   const resources = Array.isArray(moduleRow?.resources) ? moduleRow.resources : [];
   const legacyItems = Array.isArray(moduleRow?.items) ? moduleRow.items.filter(Boolean) : [];
   if (!legacyItems.length) return resources;
   return [{ kind: "text", title: "", items: legacyItems, body: "" }, ...resources];
+}
+
+function fileExtension(resource) {
+  const raw = `${resource?.fileName || ""} ${resource?.path || ""} ${resource?.url || ""}`.toLowerCase();
+  const match = raw.match(/\.(pdf|pptx?|docx?|xlsx?|zip)(?:$|[?#])/i);
+  return match ? match[1].toLowerCase() : "pdf";
+}
+
+function isOfficeDocument(ext) {
+  return ["ppt", "pptx", "doc", "docx", "xls", "xlsx"].includes(ext);
+}
+
+function canEmbedOffice(href) {
+  try {
+    const url = new URL(href);
+    return url.protocol === "https:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
+function previewEmbedSrc(src) {
+  try {
+    const url = new URL(src);
+    if (url.hostname.includes("youtube.com") || url.hostname.includes("youtube-nocookie.com")) {
+      url.searchParams.set("start", "0");
+      url.searchParams.set("end", String(PREVIEW_SECONDS));
+    }
+    return url.toString();
+  } catch {
+    return src;
+  }
 }
 
 /**
@@ -45,14 +79,30 @@ async function fetchVideoAsObjectUrl(url, { signal, onProgress } = {}) {
   return URL.createObjectURL(blob);
 }
 
-function VideoBlock({ resource }) {
+function PreviewEndedOverlay({ onLoginClick }) {
+  return (
+    <div className="curriculum-player__notice curriculum-player__preview-end">
+      <p>Önizleme süresi doldu. Videonun tamamı için giriş yapmanız gerekir.</p>
+      {typeof onLoginClick === "function" ? (
+        <button type="button" className="btn" onClick={onLoginClick}>
+          Giriş yap
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function VideoBlock({ resource, preview = false, onLoginClick }) {
   const [open, setOpen] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [playback, setPlayback] = useState({ status: "idle", src: "", progress: 0 });
+  const [previewEnded, setPreviewEnded] = useState(false);
   const objectUrlRef = useRef("");
+  const videoRef = useRef(null);
   const source = useMemo(() => describeVideoSource(resource), [resource]);
   const title = resource.title || "Video ders";
-  const needsBlobPlayback = source.type === "file";
+  const needsBlobPlayback = source.type === "file" && !preview;
+  const embedSrc = preview && source.type === "embed" ? previewEmbedSrc(source.src) : source.src;
 
   useEffect(
     () => () => {
@@ -60,6 +110,16 @@ function VideoBlock({ resource }) {
     },
     [],
   );
+
+  useEffect(() => {
+    if (!open) setPreviewEnded(false);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !preview || source.type !== "embed") return undefined;
+    const timer = window.setTimeout(() => setPreviewEnded(true), PREVIEW_SECONDS * 1000);
+    return () => window.clearTimeout(timer);
+  }, [open, preview, source.type, embedSrc]);
 
   useEffect(() => {
     if (!open || !needsBlobPlayback) return undefined;
@@ -92,6 +152,15 @@ function VideoBlock({ resource }) {
     return () => controller.abort();
   }, [open, needsBlobPlayback, source.src, reloadToken]);
 
+  const clampPreviewTime = (el) => {
+    if (!preview || !el) return;
+    if (el.currentTime >= PREVIEW_SECONDS) {
+      el.pause();
+      el.currentTime = PREVIEW_SECONDS;
+      setPreviewEnded(true);
+    }
+  };
+
   const retryBlobLoad = () => {
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
@@ -104,6 +173,19 @@ function VideoBlock({ resource }) {
   if (source.type === "none") return null;
 
   if (source.type === "link") {
+    if (preview) {
+      return (
+        <button type="button" className="curriculum-lesson curriculum-lesson--link" onClick={onLoginClick}>
+          <span className="curriculum-lesson__icon curriculum-lesson__icon--video" aria-hidden>
+            <i className="fa-solid fa-play" />
+          </span>
+          <span className="curriculum-lesson__body">
+            <span className="curriculum-lesson__title">{title}</span>
+            <span className="curriculum-lesson__meta">Harici bağlantı · Tamamı için giriş yapın</span>
+          </span>
+        </button>
+      );
+    }
     return (
       <a className="curriculum-lesson curriculum-lesson--link" href={source.src} target="_blank" rel="noopener noreferrer">
         <span className="curriculum-lesson__icon curriculum-lesson__icon--video" aria-hidden>
@@ -134,7 +216,9 @@ function VideoBlock({ resource }) {
         <span className="curriculum-lesson__body">
           <span className="curriculum-lesson__title">{title}</span>
           <span className="curriculum-lesson__meta">
-            Video{resource.duration ? ` · ${resource.duration}` : ""}
+            {preview
+              ? `Önizleme · ilk ${PREVIEW_SECONDS} saniye`
+              : `Video${resource.duration ? ` · ${resource.duration}` : ""}`}
           </span>
         </span>
         <span className="curriculum-lesson__action" aria-hidden>
@@ -144,13 +228,15 @@ function VideoBlock({ resource }) {
 
       {open ? (
         <div className="curriculum-player">
-          {source.type === "embed" ? (
+          {previewEnded ? (
+            <PreviewEndedOverlay onLoginClick={onLoginClick} />
+          ) : source.type === "embed" ? (
             <iframe
-              src={source.src}
+              src={embedSrc}
               title={title}
               loading="lazy"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
+              allowFullScreen={!preview}
             />
           ) : needsBlobPlayback && playback.status !== "ready" ? (
             playback.status === "failed" ? (
@@ -171,11 +257,17 @@ function VideoBlock({ resource }) {
           ) : (
             // eslint-disable-next-line jsx-a11y/media-has-caption
             <video
+              ref={videoRef}
               key={playback.src || source.src}
               src={needsBlobPlayback ? playback.src : source.src}
               controls
               playsInline
               preload="auto"
+              controlsList={preview ? "nodownload noplaybackrate" : undefined}
+              disablePictureInPicture={preview || undefined}
+              onContextMenu={preview ? (event) => event.preventDefault() : undefined}
+              onTimeUpdate={(event) => clampPreviewTime(event.currentTarget)}
+              onSeeked={(event) => clampPreviewTime(event.currentTarget)}
             />
           )}
         </div>
@@ -184,12 +276,97 @@ function VideoBlock({ resource }) {
   );
 }
 
-function FileBlock({ resource }) {
+function FilePreviewDialog({ resource, href, onClose, onLoginClick }) {
+  const ext = fileExtension(resource);
+  const title = resource.title?.trim() || fixUploadedFileName(resource.fileName) || "Doküman";
+  const office = isOfficeDocument(ext);
+  const embedHref = office
+    ? canEmbedOffice(href)
+      ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(href)}`
+      : ""
+    : `${href}#toolbar=0`;
+
+  return (
+    <div
+      className="promo-video-modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+    >
+      <div
+        className="training-file-preview-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="file-preview-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="training-file-preview-dialog__head">
+          <h2 id="file-preview-title">{title}</h2>
+          <button type="button" className="promo-video-modal__close" aria-label="Kapat" onClick={onClose}>
+            <i className="fa-solid fa-xmark" aria-hidden />
+          </button>
+        </header>
+        <div className="training-file-preview-dialog__body">
+          {embedHref ? (
+            <iframe title={title} src={embedHref} />
+          ) : (
+            <div className="training-file-preview-dialog__fallback">
+              <p>Bu sunum dosyası tarayıcıda önizlenemiyor. Tam erişim ve indirme için giriş yapın.</p>
+            </div>
+          )}
+        </div>
+        <footer className="training-file-preview-dialog__foot">
+          <p>Önizleme modunda dosya indirilemez.</p>
+          {typeof onLoginClick === "function" ? (
+            <button type="button" className="btn" onClick={onLoginClick}>
+              Giriş yap
+            </button>
+          ) : (
+            <button type="button" className="btn btn-outline" onClick={onClose}>
+              Kapat
+            </button>
+          )}
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function FileBlock({ resource, preview = false, onLoginClick }) {
   const href = resolveAssetUrl(resource.path || resource.url);
+  const [previewOpen, setPreviewOpen] = useState(false);
   if (!href) return null;
   const downloadName = fixUploadedFileName(resource.fileName);
-  const title = resource.title?.trim() || "PDF";
+  const ext = fileExtension(resource);
+  const title = resource.title?.trim() || (isOfficeDocument(ext) ? "Sunum" : "PDF");
   const meta = formatFileSize(resource.size);
+  const icon = isOfficeDocument(ext) ? "fa-regular fa-file-powerpoint" : "fa-regular fa-file-pdf";
+
+  if (preview) {
+    return (
+      <>
+        <button type="button" className="curriculum-lesson curriculum-lesson--file" onClick={() => setPreviewOpen(true)}>
+          <span className="curriculum-lesson__icon curriculum-lesson__icon--file" aria-hidden>
+            <i className={icon} />
+          </span>
+          <span className="curriculum-lesson__body">
+            <span className="curriculum-lesson__title">{title}</span>
+            <span className="curriculum-lesson__meta">{meta ? `${meta} · Önizleme` : "Önizleme · indirme kapalı"}</span>
+          </span>
+          <span className="curriculum-lesson__action curriculum-lesson__action--download">
+            <i className="fa-regular fa-eye" aria-hidden /> Görüntüle
+          </span>
+        </button>
+        {previewOpen ? (
+          <FilePreviewDialog
+            resource={resource}
+            href={href}
+            onClose={() => setPreviewOpen(false)}
+            onLoginClick={onLoginClick}
+          />
+        ) : null}
+      </>
+    );
+  }
 
   return (
     <a
@@ -200,7 +377,7 @@ function FileBlock({ resource }) {
       download={downloadName || undefined}
     >
       <span className="curriculum-lesson__icon curriculum-lesson__icon--file" aria-hidden>
-        <i className="fa-regular fa-file-pdf" />
+        <i className={icon} />
       </span>
       <span className="curriculum-lesson__body">
         <span className="curriculum-lesson__title">{title}</span>
@@ -233,7 +410,7 @@ function TextBlock({ resource }) {
   );
 }
 
-function ModuleSection({ moduleRow, index, defaultOpen, locked = false }) {
+function ModuleSection({ moduleRow, index, defaultOpen, locked = false, preview = false, onLoginClick }) {
   const [open, setOpen] = useState(Boolean(defaultOpen) && !locked);
   const blocks = useMemo(() => moduleBlocks(moduleRow), [moduleRow]);
   const counts = useMemo(() => countResourcesByKind(blocks), [blocks]);
@@ -263,7 +440,7 @@ function ModuleSection({ moduleRow, index, defaultOpen, locked = false }) {
         <span className="curriculum-module__heading">
           <span className="curriculum-module__title">{title}</span>
           <span className="curriculum-module__meta">
-            {locked ? "Kilitli içerik" : metaParts.join(" · ") || "İçerik hazırlanıyor"}
+            {locked ? "Kilitli içerik" : preview ? "Önizleme" : metaParts.join(" · ") || "İçerik hazırlanıyor"}
           </span>
         </span>
         <span className="curriculum-module__chevron" aria-hidden>
@@ -278,8 +455,12 @@ function ModuleSection({ moduleRow, index, defaultOpen, locked = false }) {
           ) : (
             blocks.map((resource, blockIndex) => {
               const key = `${index}-${blockIndex}-${resource.kind}`;
-              if (resource.kind === "video") return <VideoBlock key={key} resource={resource} />;
-              if (resource.kind === "pdf") return <FileBlock key={key} resource={resource} />;
+              if (resource.kind === "video") {
+                return <VideoBlock key={key} resource={resource} preview={preview} onLoginClick={onLoginClick} />;
+              }
+              if (resource.kind === "pdf") {
+                return <FileBlock key={key} resource={resource} preview={preview} onLoginClick={onLoginClick} />;
+              }
               return <TextBlock key={key} resource={resource} />;
             })
           )}
@@ -293,6 +474,7 @@ function TrainingCurriculum({
   modules = [],
   locked = false,
   lockStatus = "none",
+  guestPreview = false,
   onLoginClick,
   onApplyClick,
   onExamPortalClick,
@@ -318,6 +500,7 @@ function TrainingCurriculum({
   if (!list.length) return null;
 
   const hasPreviewLocks = !locked && list.some((moduleRow) => moduleRow.locked);
+  const showingGuestPreview = guestPreview && !locked;
 
   const lockMessage =
     lockStatus === "pending"
@@ -336,9 +519,9 @@ function TrainingCurriculum({
           <p className="curriculum__subtitle">
             {list.length} modül
             {!locked && totals.video ? ` · ${totals.video} video` : ""}
-            {!locked && totals.pdf ? ` · ${totals.pdf} indirilebilir doküman` : ""}
+            {!locked && totals.pdf ? ` · ${totals.pdf} doküman` : ""}
             {!locked && totals.text ? ` · ${totals.text} okuma` : ""}
-            {locked ? " · Erişim kilitli" : hasPreviewLocks ? " · İlk modül açık" : ""}
+            {locked ? " · Erişim kilitli" : showingGuestPreview ? " · İlk modül önizleme" : ""}
           </p>
         </div>
         {!locked ? (
@@ -385,6 +568,7 @@ function TrainingCurriculum({
       <div className={`curriculum__list${locked ? " curriculum__list--locked" : ""}`} aria-hidden={locked || undefined}>
         {list.map((moduleRow, index) => {
           const moduleLocked = Boolean(locked || moduleRow.locked);
+          const modulePreview = Boolean(guestPreview && !moduleLocked && (moduleRow.preview || index === 0));
           return (
             <ModuleSection
               key={moduleRow.id || `module-${index}`}
@@ -392,26 +576,41 @@ function TrainingCurriculum({
               index={index}
               defaultOpen={!moduleLocked && index === 0}
               locked={moduleLocked}
+              preview={modulePreview}
+              onLoginClick={onLoginClick}
             />
           );
         })}
       </div>
 
-      {hasPreviewLocks && typeof onLoginClick === "function" ? (
+      {showingGuestPreview || hasPreviewLocks ? (
         <div className="curriculum__lock-panel">
           <div className="curriculum__lock-icon" aria-hidden>
             <i className="fa-solid fa-lock" />
           </div>
-          <p>İlk modül herkese açıktır. Diğer modüllere erişmek için oturum açmanız gerekir.</p>
+          <p>
+            {showingGuestPreview
+              ? `İlk modül önizlemedir: videonun yalnızca ilk ${PREVIEW_SECONDS} saniyesi izlenebilir; PDF ve sunum dosyaları indirilemez, yalnızca görüntülenir. Tam video, indirme ve diğer modüller için giriş yapmanız gerekir.`
+              : lockStatus === "pending" || lockStatus === "unpaid" || lockStatus === "none"
+                ? lockMessage
+                : "Diğer modüllere erişmek için oturum açmanız gerekir."}
+          </p>
           <div className="curriculum__lock-actions">
-            <button type="button" className="btn btn-outline" onClick={onLoginClick}>
-              Giriş yap
-            </button>
+            {typeof onLoginClick === "function" ? (
+              <button type="button" className="btn btn-outline" onClick={onLoginClick}>
+                Giriş yap
+              </button>
+            ) : null}
+            {typeof onApplyClick === "function" && lockStatus !== "pending" ? (
+              <button type="button" className="btn" onClick={onApplyClick}>
+                {lockStatus === "unpaid" ? "Ödemeyi Tamamla" : "Başvuru Formunu Doldur"}
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
 
-      {!locked && !hasPreviewLocks && typeof onExamPortalClick === "function" ? (
+      {!locked && !hasPreviewLocks && !showingGuestPreview && typeof onExamPortalClick === "function" ? (
         <div className="curriculum__exam-cta">
           <p className="curriculum__exam-cta-text">Müfredatı tamamladıktan sonra sınava başlayabilirsiniz.</p>
           <button type="button" className="btn curriculum__exam-cta-btn" disabled={examPortalBusy} onClick={onExamPortalClick}>

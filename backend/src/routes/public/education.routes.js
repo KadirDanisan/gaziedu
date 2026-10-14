@@ -15,7 +15,7 @@ import {
   CALENDAR_DETAIL_SELECT,
 } from "../../services/education/publicCourses.js";
 import { loadEducationModules, lockEducationModulesForPublic } from "../../services/education/modules.js";
-import { normalizeSalesFilter, SALES_FILTERS } from "../../config/salesFilters.js";
+import { normalizeSalesFilter, SALES_FILTERS, usesFirstModulePreview } from "../../config/salesFilters.js";
 
 const router = Router();
 
@@ -257,15 +257,11 @@ router.get("/api/public/educations/detail/:slug", async (req, res, next) => {
 
     const fullModules = row.source_type === "education" ? await loadEducationModules(row.id) : [];
     const salesFilter = normalizeSalesFilter(row.sales_filter);
-    const isPaidGuzem = salesFilter === "guzem-ucretli";
-    const isKamuFree = salesFilter === "guzem-kamu-yarari-ucretsiz";
-    const curriculumLoginGated = isPaidGuzem || isKamuFree;
+    const previewFirst = usesFirstModulePreview(salesFilter);
     const withContent = {
       ...row,
-      modules: curriculumLoginGated
-        ? lockEducationModulesForPublic(fullModules, { unlockFirst: isKamuFree })
-        : fullModules,
-      curriculumLocked: curriculumLoginGated,
+      modules: previewFirst ? lockEducationModulesForPublic(fullModules, { previewFirst: true }) : fullModules,
+      curriculumLocked: previewFirst,
     };
     return res.json({ course: formatPublicCourse(withContent) });
   } catch (error) {

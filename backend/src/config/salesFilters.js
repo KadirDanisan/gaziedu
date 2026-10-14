@@ -22,6 +22,14 @@ const salesFilterLabel = (value) => salesFilterByKey[normalizeSalesFilter(value)
 const salesFilterRequiresInstitution = (value) =>
   Boolean(salesFilterByKey[normalizeSalesFilter(value)]?.requiresInstitution);
 
+const FIRST_MODULE_PREVIEW_FILTERS = [
+  "guzem-ucretli",
+  "guzem-kamu-yarari-ucretsiz",
+  "yok-mikro-yeterlilik",
+];
+
+const usesFirstModulePreview = (value) => FIRST_MODULE_PREVIEW_FILTERS.includes(normalizeSalesFilter(value));
+
 export {
   SALES_FILTERS,
   SALES_FILTER_KEYS,
@@ -30,4 +38,6 @@ export {
   normalizeSalesFilter,
   salesFilterLabel,
   salesFilterRequiresInstitution,
+  FIRST_MODULE_PREVIEW_FILTERS,
+  usesFirstModulePreview,
 };

@@ -78,11 +78,11 @@ const loadEducationModules = async (educationId) => {
 };
 
 /** Herkese açık yanıtta içerik URL'lerini gizle; yalnızca başlık iskeleti. */
-const lockEducationModulesForPublic = (modules, { unlockFirst = false } = {}) => {
+const lockEducationModulesForPublic = (modules, { previewFirst = false } = {}) => {
   if (!Array.isArray(modules)) return [];
   return modules.map((moduleRow, index) => {
-    if (unlockFirst && index === 0) {
-      return { ...moduleRow, locked: false };
+    if (previewFirst && index === 0) {
+      return { ...moduleRow, locked: false, preview: true };
     }
     const resources = Array.isArray(moduleRow?.resources) ? moduleRow.resources : [];
     const legacyItems = Array.isArray(moduleRow?.items) ? moduleRow.items : [];

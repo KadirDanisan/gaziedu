@@ -7,7 +7,7 @@ import PromoVideoModal from "../components/PromoVideoModal";
 import PaidApplicationModal from "../components/PaidApplicationModal";
 import { describeVideoSource } from "../utils/moduleResources";
 import { useAuth } from "../context/AuthContext";
-import { normalizeSalesFilter } from "../constants/salesFilters";
+import { normalizeSalesFilter, usesFirstModulePreview } from "../constants/salesFilters";
 
 const COURSE_ID_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -421,8 +421,8 @@ function TrainingDetailPage() {
   }, [course?.id, slug, course, displayCourse]);
 
   const isPaidGuzem = normalizeSalesFilter(activeCourse?.salesFilter) === "guzem-ucretli";
-  const isKamuFree = normalizeSalesFilter(activeCourse?.salesFilter) === "guzem-kamu-yarari-ucretsiz";
-  const needsCurriculumAuth = isPaidGuzem || isKamuFree;
+  const usesModulePreview = usesFirstModulePreview(activeCourse?.salesFilter);
+  const needsCurriculumAuth = usesModulePreview;
 
   useEffect(() => {
     if (!needsCurriculumAuth || !activeCourse?.id || activeCourse.sourceType === "calendar") {
@@ -444,7 +444,7 @@ function TrainingDetailPage() {
 
     (async () => {
       try {
-        if (isKamuFree) {
+        if (!isPaidGuzem) {
           const mods = await userApi.getEducationApplicationModules(activeCourse.id);
           if (cancelled) return;
           setCurriculumAccess({ loading: false, hasAccess: true, status: "open" });
@@ -468,7 +468,7 @@ function TrainingDetailPage() {
         }
       } catch {
         if (cancelled) return;
-        setCurriculumAccess({ loading: false, hasAccess: false, status: isKamuFree ? "login" : "none" });
+        setCurriculumAccess({ loading: false, hasAccess: false, status: isPaidGuzem ? "none" : "login" });
         setUnlockedModules(null);
       }
     })();
@@ -478,8 +478,8 @@ function TrainingDetailPage() {
     };
   }, [
     needsCurriculumAuth,
+    usesModulePreview,
     isPaidGuzem,
-    isKamuFree,
     activeCourse?.id,
     activeCourse?.sourceType,
     isReady,
@@ -717,19 +717,17 @@ function TrainingDetailPage() {
                     ? unlockedModules
                     : c.modules
                 }
-                locked={Boolean(
-                  isPaidGuzem &&
-                    !(curriculumAccess.hasAccess && Array.isArray(unlockedModules)),
-                )}
+                locked={false}
+                guestPreview={Boolean(usesModulePreview && !isLoggedIn)}
                 lockStatus={
                   needsCurriculumAuth
                     ? curriculumAccess.loading
-                      ? curriculumAccess.status || (isKamuFree ? "login" : "none")
+                      ? curriculumAccess.status || (isPaidGuzem ? "none" : "login")
                       : curriculumAccess.status
                     : "open"
                 }
                 onLoginClick={
-                  needsCurriculumAuth && !isLoggedIn
+                  usesModulePreview && !isLoggedIn
                     ? () => {
                         const nextPath = `${location.pathname}${location.hash || "#moduller"}`;
                         navigate(`/kullanici-islemleri?next=${encodeURIComponent(nextPath)}`);
