@@ -27,13 +27,8 @@ function isOfficeDocument(ext) {
   return ["ppt", "pptx", "doc", "docx", "xls", "xlsx"].includes(ext);
 }
 
-function canEmbedOffice(href) {
-  try {
-    const url = new URL(href);
-    return url.protocol === "https:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1";
-  } catch {
-    return false;
-  }
+function isPdfResource(resource) {
+  return fileExtension(resource) === "pdf";
 }
 
 function previewEmbedSrc(src) {
@@ -277,14 +272,8 @@ function VideoBlock({ resource, preview = false, onLoginClick }) {
 }
 
 function FilePreviewDialog({ resource, href, onClose, onLoginClick }) {
-  const ext = fileExtension(resource);
-  const title = resource.title?.trim() || fixUploadedFileName(resource.fileName) || "Doküman";
-  const office = isOfficeDocument(ext);
-  const embedHref = office
-    ? canEmbedOffice(href)
-      ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(href)}`
-      : ""
-    : `${href}#toolbar=0`;
+  const title = resource.title?.trim() || fixUploadedFileName(resource.fileName) || "PDF";
+  const embedHref = `${href}#toolbar=0`;
 
   return (
     <div
@@ -335,6 +324,7 @@ function FileBlock({ resource, preview = false, onLoginClick }) {
   const href = resolveAssetUrl(resource.path || resource.url);
   const [previewOpen, setPreviewOpen] = useState(false);
   if (!href) return null;
+  if (preview && !isPdfResource(resource)) return null;
   const downloadName = fixUploadedFileName(resource.fileName);
   const ext = fileExtension(resource);
   const title = resource.title?.trim() || (isOfficeDocument(ext) ? "Sunum" : "PDF");
@@ -590,7 +580,7 @@ function TrainingCurriculum({
           </div>
           <p>
             {showingGuestPreview
-              ? `İlk modül önizlemedir: videonun yalnızca ilk ${PREVIEW_SECONDS} saniyesi izlenebilir; PDF ve sunum dosyaları indirilemez, yalnızca görüntülenir. Tam video, indirme ve diğer modüller için giriş yapmanız gerekir.`
+              ? `İlk modül önizlemedir: videonun yalnızca ilk ${PREVIEW_SECONDS} saniyesi izlenebilir; PDF dosyaları indirilemez, yalnızca görüntülenir. Sunum dosyaları giriş yapılmadan görünmez. Tam video, indirme ve diğer modüller için giriş yapmanız gerekir.`
               : lockStatus === "pending" || lockStatus === "unpaid" || lockStatus === "none"
                 ? lockMessage
                 : "Diğer modüllere erişmek için oturum açmanız gerekir."}
