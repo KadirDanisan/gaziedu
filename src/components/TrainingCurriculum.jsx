@@ -17,10 +17,25 @@ function moduleBlocks(moduleRow) {
   return [{ kind: "text", title: "", items: legacyItems, body: "" }, ...resources];
 }
 
+function extractExtension(value) {
+  let raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    raw = decodeURIComponent(raw);
+  } catch {
+    /* keep raw */
+  }
+  raw = raw.split("?")[0].split("#")[0].replace(/\/+$/, "").toLowerCase();
+  const match = raw.match(/\.([a-z0-9]+)$/);
+  return match ? match[1] : "";
+}
+
 function fileExtension(resource) {
-  const raw = `${resource?.fileName || ""} ${resource?.path || ""} ${resource?.url || ""}`.toLowerCase();
-  const match = raw.match(/\.(pdf|pptx?|docx?|xlsx?|zip)(?:$|[?#])/i);
-  return match ? match[1].toLowerCase() : "pdf";
+  for (const value of [resource?.path, resource?.url, resource?.fileName]) {
+    const ext = extractExtension(value);
+    if (ext) return ext;
+  }
+  return "";
 }
 
 function isOfficeDocument(ext) {
