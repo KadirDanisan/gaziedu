@@ -225,7 +225,7 @@ function TrainingCalendarPage() {
                   <i className="fa-regular fa-calendar" /> {course.date}
                 </li>
                 <li>
-                  <i className="fa-regular fa-clock" /> {course.duration}
+                  <i className="fa-regular fa-clock" /> {course.duration} Saat
                 </li>
                 <li>
                   <i className="fa-solid fa-globe" /> {course.mode}

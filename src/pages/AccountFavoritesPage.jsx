@@ -20,7 +20,7 @@ function AccountFavoritesPage() {
               </div>
               <div className="upcoming-card-body">
                 <h3>{course.title}</h3>
-                <p>{course.duration}</p>
+                <p>{course.duration} Saat</p>
                 <Link className="upcoming-card-cta" to={`/egitim-detay/${makeSlug(course.title)}`} state={{ course }}>
                   Eğitimi İncele <i className="fa-solid fa-arrow-right" />
                 </Link>

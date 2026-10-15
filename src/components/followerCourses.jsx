@@ -106,7 +106,7 @@ function FollowerCourses() {
                 <div className="upcoming-meta-list">
                   <p className="upcoming-meta-item">
                     <i className="fa-regular fa-clock" />
-                    <span>{course.duration}</span>
+                    <span>{course.duration} Saat</span>
                   </p>
                   {course.category ? (
                     <p className="upcoming-meta-item">

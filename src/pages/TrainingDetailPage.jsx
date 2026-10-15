@@ -592,7 +592,7 @@ function TrainingDetailPage() {
               <i className="fa-regular fa-calendar" /> {c.date}
             </li>
             <li>
-              <i className="fa-regular fa-clock" /> {c.duration}
+              <i className="fa-regular fa-clock" /> {c.duration} Saat
             </li>
             <li>
               <i className="fa-solid fa-globe" /> {c.mode}
@@ -669,7 +669,7 @@ function TrainingDetailPage() {
               <li>
                 <i className="fa-regular fa-clock" aria-hidden />
                 <span>Süre</span>
-                <strong>{c.duration}</strong>
+                <strong>{c.duration} Saat</strong>
               </li>
               <li>
                 <i className="fa-solid fa-globe" aria-hidden />
@@ -825,7 +825,7 @@ function TrainingDetailPage() {
             </li>
             <li>
               <span>Eğitim Süresi</span>
-              <strong>{c.duration}</strong>
+              <strong>{c.duration} Saat</strong>
             </li>
             <li>
               <span>Kontenjan</span>

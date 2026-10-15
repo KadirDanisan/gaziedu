@@ -186,7 +186,7 @@ function Hero() {
                     </div>
                     <div className="hero-course-meta">
                       <span>
-                        <i className="fa-regular fa-clock" /> {course.duration}
+                        <i className="fa-regular fa-clock" /> {course.duration} Saat
                       </span>
                       <span>
                         <i className="fa-solid fa-globe" /> {course.mode}
