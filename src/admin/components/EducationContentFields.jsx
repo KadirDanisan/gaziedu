@@ -33,6 +33,63 @@ export function BulletListEditor({ label, hint, value = [], onChange, rows = 6, 
   );
 }
 
+export function VideoUploadField({ path, fileName, onUploaded, onRemove, onUploadingChange }) {
+  const [progress, setProgress] = useState(null);
+  const [error, setError] = useState("");
+  const uploading = progress !== null;
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    setError("");
+    setProgress(0);
+    onUploadingChange?.(true);
+    try {
+      const result = await adminApi.uploadEducationModuleVideo(file, setProgress);
+      if (!result?.path) throw new Error("Video yüklendi ancak dosya yolu alınamadı. Tekrar deneyin.");
+      onUploaded({
+        path: result.path,
+        fileName: fixUploadedFileName(result.fileName || file.name),
+        size: result.size || file.size,
+      });
+    } catch (err) {
+      setError(err?.message || "Video yüklenemedi.");
+    } finally {
+      setProgress(null);
+      onUploadingChange?.(false);
+    }
+  };
+
+  return (
+    <div className="admin-video-upload">
+      {uploading ? (
+        <div className="admin-video-upload__progress">
+          <div className="admin-video-upload__progress-head">
+            <span>{progress < 100 ? "Video yükleniyor..." : "Video işleniyor, lütfen bekleyin..."}</span>
+            <strong>%{progress}</strong>
+          </div>
+          <div className="admin-video-upload__bar">
+            <span style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      ) : path ? (
+        <div className="admin-video-upload__done">
+          <i className="fa-solid fa-circle-check" aria-hidden />
+          <span>
+            Video başarıyla yüklenmiştir.
+            {fileName ? <small>{fixUploadedFileName(fileName)}</small> : null}
+          </span>
+          <button type="button" className="admin-resource-card__unlink" onClick={onRemove}>
+            Kaldır
+          </button>
+        </div>
+      ) : (
+        <input type="file" accept="video/*" onChange={(event) => handleFile(event.target.files?.[0])} />
+      )}
+      {error ? <p className="admin-form-error">{error}</p> : null}
+    </div>
+  );
+}
+
 const blankResource = (kind) => {
   if (kind === "text") return { kind, title: "", items: [], body: "" };
   if (kind === "pdf") return { kind, title: "", path: "", url: "", fileName: "" };
@@ -109,7 +166,7 @@ function ResourceBlock({ resource, index, total, onPatch, onRemove, onMove, onUp
           <input
             type="file"
             accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip"
-            onChange={(event) => onUpload(index, event.target.files?.[0], "pdf")}
+            onChange={(event) => onUpload(index, event.target.files?.[0])}
             disabled={uploading}
           />
           {uploading ? <small>Yükleniyor...</small> : null}
@@ -129,42 +186,12 @@ function ResourceBlock({ resource, index, total, onPatch, onRemove, onMove, onUp
       ) : null}
 
       {kind === "video" ? (
-        <div className="admin-field-stack">
-          <span className="admin-field-label">Video kaynağı</span>
-          <input
-            type="text"
-            value={resource.url ?? ""}
-            onChange={(event) => onPatch(index, { url: event.target.value })}
-            placeholder="YouTube / Vimeo bağlantısı veya .mp4 adresi"
-          />
-          <input
-            type="file"
-            accept="video/*"
-            onChange={(event) => onUpload(index, event.target.files?.[0], "video")}
-            disabled={uploading}
-          />
-          {uploading ? (
-            <small>Video yükleniyor ve web için optimize ediliyor (faststart), pencereyi kapatmayın...</small>
-          ) : null}
-          {resource.path ? (
-            <small className="admin-resource-card__file">
-              <i className="fa-regular fa-circle-check" aria-hidden /> Yüklendi: {fixUploadedFileName(resource.fileName) || resource.path}
-              <button type="button" className="admin-resource-card__unlink" onClick={() => onPatch(index, { path: "", fileName: "" })}>
-                kaldır
-              </button>
-            </small>
-          ) : null}
-          <input
-            type="text"
-            value={resource.duration ?? ""}
-            onChange={(event) => onPatch(index, { duration: event.target.value })}
-            placeholder="Süre (ör. 12:30)"
-          />
-          <small style={{ opacity: 0.85 }}>
-            Yüklenen dosya varsa o oynatılır; yoksa bağlantı kullanılır. En fazla 2 GB. Yükleme sonrası
-            sunucu videoyu tarayıcıda hızlı başlatmak için otomatik optimize eder.
-          </small>
-        </div>
+        <VideoUploadField
+          path={resource.path}
+          fileName={resource.fileName}
+          onUploaded={(uploaded) => onPatch(index, { ...uploaded, url: "" })}
+          onRemove={() => onPatch(index, { path: "", fileName: "", size: 0 })}
+        />
       ) : null}
 
       {error ? <p className="admin-form-error">{error}</p> : null}
@@ -195,13 +222,12 @@ function ModuleCard({ moduleRow, index, onPatch, onRemove }) {
     setResources(next);
   };
 
-  const uploadResource = async (resourceIndex, file, kind) => {
+  const uploadResource = async (resourceIndex, file) => {
     if (!file) return;
     setUploadError("");
     setUploadingKey(`${index}-${resourceIndex}`);
     try {
-      const result =
-        kind === "video" ? await adminApi.uploadEducationModuleVideo(file) : await adminApi.uploadEducationModuleFile(file);
+      const result = await adminApi.uploadEducationModuleFile(file);
       patchResource(resourceIndex, {
         path: result?.path || "",
         fileName: fixUploadedFileName(result?.fileName || file.name),

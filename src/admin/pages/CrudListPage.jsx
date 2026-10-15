@@ -7,6 +7,7 @@ import {
   EducationModulesEditor,
   renderBulletPreview,
   renderModuleResourcesPreview,
+  VideoUploadField,
 } from "../components/EducationContentFields";
 import { normalizeEducationCode, parseEducationCode } from "../utils/educationCode";
 import { lookupCodeMatches, normalizeLookupCode, parseApprovedEducationExcelBuffer } from "../utils/parseApprovedEducationExcel";
@@ -560,24 +561,6 @@ export default function CrudListPage({ moduleKey }) {
     }
   };
 
-  const handlePromoVideoUpload = async (file) => {
-    if (!file) return;
-    setPromoVideoUploading(true);
-    setError("");
-    try {
-      const result = await data.uploadEducationModuleVideo(file);
-      const uploadedPath = result?.path || "";
-      setForm((prev) => ({ ...prev, promoVideoPath: uploadedPath }));
-      if (!uploadedPath) {
-        setError("Video yüklendi ancak yol alınamadı. Lütfen tekrar deneyin.");
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setPromoVideoUploading(false);
-    }
-  };
-
   const handleExamDocUpload = async (file) => {
     if (!file) return;
     setExamDocUploading("table");
@@ -1074,40 +1057,12 @@ export default function CrudListPage({ moduleKey }) {
                       {educationImageUploading ? <small>Görsel yükleniyor...</small> : null}
                     </div>
                   ) : isEducationsModule && field === "promoVideoPath" ? (
-                    <div className="admin-field-stack">
-                      <input
-                        type="text"
-                        value={form.promoVideoUrl ?? ""}
-                        onChange={(event) => setForm((prev) => ({ ...prev, promoVideoUrl: event.target.value }))}
-                        placeholder="YouTube / Vimeo bağlantısı veya .mp4 adresi"
-                      />
-                      <input
-                        type="file"
-                        accept="video/*"
-                        onChange={(event) => handlePromoVideoUpload(event.target.files?.[0])}
-                        disabled={promoVideoUploading}
-                      />
-                      {promoVideoUploading ? (
-                        <small>Video yükleniyor ve web için optimize ediliyor (faststart), pencereyi kapatmayın...</small>
-                      ) : null}
-                      <input
-                        value={form.promoVideoPath ?? ""}
-                        onChange={(event) => setForm((prev) => ({ ...prev, promoVideoPath: event.target.value }))}
-                        placeholder="Yüklenen tanıtım videosu yolu"
-                      />
-                      {form.promoVideoPath ? (
-                        <button
-                          type="button"
-                          className="admin-resource-card__unlink"
-                          onClick={() => setForm((prev) => ({ ...prev, promoVideoPath: "" }))}
-                        >
-                          Yüklenen videoyu kaldır
-                        </button>
-                      ) : null}
-                      <small style={{ opacity: 0.85 }}>
-                        Yüklenen dosya varsa o oynatılır; yoksa bağlantı kullanılır. En fazla 2 GB.
-                      </small>
-                    </div>
+                    <VideoUploadField
+                      path={form.promoVideoPath}
+                      onUploaded={({ path }) => setForm((prev) => ({ ...prev, promoVideoPath: path, promoVideoUrl: "" }))}
+                      onRemove={() => setForm((prev) => ({ ...prev, promoVideoPath: "" }))}
+                      onUploadingChange={setPromoVideoUploading}
+                    />
                   ) : isEducationLikeModule && field === "imageUrl" ? (
                     <div className="admin-field-stack">
                       <input

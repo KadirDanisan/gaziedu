@@ -2040,6 +2040,73 @@ html {
   cursor: pointer;
 }
 
+.admin-video-upload {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-video-upload__progress {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid #c9d9f4;
+  border-radius: 12px;
+  background: #f4f8ff;
+}
+
+.admin-video-upload__progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.88rem;
+  color: #2a3f5f;
+}
+
+.admin-video-upload__progress-head strong {
+  color: #1d57aa;
+}
+
+.admin-video-upload__bar {
+  height: 8px;
+  border-radius: 999px;
+  background: #dbe6f8;
+  overflow: hidden;
+}
+
+.admin-video-upload__bar span {
+  display: block;
+  height: 100%;
+  background: #1d57aa;
+  border-radius: inherit;
+  transition: width 0.2s ease;
+}
+
+.admin-video-upload__done {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #bbe5c8;
+  border-radius: 12px;
+  background: #f0fbf4;
+  color: #15803d;
+  font-weight: 600;
+}
+
+.admin-video-upload__done > span {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-video-upload__done small {
+  color: #4b5d73;
+  font-weight: 400;
+  word-break: break-all;
+}
+
 .admin-resource-preview {
   list-style: none;
   margin: 10px 0 0;
