@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /hesabim
+Disallow: /sinavportali
+Disallow: /odeme-sonuc
+
+Sitemap: https://uzaktan.gazi.edu.tr/sitemap.xml
