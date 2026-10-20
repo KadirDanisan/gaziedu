@@ -3,6 +3,7 @@ dist
 .env
 .env.example
 .env.production
+public/sitemap.xml
 
 backend/uploads/*.mp4
 backend/uploads/*.mov
