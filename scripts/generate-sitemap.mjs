@@ -79,21 +79,8 @@ async function main() {
     "",
   ].join("\n");
 
-  const robots = [
-    "User-agent: *",
-    "Allow: /",
-    "Disallow: /admin",
-    "Disallow: /hesabim",
-    "Disallow: /sinavportali",
-    "Disallow: /odeme-sonuc",
-    "",
-    `Sitemap: ${SITE_URL}/sitemap.xml`,
-    "",
-  ].join("\n");
-
   await writeFile(path.join(publicDir, "sitemap.xml"), xml, "utf8");
-  await writeFile(path.join(publicDir, "robots.txt"), robots, "utf8");
-  console.log(`[sitemap] public/sitemap.xml (${entries.length} URL) ve public/robots.txt yazıldı.`);
+  console.log(`[sitemap] public/sitemap.xml (${entries.length} URL) yazıldı.`);
 }
 
 main();
