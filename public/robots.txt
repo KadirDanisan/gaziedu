@@ -1,8 +1,14 @@
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
 User-agent: *
 Allow: /
-Disallow: /admin
-Disallow: /hesabim
-Disallow: /sinavportali
-Disallow: /odeme-sonuc
-
-Sitemap: https://uzaktan.gazi.edu.tr/sitemap.xml
