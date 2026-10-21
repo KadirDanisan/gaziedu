@@ -177,16 +177,18 @@ export default function CertificateListPage() {
         setError("Seçili kayıtlardan dışa aktarılacak veri bulunamadı. Filtreyi veya seçimi kontrol edin.");
         return;
       }
-      const alreadyExported = selectedRows.filter((row) => row.edevletExcelExported);
-      const pendingRows = selectedRows.filter((row) => !row.edevletExcelExported);
+      const processedRows = selectedRows.filter((row) => row.edevletProcessed);
+      const pendingRows = selectedRows.filter((row) => !row.edevletProcessed);
       if (!pendingRows.length) {
-        setError("Seçili kayıtların tümü daha önce Excel raporuna alınmış. Yeni satır oluşturulmaz.");
+        setError("Seçili kayıtların tümü e-devlete işlenmiş. Yeni satır oluşturulmaz.");
         return;
       }
+      const reexportCount = pendingRows.filter((row) => row.edevletExcelExported).length;
       setExcelExportConfirm({
         pendingIds: pendingRows.map((row) => String(row.id)),
-        skippedCount: alreadyExported.length,
-        pendingCount: pendingRows.length,
+        skippedCount: processedRows.length,
+        reexportCount,
+        newCount: pendingRows.length - reexportCount,
       });
     } catch (e) {
       setError(e.message || "E-devlet Excel dosyası oluşturulamadı.");
@@ -204,7 +206,7 @@ export default function CertificateListPage() {
       const prepared = await adminApi.prepareCertificateListEdevletExport(excelExportConfirm.pendingIds);
       const exportRows = prepared.rows || [];
       if (!exportRows.length) {
-        setError("Dışa aktarılacak yeni kayıt kalmadı (daha önce Excel raporu oluşturulmuş olabilir).");
+        setError("Dışa aktarılacak kayıt kalmadı (seçili kayıtlar e-devlete işlenmiş olabilir).");
         setExcelExportConfirm(null);
         return;
       }
@@ -795,14 +797,26 @@ export default function CertificateListPage() {
                 <p className="admin-modal__subtitle admin-modal__subtitle--dense">
                   {excelExportConfirm.skippedCount > 0 ? (
                     <>
-                      Daha önce Excel raporu oluşturduğunuz <strong>{excelExportConfirm.skippedCount}</strong> kayıt
-                      listenizden çıkartılacak; yeni ID verilmeyecek.
+                      E-devlete işlenmiş <strong>{excelExportConfirm.skippedCount}</strong> kayıt listenizden
+                      çıkartılacak.
                       <br />
                       <br />
                     </>
                   ) : null}
-                  Excel&apos;e <strong>{excelExportConfirm.pendingCount}</strong> yeni kayıt eklenecek. Devam etmek
-                  istiyor musunuz?
+                  {excelExportConfirm.reexportCount > 0 ? (
+                    <>
+                      Daha önce Excel&apos;e alınmış <strong>{excelExportConfirm.reexportCount}</strong> kayıt mevcut
+                      ID&apos;siyle tekrar eklenecek.
+                      <br />
+                      <br />
+                    </>
+                  ) : null}
+                  {excelExportConfirm.newCount > 0 ? (
+                    <>
+                      Excel&apos;e <strong>{excelExportConfirm.newCount}</strong> yeni kayıt eklenecek.{" "}
+                    </>
+                  ) : null}
+                  Devam etmek istiyor musunuz?
                 </p>
               </div>
             </header>

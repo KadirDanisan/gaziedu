@@ -22,7 +22,8 @@ const mapExportRow = (row) => {
 
 /**
  * Seçilen kayıtlardan daha önce Excel'e alınmamış olanlara sıralı A kolonu ID'si + C kolonu UUID atar.
- * Zaten export edilenler atlanır (yeni ID verilmez).
+ * Daha önce export edilmiş ama e-devlete işlenmemiş olanlar mevcut ID/UUID ile tekrar çıkarılır.
+ * E-devlete işlenmiş olanlar atlanır.
  */
 export async function prepareEdevletExcelExport(ids = []) {
   const uniqueIds = [...new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || "").trim()).filter(Boolean))];
@@ -41,6 +42,7 @@ export async function prepareEdevletExcelExport(ids = []) {
               b.best_score,
               b.best_recorded_at,
               b.document_number,
+              b.edevlet_processed,
               b.edevlet_excel_exported,
               b.edevlet_excel_row_id,
               b.edevlet_excel_uuid,
@@ -59,11 +61,17 @@ export async function prepareEdevletExcelExport(ids = []) {
     const byId = new Map(selected.rows.map((row) => [String(row.id), row]));
     const ordered = uniqueIds.map((id) => byId.get(id)).filter(Boolean);
 
-    const alreadyExported = ordered.filter((row) => row.edevlet_excel_exported === true);
-    const pending = ordered.filter((row) => row.edevlet_excel_exported !== true);
+    const skipped = ordered.filter((row) => row.edevlet_processed === true);
+    const exportable = ordered.filter((row) => row.edevlet_processed !== true);
 
     const prepared = [];
-    for (const row of pending) {
+    let newCount = 0;
+    for (const row of exportable) {
+      if (row.edevlet_excel_exported === true && row.edevlet_excel_row_id != null && row.edevlet_excel_uuid) {
+        prepared.push(mapExportRow(row));
+        continue;
+      }
+      newCount += 1;
       const next = await client.query(
         `UPDATE edevlet_excel_serial_state
          SET last_serial = last_serial + 1,
@@ -100,9 +108,11 @@ export async function prepareEdevletExcelExport(ids = []) {
     await client.query("COMMIT");
     return {
       rows: prepared,
-      skippedCount: alreadyExported.length,
+      skippedCount: skipped.length,
       exportedCount: prepared.length,
-      skippedIds: alreadyExported.map((row) => String(row.id)),
+      newCount,
+      reexportedCount: prepared.length - newCount,
+      skippedIds: skipped.map((row) => String(row.id)),
     };
   } catch (error) {
     await client.query("ROLLBACK");
