@@ -7,6 +7,7 @@ import { DEFAULT_DATE_RANGE_PERIOD } from "../utils/dateRangePeriod";
 import { formatPersonName } from "../utils/turkishText";
 import { parseBulkApplicationsExcelBuffer } from "../utils/parseBulkUsersExcel";
 import { downloadBlob } from "../utils/downloadBlob";
+import { downloadEducationApplicationsExcel } from "../utils/buildEducationApplicationsExcel";
 
 const BULK_CHUNK_SIZE = 100;
 const BULK_PAYMENT_METHOD = "toplu";
@@ -84,6 +85,7 @@ export default function EducationApplicationsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState("");
+  const [exporting, setExporting] = useState(false);
   const [detail, setDetail] = useState(null);
   const [approveConfirm, setApproveConfirm] = useState(null);
   const [bulk, setBulk] = useState(null);
@@ -128,6 +130,32 @@ export default function EducationApplicationsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    setError("");
+    try {
+      const res = await adminApi.exportEducationApplications({ period, educationId, nationalId, status });
+      const exportRows = res.data || [];
+      if (!exportRows.length) {
+        setError("Seçili filtrelere uygun başvuru bulunamadı.");
+        return;
+      }
+      const stamp = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Europe/Istanbul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+      const educationCode = educations.find((edu) => edu.id === educationId)?.code;
+      const nameParts = ["egitim-basvurulari", educationCode, period !== "all" ? period : "", stamp].filter(Boolean);
+      downloadEducationApplicationsExcel(exportRows, `${nameParts.join("-")}.xlsx`);
+    } catch (e) {
+      setError(e.message || "Excel raporu oluşturulamadı.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const runNationalSearch = () => {
     setNationalId(nationalIdInput.replace(/\D/g, ""));
@@ -286,6 +314,15 @@ export default function EducationApplicationsPage() {
           />
           <button type="button" className="btn btn-outline" disabled={loading} onClick={runNationalSearch}>
             Ara
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline"
+            disabled={loading || exporting || total === 0}
+            onClick={handleExportExcel}
+            title="Seçili eğitim, tarih aralığı ve diğer filtrelere göre tüm başvuruları Excel'e aktarır"
+          >
+            <i className="fa-solid fa-file-excel" /> {exporting ? "Hazırlanıyor…" : "Excel raporu al"}
           </button>
         </div>
       </div>

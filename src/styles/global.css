@@ -1501,6 +1501,20 @@ html {
   text-align: left;
 }
 
+.admin-table-row--clickable {
+  cursor: pointer;
+}
+
+.admin-table-row--clickable:hover,
+.admin-table-row--clickable.is-expanded {
+  background: #f5f8ff;
+}
+
+.admin-table-row--detail > td {
+  background: #f9fbff;
+  padding: 10px 16px 16px 32px;
+}
+
 .admin-actions {
   display: flex;
   gap: 6px;

@@ -52,37 +52,69 @@ const formatApplicationRow = (row) => {
     institutionDocPath: row.institution_doc_path || "",
     birthDate: row.birth_date || null,
     approvedAt: row.approved_at || null,
+    paymentMethod: row.payment_method || "",
+    paymentStatus: row.payment_status || "",
+    paidAt: row.paid_at || null,
   };
 };
+
+const buildApplicationFilters = (query) => {
+  const educationId = String(query.educationId || "").trim();
+  const nationalId = String(query.nationalId || "").replace(/\D/g, "");
+  const status = String(query.status || "").trim().toLowerCase();
+  const period = parseDateRangePeriod(query.period);
+  const dateFilter = buildIstanbulDateFilterSql("a.created_at", period);
+
+  const params = [];
+  const conditions = [];
+
+  if (isUuidParam(educationId)) {
+    params.push(educationId);
+    conditions.push(`a.education_id = $${params.length}`);
+  }
+  if (nationalId) {
+    params.push(`%${escapeIlikePattern(nationalId)}%`);
+    conditions.push(`a.national_id LIKE $${params.length}`);
+  }
+  if (status === "pending" || status === "approved") {
+    params.push(status);
+    conditions.push(`a.status = $${params.length}`);
+  }
+
+  const whereSql = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "WHERE TRUE";
+  return { params, whereSql, dateFilter };
+};
+
+const APPLICATION_LIST_SELECT = `SELECT a.*,
+              e.name AS education_name,
+              e.code AS education_code,
+              e.price AS education_price,
+              e.has_discount AS education_has_discount,
+              e.discount_rate AS education_discount_rate
+       FROM education_applications a
+       LEFT JOIN educations e ON e.id = a.education_id`;
+
+router.get("/api/admin/education-applications/export", auth, checkPermission("educationApplications", "can_view"), async (req, res, next) => {
+  try {
+    const { params, whereSql, dateFilter } = buildApplicationFilters(req.query);
+    const result = await pool.query(
+      `${APPLICATION_LIST_SELECT}
+       ${whereSql}${dateFilter}
+       ORDER BY a.created_at DESC`,
+      params,
+    );
+    return res.json({ data: result.rows.map(formatApplicationRow) });
+  } catch (error) {
+    return next(error);
+  }
+});
 
 router.get("/api/admin/education-applications", auth, checkPermission("educationApplications", "can_view"), async (req, res, next) => {
   try {
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize || 20)));
     const offset = (page - 1) * pageSize;
-    const educationId = String(req.query.educationId || "").trim();
-    const nationalId = String(req.query.nationalId || "").replace(/\D/g, "");
-    const status = String(req.query.status || "").trim().toLowerCase();
-    const period = parseDateRangePeriod(req.query.period);
-    const dateFilter = buildIstanbulDateFilterSql("a.created_at", period);
-
-    const params = [];
-    const conditions = [];
-
-    if (isUuidParam(educationId)) {
-      params.push(educationId);
-      conditions.push(`a.education_id = $${params.length}`);
-    }
-    if (nationalId) {
-      params.push(`%${escapeIlikePattern(nationalId)}%`);
-      conditions.push(`a.national_id LIKE $${params.length}`);
-    }
-    if (status === "pending" || status === "approved") {
-      params.push(status);
-      conditions.push(`a.status = $${params.length}`);
-    }
-
-    const whereSql = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "WHERE TRUE";
+    const { params, whereSql, dateFilter } = buildApplicationFilters(req.query);
 
     const countResult = await pool.query(
       `SELECT COUNT(*)::int AS total
@@ -93,14 +125,7 @@ router.get("/api/admin/education-applications", auth, checkPermission("education
 
     const listParams = [...params, pageSize, offset];
     const result = await pool.query(
-      `SELECT a.*,
-              e.name AS education_name,
-              e.code AS education_code,
-              e.price AS education_price,
-              e.has_discount AS education_has_discount,
-              e.discount_rate AS education_discount_rate
-       FROM education_applications a
-       LEFT JOIN educations e ON e.id = a.education_id
+      `${APPLICATION_LIST_SELECT}
        ${whereSql}${dateFilter}
        ORDER BY a.created_at DESC
        LIMIT $${listParams.length - 1} OFFSET $${listParams.length}`,

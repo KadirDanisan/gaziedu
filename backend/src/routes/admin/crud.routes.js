@@ -26,6 +26,7 @@ router.get("/api/admin/:moduleName", auth, async (req, res, next) => {
     const search = String(req.query.search || "").trim().toLowerCase();
     const readStatus = String(req.query.readStatus || "all").trim().toLowerCase();
     const salesFilter = normalizeSalesFilter(req.query.salesFilter);
+    const institutionFilter = String(req.query.institutionId || "").trim();
     const offset = (page - 1) * pageSize;
 
     if (moduleName === "instructors") {
@@ -91,6 +92,11 @@ router.get("/api/admin/:moduleName", auth, async (req, res, next) => {
       conditions.push(`sales_filter = $${params.length}`);
     }
 
+    if (institutionFilter && (config.table === "approved_educations" || config.table === "educations" || config.table === "education_calendar")) {
+      params.push(institutionFilter);
+      conditions.push(`institution_id::text = $${params.length}`);
+    }
+
     const whereSql = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
     const countSql = `SELECT COUNT(*)::int AS total FROM ${config.table} ${whereSql}`;
@@ -109,6 +115,49 @@ router.get("/api/admin/:moduleName", auth, async (req, res, next) => {
         total: countResult.rows[0].total,
         totalPages: Math.max(1, Math.ceil(countResult.rows[0].total / pageSize)),
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/api/admin/instructors/:id/educations", auth, async (req, res, next) => {
+  try {
+    const permissionResult = await pool.query(
+      `SELECT can_view FROM permissions WHERE role_id = $1 AND module_name = 'instructors' LIMIT 1`,
+      [req.user.roleId],
+    );
+    if (!permissionResult.rows[0]?.can_view) return res.status(403).json({ message: "Yetkiniz yok." });
+
+    const adminUserId = String(req.params.id || "").trim();
+    const result = await pool.query(
+      `SELECT e.id, e.name, e.code, e.sales_filter, e.created_at, 'education'::text AS source_type,
+              NULL::date AS calendar_date, inst.name AS institution_name
+       FROM educations e
+       INNER JOIN instructors ins ON ins.id = e.instructor_id
+       LEFT JOIN institutions inst ON inst.id = e.institution_id
+       WHERE ins.admin_user_id::text = $1
+       UNION ALL
+       SELECT ec.id, ec.education_name AS name, ec.code, ec.sales_filter, ec.created_at, 'calendar'::text AS source_type,
+              ec.calendar_date::date AS calendar_date, inst.name AS institution_name
+       FROM education_calendar ec
+       INNER JOIN instructors ins ON ins.id = ec.instructor_id
+       LEFT JOIN institutions inst ON inst.id = ec.institution_id
+       WHERE ins.admin_user_id::text = $1
+       ORDER BY source_type ASC, created_at DESC`,
+      [adminUserId],
+    );
+    res.json({
+      data: result.rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        code: row.code,
+        salesFilter: row.sales_filter,
+        createdAt: row.created_at,
+        sourceType: row.source_type,
+        calendarDate: row.calendar_date,
+        institutionName: row.institution_name,
+      })),
     });
   } catch (error) {
     next(error);

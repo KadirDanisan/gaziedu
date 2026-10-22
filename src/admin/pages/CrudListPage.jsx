@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useAdminAuth } from "../context/AdminAuthContext";
 import { useAdminData } from "../context/AdminDataContext";
 import { adminApi } from "../api";
@@ -269,6 +269,9 @@ export default function CrudListPage({ moduleKey }) {
   const [search, setSearch] = useState("");
   const [readStatusFilter, setReadStatusFilter] = useState("all");
   const [salesFilterTab, setSalesFilterTab] = useState("");
+  const [institutionFilter, setInstitutionFilter] = useState("");
+  const [expandedInstructorId, setExpandedInstructorId] = useState("");
+  const [instructorEducations, setInstructorEducations] = useState({});
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState([]);
   const [totalPages, setTotalPages] = useState(1);
@@ -311,6 +314,8 @@ export default function CrudListPage({ moduleKey }) {
   const educationsById = Object.fromEntries((data.educations || []).map((education) => [education.id, education]));
   const lockEducationFromApproved = isEducationsModule && Boolean(String(form._approvedEducationId || "").trim());
   const isSalesFilterModule = isApprovedEducationsModule || isEducationsModule;
+  const showInstitutionFilter = isSalesFilterModule && salesFilterRequiresInstitution(salesFilterTab);
+  const activeInstitutionFilter = showInstitutionFilter ? institutionFilter : "";
   const formNeedsInstitution = salesFilterRequiresInstitution(form.salesFilter);
   const formIsPaidGuzem = isEducationsModule && normalizeSalesFilter(form.salesFilter) === "guzem-ucretli";
   const formFields = isContactFormsModule
@@ -341,6 +346,7 @@ export default function CrudListPage({ moduleKey }) {
         search,
         isContactFormsModule ? readStatusFilter : "all",
         isSalesFilterModule ? salesFilterTab : "",
+        activeInstitutionFilter,
       );
       setRows(resultWithFilter.data);
       setTotalPages(resultWithFilter.pagination.totalPages);
@@ -353,11 +359,32 @@ export default function CrudListPage({ moduleKey }) {
 
   useEffect(() => {
     loadRows();
-  }, [moduleKey, page, search, readStatusFilter, salesFilterTab]);
+  }, [moduleKey, page, search, readStatusFilter, salesFilterTab, activeInstitutionFilter]);
 
   useEffect(() => {
     setSalesFilterTab("");
+    setInstitutionFilter("");
+    setExpandedInstructorId("");
+    setInstructorEducations({});
   }, [moduleKey]);
+
+  const toggleInstructorEducations = async (instructorId) => {
+    if (expandedInstructorId === instructorId) {
+      setExpandedInstructorId("");
+      return;
+    }
+    setExpandedInstructorId(instructorId);
+    setInstructorEducations((prev) => ({ ...prev, [instructorId]: { loading: true, error: "", items: [] } }));
+    try {
+      const result = await adminApi.getInstructorEducations(instructorId);
+      setInstructorEducations((prev) => ({ ...prev, [instructorId]: { loading: false, error: "", items: result?.data || [] } }));
+    } catch (err) {
+      setInstructorEducations((prev) => ({
+        ...prev,
+        [instructorId]: { loading: false, error: err.message || "Eğitimler yüklenemedi.", items: [] },
+      }));
+    }
+  };
 
   useEffect(() => {
     data.loadFormOptionsForModule(moduleKey).catch(() => {});
@@ -825,6 +852,23 @@ export default function CrudListPage({ moduleKey }) {
             <option value="read">Okunanlar</option>
           </select>
         )}
+        {showInstitutionFilter && (
+          <select
+            value={institutionFilter}
+            aria-label="Kurum filtresi"
+            onChange={(event) => {
+              setInstitutionFilter(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">Tüm Kurumlar</option>
+            {(data.institutions || []).map((institution) => (
+              <option key={institution.id} value={institution.id}>
+                {institution.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {isSalesFilterModule && (
@@ -876,11 +920,25 @@ export default function CrudListPage({ moduleKey }) {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id}>
-                  {config.fields.slice(0, 4).map((field) => (
-                    <td key={field}>{renderTableCellValue(field, row[field], { rolesById, educationCategoriesById, institutionsById, educationInstructorsById, educationsById })}</td>
+                <Fragment key={row.id}>
+                <tr
+                  className={isInstructorsModule ? `admin-table-row--clickable${expandedInstructorId === row.id ? " is-expanded" : ""}` : undefined}
+                  onClick={isInstructorsModule ? () => toggleInstructorEducations(row.id) : undefined}
+                  title={isInstructorsModule ? "Eğitmenin eğitimlerini görmek için tıklayın" : undefined}
+                >
+                  {config.fields.slice(0, 4).map((field, index) => (
+                    <td key={field}>
+                      {isInstructorsModule && index === 0 ? (
+                        <i
+                          className={`fa-solid ${expandedInstructorId === row.id ? "fa-chevron-down" : "fa-chevron-right"}`}
+                          style={{ marginRight: 8, fontSize: "0.75rem", color: "#647086" }}
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                      {renderTableCellValue(field, row[field], { rolesById, educationCategoriesById, institutionsById, educationInstructorsById, educationsById })}
+                    </td>
                   ))}
-                  <td>
+                  <td onClick={(event) => event.stopPropagation()}>
                     <div className="admin-actions">
                       <button type="button" onClick={() => openDetail(row)}>
                         Detay
@@ -916,6 +974,47 @@ export default function CrudListPage({ moduleKey }) {
                     </div>
                   </td>
                 </tr>
+                {isInstructorsModule && expandedInstructorId === row.id ? (
+                  <tr className="admin-table-row--detail">
+                    <td colSpan={config.fields.slice(0, 4).length + 1}>
+                      {(() => {
+                        const state = instructorEducations[row.id] || { loading: true, error: "", items: [] };
+                        if (state.loading) return <p style={{ margin: 0 }}>Eğitimler yükleniyor...</p>;
+                        if (state.error) return <p className="admin-form-error" style={{ margin: 0 }}>{state.error}</p>;
+                        if (!state.items.length) return <p style={{ margin: 0, color: "#647086" }}>Bu eğitmene atanmış eğitim yok.</p>;
+                        return (
+                          <table className="admin-table" style={{ margin: 0 }}>
+                            <thead>
+                              <tr>
+                                <th>Kod</th>
+                                <th>Eğitim Adı</th>
+                                <th>Kaynak</th>
+                                <th>Satış Filtresi</th>
+                                <th>Kurum</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {state.items.map((item) => (
+                                <tr key={`${item.sourceType}-${item.id}`}>
+                                  <td>{item.code || "-"}</td>
+                                  <td>{item.name || "-"}</td>
+                                  <td>
+                                    {item.sourceType === "calendar"
+                                      ? `Eğitim Takvimi${item.calendarDate ? ` (${new Date(item.calendarDate).toLocaleDateString("tr-TR")})` : ""}`
+                                      : "Eğitim Listesi"}
+                                  </td>
+                                  <td>{salesFilterLabel(item.salesFilter) || "-"}</td>
+                                  <td>{item.institutionName || "-"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        );
+                      })()}
+                    </td>
+                  </tr>
+                ) : null}
+                </Fragment>
               ))}
             </tbody>
           </table>

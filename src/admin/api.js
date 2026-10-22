@@ -41,8 +41,8 @@ export function invalidateAdminCachePrefix(prefix) {
   }
 }
 
-function moduleListKey(moduleName, page, search, readStatus, salesFilter) {
-  return `admin-module:${moduleName}:${page}:${search}:${readStatus}:${salesFilter}`;
+function moduleListKey(moduleName, page, search, readStatus, salesFilter, institutionId) {
+  return `admin-module:${moduleName}:${page}:${search}:${readStatus}:${salesFilter}:${institutionId}`;
 }
 
 /** 502/503/504 veya yanlış URL: gövde HTML olur; response.json() SyntaxError verir. */
@@ -145,14 +145,16 @@ export const adminApi = {
     const key = `admin-activity-logs:${page}:${pageSize}`;
     return adminSingleFlight(key, () => request(`/admin/activity-logs?page=${page}&pageSize=${pageSize}`));
   },
-  getModule: (moduleName, page = 1, search = "", readStatus = "all", salesFilter = "") => {
-    const key = moduleListKey(moduleName, page, search, readStatus, salesFilter);
+  getModule: (moduleName, page = 1, search = "", readStatus = "all", salesFilter = "", institutionId = "") => {
+    const key = moduleListKey(moduleName, page, search, readStatus, salesFilter, institutionId);
     return adminSingleFlight(key, () =>
       request(
-        `/admin/${moduleName}?page=${page}&search=${encodeURIComponent(search)}&readStatus=${encodeURIComponent(readStatus)}&salesFilter=${encodeURIComponent(salesFilter)}`,
+        `/admin/${moduleName}?page=${page}&search=${encodeURIComponent(search)}&readStatus=${encodeURIComponent(readStatus)}&salesFilter=${encodeURIComponent(salesFilter)}&institutionId=${encodeURIComponent(institutionId)}`,
       ),
     );
   },
+  getInstructorEducations: (instructorId) =>
+    request(`/admin/instructors/${encodeURIComponent(instructorId)}/educations`),
   createItem: (moduleName, payload) => {
     invalidateAdminCachePrefix(`admin-module:${moduleName}:`);
     return request(`/admin/${moduleName}`, { method: "POST", body: JSON.stringify(payload) });
@@ -395,6 +397,13 @@ export const adminApi = {
     if (nationalId) params.set("nationalId", nationalId);
     if (status) params.set("status", status);
     return request(`/admin/education-applications?${params.toString()}`);
+  },
+  exportEducationApplications: ({ period = "all", educationId = "", nationalId = "", status = "" } = {}) => {
+    const params = new URLSearchParams({ period: String(period || "all") });
+    if (educationId) params.set("educationId", educationId);
+    if (nationalId) params.set("nationalId", nationalId);
+    if (status) params.set("status", status);
+    return request(`/admin/education-applications/export?${params.toString()}`);
   },
   getEducationApplicationEducations: () => request("/admin/education-applications/educations"),
   getBulkApplicationEducations: () => request("/admin/education-applications/bulk-educations"),
