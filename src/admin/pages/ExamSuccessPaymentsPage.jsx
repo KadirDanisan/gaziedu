@@ -64,6 +64,7 @@ function PaymentReceivedPill({ paid, interactive, busy, onRequestConfirm }) {
 export default function ExamSuccessPaymentsPage() {
   const { hasPermission } = useAdminAuth();
   const canUpdate = hasPermission("examSuccessPayments", "canUpdate");
+  const canDelete = hasPermission("examSuccessPayments", "canDelete");
 
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
@@ -75,6 +76,8 @@ export default function ExamSuccessPaymentsPage() {
   const [error, setError] = useState("");
   const [busyPaymentId, setBusyPaymentId] = useState("");
   const [paymentConfirmId, setPaymentConfirmId] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const runSearch = () => {
     setSearch(searchInput.trim());
@@ -111,6 +114,27 @@ export default function ExamSuccessPaymentsPage() {
       setError(e.message || "Güncellenemedi.");
     } finally {
       setBusyPaymentId("");
+    }
+  };
+
+  const submitDelete = async () => {
+    const id = deleteConfirm?.id;
+    if (!id) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await adminApi.deleteExamSuccessPayment(id);
+      setDeleteConfirm(null);
+      if (rows.length === 1 && page > 1) {
+        setPage((p) => p - 1);
+      } else {
+        await load();
+      }
+    } catch (e) {
+      setError(e.message || "Kayıt silinemedi.");
+      setDeleteConfirm(null);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -173,6 +197,7 @@ export default function ExamSuccessPaymentsPage() {
                   <th>Son sınav puanı</th>
                   <th>Son sınav zamanı</th>
                   <th>Ödeme alındı mı</th>
+                  {canDelete ? <th>Aksiyon</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -198,6 +223,20 @@ export default function ExamSuccessPaymentsPage() {
                           onRequestConfirm={() => setPaymentConfirmId(row.id)}
                         />
                       </td>
+                      {canDelete ? (
+                        <td>
+                          <div className="admin-actions">
+                            <button
+                              type="button"
+                              className="is-danger"
+                              disabled={deleting || Boolean(busyPaymentId)}
+                              onClick={() => setDeleteConfirm(row)}
+                            >
+                              Sil
+                            </button>
+                          </div>
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })}
@@ -285,6 +324,66 @@ export default function ExamSuccessPaymentsPage() {
                   disabled={Boolean(busyPaymentId)}
                 >
                   {busyPaymentId ? "…" : "Evet"}
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteConfirm ? (
+        <div
+          className="admin-modal-backdrop"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !deleting) setDeleteConfirm(null);
+          }}
+        >
+          <div
+            className="admin-modal admin-modal--confirm"
+            style={{ maxWidth: 440, width: "min(440px, 94vw)" }}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="exam-success-delete-title"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <header className="admin-modal__header admin-modal__header--confirm">
+              <div className="admin-modal__confirm-icon" aria-hidden="true">
+                <i className="fa-solid fa-trash" style={{ fontSize: "1.4rem", color: "#dc2626" }} />
+              </div>
+              <div className="admin-modal__header-text">
+                <h3 id="exam-success-delete-title" className="admin-modal__title">
+                  Kaydı sil
+                </h3>
+                <p className="admin-modal__subtitle admin-modal__subtitle--dense">
+                  <strong>{formatPersonName(deleteConfirm.participantName)}</strong> · T.C. {deleteConfirm.nationalId}
+                  <br />
+                  {deleteConfirm.educationCode}
+                  {deleteConfirm.educationName ? ` — ${deleteConfirm.educationName}` : ""}
+                </p>
+                <p className="admin-modal__subtitle admin-modal__subtitle--dense" style={{ marginTop: 8 }}>
+                  Bu kayıt kalıcı olarak silinecek; sınav sonuçları ve sertifika listesinden de kalkacaktır. Emin misiniz?
+                </p>
+              </div>
+            </header>
+            <footer className="admin-modal__footer">
+              <div className="admin-modal-actions admin-modal-actions--stretch">
+                <button
+                  type="button"
+                  className="btn btn-outline btn--modal-secondary"
+                  onClick={() => setDeleteConfirm(null)}
+                  disabled={deleting}
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--modal-primary"
+                  style={{ background: "#dc2626", borderColor: "#dc2626" }}
+                  onClick={submitDelete}
+                  disabled={deleting}
+                >
+                  {deleting ? "Siliniyor…" : "Evet, sil"}
                 </button>
               </div>
             </footer>

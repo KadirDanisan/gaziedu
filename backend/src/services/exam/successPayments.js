@@ -62,7 +62,7 @@ const fetchExamSuccessPaymentRows = async ({ search = "", period = "all", page, 
             COALESCE(ae.name, '') AS education_name
      ${successPaymentsJoinSql}
      ${whereSql}
-     ORDER BY b.best_recorded_at DESC NULLS LAST, b.updated_at DESC, b.education_code ASC, b.national_id ASC`;
+     ORDER BY b.last_attempt_at DESC NULLS LAST, b.updated_at DESC, b.education_code ASC, b.national_id ASC`;
 
   const listParams = [...params];
   if (page != null && pageSize != null) {

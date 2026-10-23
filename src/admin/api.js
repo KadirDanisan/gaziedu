@@ -421,6 +421,12 @@ export const adminApi = {
       body: JSON.stringify({ paymentReceived: true }),
     });
   },
+  deleteExamSuccessPayment: (id) => {
+    invalidateAdminCachePrefix("admin-exam-success-payments:");
+    invalidateAdminCachePrefix("admin-exam-results:");
+    invalidateAdminCachePrefix("admin-certificate-list:");
+    return request(`/admin/exam-success-payments/${id}`, { method: "DELETE" });
+  },
   getMessagingAdmins: () =>
     adminSingleFlight("admin-messaging-admins", () => request("/admin/messaging/admins")),
   getMessagingAnnouncements: (page = 1) => {

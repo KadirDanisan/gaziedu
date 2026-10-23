@@ -1,6 +1,6 @@
 import { Router } from "express";
 import pool from "../../db/pool.js";
-import { auth, checkPermission } from "../../middleware/auth.js";
+import { auth, checkPermission, isUuidParam } from "../../middleware/auth.js";
 import { toApiObject } from "../../utils/apiTransform.js";
 import { writeActivityLog } from "../../services/activityLog.js";
 import { EXAM_PORTAL_MAX_STARTS } from "../../db/migrations/index.js";
@@ -233,6 +233,24 @@ router.patch("/api/admin/exam-success-payments/:id/payment-received", auth, chec
   }
 });
 
+router.delete("/api/admin/exam-success-payments/:id", auth, checkPermission("examSuccessPayments", "can_delete"), async (req, res, next) => {
+  try {
+    const id = String(req.params.id || "").trim();
+    if (!isUuidParam(id)) return res.status(400).json({ message: "Geçersiz kayıt." });
+    const previousResult = await pool.query(`SELECT * FROM exam_portal_best_scores WHERE id = $1 LIMIT 1`, [id]);
+    const previous = previousResult.rows[0];
+    if (!previous) return res.status(404).json({ message: "Kayıt bulunamadı." });
+    if (previous.edevlet_processed === true) {
+      return res.status(400).json({ message: "E-devlete işlenmiş kayıt silinemez. Önce sertifika listesinden e-devlet durumunu Hayır yapın." });
+    }
+    await pool.query(`DELETE FROM exam_portal_best_scores WHERE id = $1`, [id]);
+    await writeActivityLog({ req, action: "delete", moduleName: "examSuccessPayments", entityId: id, oldData: previous });
+    return res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get("/api/admin/exam-success-payments", auth, checkPermission("examSuccessPayments", "can_view"), async (req, res, next) => {
   try {
     const page = Math.max(1, Number(req.query.page || 1));
@@ -349,7 +367,7 @@ router.get("/api/admin/exam-results", auth, checkPermission("examResults", "can_
             COALESCE(NULLIF(TRIM(b.participant_name), ''), NULLIF(TRIM(latest_attempt.participant_name), ''), '') AS participant_name
      ${joinSql}
      ${whereSql}
-     ORDER BY b.updated_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+     ORDER BY b.last_attempt_at DESC NULLS LAST, b.updated_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     const [countResult, listResult] = await Promise.all([
       pool.query(countSql, params),
       pool.query(listSql, [...params, pageSize, offset]),
