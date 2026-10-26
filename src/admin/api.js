@@ -406,6 +406,16 @@ export const adminApi = {
     return request(`/admin/education-applications/export?${params.toString()}`);
   },
   getEducationApplicationEducations: () => request("/admin/education-applications/educations"),
+  getInstructorVerifications: ({ page = 1, status = "", search = "" } = {}) => {
+    const params = new URLSearchParams({ page: String(page) });
+    if (status) params.set("status", status);
+    if (search) params.set("search", search);
+    return request(`/admin/instructor-verifications?${params.toString()}`);
+  },
+  verifyInstructorVerification: (id) =>
+    request(`/admin/instructor-verifications/${id}/verify`, { method: "PATCH", body: JSON.stringify({}) }),
+  rejectInstructorVerification: (id) =>
+    request(`/admin/instructor-verifications/${id}/reject`, { method: "PATCH", body: JSON.stringify({}) }),
   getBulkApplicationEducations: () => request("/admin/education-applications/bulk-educations"),
   downloadBulkApplicationsTemplate: () => requestBlob("/admin/education-applications/bulk-template", "Şablon indirilemedi."),
   bulkImportEducationApplications: (educationId, rows) =>

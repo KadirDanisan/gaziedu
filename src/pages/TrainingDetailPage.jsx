@@ -5,9 +5,14 @@ import { userApi } from "../api/userApi";
 import TrainingCurriculum from "../components/TrainingCurriculum";
 import PromoVideoModal from "../components/PromoVideoModal";
 import PaidApplicationModal from "../components/PaidApplicationModal";
+import InstructorVerificationModal from "../components/InstructorVerificationModal";
 import { describeVideoSource } from "../utils/moduleResources";
 import { useAuth } from "../context/AuthContext";
-import { normalizeSalesFilter, usesFirstModulePreview } from "../constants/salesFilters";
+import {
+  normalizeSalesFilter,
+  salesFilterRequiresInstructorVerification,
+  usesFirstModulePreview,
+} from "../constants/salesFilters";
 
 const COURSE_ID_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -348,6 +353,8 @@ function TrainingDetailPage() {
   const [promoVideoOpen, setPromoVideoOpen] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
   const [partnerRedirectOpen, setPartnerRedirectOpen] = useState(false);
+  const [instructorVerifyOpen, setInstructorVerifyOpen] = useState(false);
+  const [accessRefreshKey, setAccessRefreshKey] = useState(0);
   const [curriculumAccess, setCurriculumAccess] = useState({
     loading: false,
     hasAccess: false,
@@ -421,6 +428,7 @@ function TrainingDetailPage() {
   }, [course?.id, slug, course, displayCourse]);
 
   const isPaidGuzem = normalizeSalesFilter(activeCourse?.salesFilter) === "guzem-ucretli";
+  const needsInstructorVerification = salesFilterRequiresInstructorVerification(activeCourse?.salesFilter);
   const usesModulePreview = usesFirstModulePreview(activeCourse?.salesFilter);
   const needsCurriculumAuth = usesModulePreview;
 
@@ -444,7 +452,7 @@ function TrainingDetailPage() {
 
     (async () => {
       try {
-        if (!isPaidGuzem) {
+        if (!isPaidGuzem && !needsInstructorVerification) {
           const mods = await userApi.getEducationApplicationModules(activeCourse.id);
           if (cancelled) return;
           setCurriculumAccess({ loading: false, hasAccess: true, status: "open" });
@@ -468,7 +476,11 @@ function TrainingDetailPage() {
         }
       } catch {
         if (cancelled) return;
-        setCurriculumAccess({ loading: false, hasAccess: false, status: isPaidGuzem ? "none" : "login" });
+        setCurriculumAccess({
+          loading: false,
+          hasAccess: false,
+          status: isPaidGuzem ? "none" : needsInstructorVerification ? "verification_required" : "login",
+        });
         setUnlockedModules(null);
       }
     })();
@@ -480,12 +492,24 @@ function TrainingDetailPage() {
     needsCurriculumAuth,
     usesModulePreview,
     isPaidGuzem,
+    needsInstructorVerification,
     activeCourse?.id,
     activeCourse?.sourceType,
     isReady,
     isLoggedIn,
     user?.email,
+    accessRefreshKey,
   ]);
+
+  useEffect(() => {
+    if (!isReady || !needsInstructorVerification) return;
+    if (searchParams.get("egitmen") !== "1") return;
+    if (!isLoggedIn) return;
+    setInstructorVerifyOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("egitmen");
+    setSearchParams(next, { replace: true });
+  }, [isReady, isLoggedIn, needsInstructorVerification, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!isReady || !isPaidGuzem) return;
@@ -522,6 +546,22 @@ function TrainingDetailPage() {
       return;
     }
     setApplyOpen(true);
+  };
+
+  const instructorVerified = needsInstructorVerification && curriculumAccess.hasAccess;
+
+  const openInstructorEntry = () => {
+    if (!isReady) return;
+    if (!isLoggedIn) {
+      const nextPath = `${location.pathname}?egitmen=1`;
+      navigate(`/kullanici-islemleri?next=${encodeURIComponent(nextPath)}`);
+      return;
+    }
+    if (instructorVerified) {
+      scrollTrainingDetailSectionIntoView("moduller");
+      return;
+    }
+    setInstructorVerifyOpen(true);
   };
 
   const curriculumUnlocked =
@@ -734,7 +774,9 @@ function TrainingDetailPage() {
                       }
                     : undefined
                 }
-                onApplyClick={isPaidGuzem ? openPaidApplication : undefined}
+                onApplyClick={
+                  isPaidGuzem ? openPaidApplication : needsInstructorVerification && isLoggedIn ? openInstructorEntry : undefined
+                }
                 onExamPortalClick={
                   needsCurriculumAuth && curriculumUnlocked ? goToExamPortal : undefined
                 }
@@ -809,6 +851,17 @@ function TrainingDetailPage() {
             >
               Başvuru Formunu Doldur
             </button>
+          ) : needsInstructorVerification ? (
+            <button type="button" className="btn btn-outline training-detail-btn" onClick={openInstructorEntry}>
+              <i className="fa-solid fa-chalkboard-user" aria-hidden />{" "}
+              {!isLoggedIn
+                ? "Eğitmen Girişi"
+                : instructorVerified
+                  ? "Eğitim İçeriğine Git"
+                  : curriculumAccess.status === "verification_pending"
+                    ? "Doğrulama Bekleniyor"
+                    : "Eğitmen Doğrulama"}
+            </button>
           ) : institutionSiteHref ? (
             <button
               type="button"
@@ -853,6 +906,14 @@ function TrainingDetailPage() {
         onClose={() => setApplyOpen(false)}
         course={c}
         user={user}
+      />
+
+      <InstructorVerificationModal
+        open={instructorVerifyOpen}
+        onClose={() => setInstructorVerifyOpen(false)}
+        course={c}
+        user={user}
+        onStatusChange={() => setAccessRefreshKey((key) => key + 1)}
       />
 
       {partnerRedirectOpen && institutionSiteHref ? (

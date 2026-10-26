@@ -52,6 +52,12 @@ export const userApi = {
     request(`/users/education-applications/access/${encodeURIComponent(educationId)}`),
   getEducationApplicationModules: (educationId) =>
     request(`/users/education-applications/${encodeURIComponent(educationId)}/modules`),
+  getInstructorVerification: () => request("/users/instructor-verification"),
+  submitInstructorVerification: ({ email, educationId } = {}) =>
+    request("/users/instructor-verification", {
+      method: "POST",
+      body: JSON.stringify({ email, educationId }),
+    }),
   getExamPortalLink: (educationId) =>
     request(`/users/educations/${encodeURIComponent(educationId)}/exam-portal-link`, {
       method: "POST",

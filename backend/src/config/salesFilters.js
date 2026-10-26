@@ -3,8 +3,18 @@ const SALES_FILTERS = [
   { key: "guzem-ucretli", label: "Ücretli Eğitim Programları", requiresInstitution: false },
   { key: "egitim-isbirligi-sertifikasyon", label: "İş Birliği ve Sertifika Programları", requiresInstitution: true },
   { key: "guzem-kamu-yarari-ucretsiz", label: "Kamu Yararına Yönelik Ücretsiz Eğitim Programları", requiresInstitution: false },
-  { key: "yok-mikro-yeterlilik", label: "YÖK Mikro Yeterlilik Programları", requiresInstitution: false },
+  {
+    key: "turk-egitim-sen",
+    label: "Türk Eğitim Sen İşbirliği",
+    requiresInstitution: false,
+    requiresInstructorVerification: true,
+  },
 ];
+
+/** Eski anahtar → yeni anahtar (DB'deki kayıtlar migration ile taşınır). */
+const LEGACY_SALES_FILTER_KEYS = {
+  "yok-mikro-yeterlilik": "turk-egitim-sen",
+};
 
 const DEFAULT_SALES_FILTER = "egitim-isbirligi-sertifikasyon";
 
@@ -13,7 +23,8 @@ const SALES_FILTER_KEYS = SALES_FILTERS.map((item) => item.key);
 const salesFilterByKey = Object.fromEntries(SALES_FILTERS.map((item) => [item.key, item]));
 
 const normalizeSalesFilter = (value) => {
-  const key = String(value ?? "").trim().toLowerCase();
+  const raw = String(value ?? "").trim().toLowerCase();
+  const key = LEGACY_SALES_FILTER_KEYS[raw] || raw;
   return salesFilterByKey[key] ? key : "";
 };
 
@@ -22,10 +33,14 @@ const salesFilterLabel = (value) => salesFilterByKey[normalizeSalesFilter(value)
 const salesFilterRequiresInstitution = (value) =>
   Boolean(salesFilterByKey[normalizeSalesFilter(value)]?.requiresInstitution);
 
+/** Müfredat ve sınav erişimi için admin panelinden eğitmen doğrulaması gereken türler. */
+const salesFilterRequiresInstructorVerification = (value) =>
+  Boolean(salesFilterByKey[normalizeSalesFilter(value)]?.requiresInstructorVerification);
+
 const FIRST_MODULE_PREVIEW_FILTERS = [
   "guzem-ucretli",
   "guzem-kamu-yarari-ucretsiz",
-  "yok-mikro-yeterlilik",
+  "turk-egitim-sen",
 ];
 
 const usesFirstModulePreview = (value) => FIRST_MODULE_PREVIEW_FILTERS.includes(normalizeSalesFilter(value));
@@ -33,11 +48,13 @@ const usesFirstModulePreview = (value) => FIRST_MODULE_PREVIEW_FILTERS.includes(
 export {
   SALES_FILTERS,
   SALES_FILTER_KEYS,
+  LEGACY_SALES_FILTER_KEYS,
   DEFAULT_SALES_FILTER,
   salesFilterByKey,
   normalizeSalesFilter,
   salesFilterLabel,
   salesFilterRequiresInstitution,
+  salesFilterRequiresInstructorVerification,
   FIRST_MODULE_PREVIEW_FILTERS,
   usesFirstModulePreview,
 };

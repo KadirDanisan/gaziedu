@@ -14,6 +14,14 @@ import { formatEducationReviewRow, formatRatingAggregateFields } from "../servic
 import { extractEducationContentHtml } from "../services/education/content.js";
 import { loadEducationModules } from "../services/education/modules.js";
 import { signExamPortalLink } from "../examPortalLinkToken.js";
+import { salesFilterRequiresInstructorVerification } from "../config/salesFilters.js";
+import {
+  getInstructorVerification,
+  isInstructorVerified,
+  instructorAccessStatus,
+} from "../services/users/instructorVerification.js";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const router = Router();
 
@@ -549,6 +557,53 @@ router.post("/api/users/education-reviews", userAuth, async (req, res, next) => 
   }
 });
 
+router.get("/api/users/instructor-verification", userAuth, async (req, res, next) => {
+  try {
+    const verification = await getInstructorVerification(req.user.id);
+    return res.json({ status: instructorAccessStatus(verification), verification });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post("/api/users/instructor-verification", userAuth, async (req, res, next) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!EMAIL_PATTERN.test(email)) {
+      return res.status(400).json({ message: "Geçerli bir e-posta adresi giriniz." });
+    }
+    const educationIdRaw = String(req.body?.educationId || "").trim();
+    const educationId = isUuidParam(educationIdRaw) ? educationIdRaw : null;
+
+    const userRow = await pool.query(`SELECT id FROM normal_users WHERE id = $1 LIMIT 1`, [req.user.id]);
+    if (!userRow.rows[0]) {
+      return res.status(401).json({ message: "Kullanıcı bulunamadı." });
+    }
+
+    const existing = await getInstructorVerification(req.user.id);
+    if (existing?.status === "verified") {
+      return res.json({ status: "verified", verification: existing });
+    }
+
+    await pool.query(
+      `INSERT INTO instructor_verifications (user_id, verification_email, education_id, status)
+       VALUES ($1, $2, $3, 'pending')
+       ON CONFLICT (user_id) DO UPDATE SET
+         verification_email = EXCLUDED.verification_email,
+         education_id = COALESCE(EXCLUDED.education_id, instructor_verifications.education_id),
+         status = 'pending',
+         verified_at = NULL,
+         verified_by = NULL,
+         updated_at = NOW()`,
+      [req.user.id, email, educationId],
+    );
+    const verification = await getInstructorVerification(req.user.id);
+    return res.status(201).json({ status: instructorAccessStatus(verification), verification });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.get("/api/users/education-applications/access/:educationId", userAuth, async (req, res, next) => {
   try {
     const educationId = String(req.params.educationId || "").trim();
@@ -562,6 +617,11 @@ router.get("/api/users/education-applications/access/:educationId", userAuth, as
     );
     if (!education.rows[0]) {
       return res.status(404).json({ message: "Eğitim bulunamadı." });
+    }
+    if (salesFilterRequiresInstructorVerification(education.rows[0].sales_filter)) {
+      const status = instructorAccessStatus(await getInstructorVerification(req.user.id));
+      const verified = status === "verified";
+      return res.json({ hasAccess: verified, status, curriculumLocked: !verified });
     }
     if (String(education.rows[0].sales_filter || "").toLowerCase() !== "guzem-ucretli") {
       return res.json({ hasAccess: true, status: "open", curriculumLocked: false });
@@ -609,6 +669,12 @@ router.get("/api/users/education-applications/:educationId/modules", userAuth, a
     );
     if (!education.rows[0]) {
       return res.status(404).json({ message: "Eğitim bulunamadı." });
+    }
+    if (salesFilterRequiresInstructorVerification(education.rows[0].sales_filter)) {
+      if (!(await isInstructorVerified(req.user.id))) {
+        return res.status(403).json({ message: "Bu eğitimin içeriğine erişmek için eğitmen doğrulamanızın onaylanması gerekir." });
+      }
+      return res.json({ modules: await loadEducationModules(educationId) });
     }
     if (String(education.rows[0].sales_filter || "").toLowerCase() !== "guzem-ucretli") {
       return res.json({ modules: await loadEducationModules(educationId) });
@@ -689,6 +755,10 @@ router.post("/api/users/educations/:educationId/exam-portal-link", userAuth, asy
         educationCode: String(edu.code || "").toUpperCase(),
         participantName,
       });
+    }
+
+    if (salesFilterRequiresInstructorVerification(edu.sales_filter) && !(await isInstructorVerified(req.user.id))) {
+      return res.status(403).json({ message: "Sınav portalına erişim için eğitmen doğrulamanızın onaylanması gerekir." });
     }
 
     // Ücretsiz / diğer türler: profil bilgisiyle token

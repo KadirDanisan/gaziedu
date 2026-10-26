@@ -514,7 +514,20 @@ function TrainingCurriculum({
         ? "Başvurunuz kaydedildi ancak ödemeniz tamamlanmadı. Ödemeyi tamamladıktan sonra başvurunuz incelemeye alınır."
         : lockStatus === "login"
         ? "Müfredata erişmek için oturum açmanız gerekir."
-        : "Ücretli eğitim müfredatı, başvurunuz onaylandıktan ve başvuru yaptığınız hesapla giriş yaptıktan sonra açılır.";
+        : lockStatus === "verification_pending"
+          ? "Eğitmen doğrulama talebiniz yönetici onayı bekliyor. Onaylandıktan sonra eğitim içeriği bu hesapla açılır."
+          : lockStatus === "verification_rejected"
+            ? "Eğitmen doğrulama talebiniz onaylanmadı. E-posta adresinizi kontrol edip tekrar doğrulamaya gönderebilirsiniz."
+            : lockStatus === "verification_required"
+              ? "Eğitim içeriğine erişmek için Eğitmen Doğrulama adımını tamamlamanız gerekir."
+              : "Ücretli eğitim müfredatı, başvurunuz onaylandıktan ve başvuru yaptığınız hesapla giriş yaptıktan sonra açılır.";
+  const isWaitingStatus = lockStatus === "pending" || lockStatus === "verification_pending";
+  const isVerificationStatus = String(lockStatus).startsWith("verification_");
+  const applyLabel = isVerificationStatus
+    ? "Eğitmen Doğrulama"
+    : lockStatus === "unpaid"
+      ? "Ödemeyi Tamamla"
+      : "Başvuru Formunu Doldur";
 
   return (
     <div className={`curriculum${locked ? " curriculum--locked" : ""}`}>
@@ -561,9 +574,9 @@ function TrainingCurriculum({
                 Giriş yap
               </button>
             ) : null}
-            {typeof onApplyClick === "function" && lockStatus !== "pending" && lockStatus !== "login" ? (
+            {typeof onApplyClick === "function" && !isWaitingStatus && lockStatus !== "login" ? (
               <button type="button" className="btn" onClick={onApplyClick}>
-                {lockStatus === "unpaid" ? "Ödemeyi Tamamla" : "Başvuru Formunu Doldur"}
+                {applyLabel}
               </button>
             ) : null}
           </div>
@@ -596,7 +609,7 @@ function TrainingCurriculum({
           <p>
             {showingGuestPreview
               ? `İlk modül önizlemedir: videonun yalnızca ilk ${PREVIEW_SECONDS} saniyesi izlenebilir; PDF dosyaları indirilemez, yalnızca görüntülenir. Sunum dosyaları giriş yapılmadan görünmez. Tam video, indirme ve diğer modüller için giriş yapmanız gerekir.`
-              : lockStatus === "pending" || lockStatus === "unpaid" || lockStatus === "none"
+              : lockStatus === "pending" || lockStatus === "unpaid" || lockStatus === "none" || isVerificationStatus
                 ? lockMessage
                 : "Diğer modüllere erişmek için oturum açmanız gerekir."}
           </p>
@@ -606,9 +619,9 @@ function TrainingCurriculum({
                 Giriş yap
               </button>
             ) : null}
-            {typeof onApplyClick === "function" && lockStatus !== "pending" ? (
+            {typeof onApplyClick === "function" && !isWaitingStatus ? (
               <button type="button" className="btn" onClick={onApplyClick}>
-                {lockStatus === "unpaid" ? "Ödemeyi Tamamla" : "Başvuru Formunu Doldur"}
+                {applyLabel}
               </button>
             ) : null}
           </div>

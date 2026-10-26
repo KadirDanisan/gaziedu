@@ -80,7 +80,7 @@ const migrateApprovedEducationsTable = async () => {
   await pool.query(`CREATE INDEX IF NOT EXISTS approved_educations_institution_id_idx ON approved_educations(institution_id)`);
 };
 
-/** Onaylanmış eğitim türü (GUZEM ücretli / işbirliği / kamu yararı / YÖK mikro yeterlilik). */
+/** Onaylanmış eğitim türü (GUZEM ücretli / işbirliği / kamu yararı / Türk Eğitim Sen işbirliği). */
 const migrateEducationSalesFilterColumn = async () => {
   await pool.query(`ALTER TABLE approved_educations ADD COLUMN IF NOT EXISTS sales_filter TEXT`);
   await pool.query(`ALTER TABLE educations ADD COLUMN IF NOT EXISTS sales_filter TEXT`);
@@ -820,6 +820,46 @@ const migratePaymentsTable = async () => {
   await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS payment_id UUID`);
 };
 
+/** "YÖK Mikro Yeterlilik" satış filtresi "Türk Eğitim Sen İşbirliği" olarak yeniden adlandırıldı. */
+const migrateRenameYokMikroSalesFilter = async () => {
+  for (const table of ["educations", "approved_educations", "education_calendar"]) {
+    await pool.query(
+      `UPDATE ${table} SET sales_filter = 'turk-egitim-sen' WHERE LOWER(TRIM(sales_filter)) = 'yok-mikro-yeterlilik'`,
+    );
+  }
+};
+
+/** Türk Eğitim Sen eğitimleri için kullanıcı bazlı eğitmen doğrulama talepleri. */
+const migrateInstructorVerificationsTable = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS instructor_verifications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL UNIQUE REFERENCES normal_users(id) ON DELETE CASCADE,
+      verification_email TEXT NOT NULL,
+      education_id UUID REFERENCES educations(id) ON DELETE SET NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      verified_at TIMESTAMPTZ,
+      verified_by UUID REFERENCES admin_users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS instructor_verifications_status_idx
+      ON instructor_verifications (status, created_at DESC)
+  `);
+};
+
+const migrateInstructorVerificationsPermissions = async () => {
+  await pool.query(`
+    INSERT INTO permissions (role_id, module_name, can_view, can_create, can_update, can_delete)
+    SELECT r.id, 'instructorVerifications', p.can_view, FALSE, p.can_update, FALSE
+    FROM roles r
+    INNER JOIN permissions p ON p.role_id = r.id AND p.module_name = 'educationApplications'
+    ON CONFLICT (role_id, module_name) DO NOTHING
+  `);
+};
+
 /** E-Devlet sertifika bildirim / onay kuyruğu */
 const migrateCertificateNotificationsTable = async () => {
   await pool.query(`
@@ -878,6 +918,9 @@ export {
   migrateEducationApplicationsPermissions,
   migrateCertificateNotificationsTable,
   migrateCertificateNotificationsPermissions,
+  migrateRenameYokMikroSalesFilter,
+  migrateInstructorVerificationsTable,
+  migrateInstructorVerificationsPermissions,
   migrateEducationDocColumns,
   migrateEducationCalendarColumns,
   migrateEducationCategoryColumns,
@@ -957,4 +1000,7 @@ export const migrations = [
   migrateCertificateNotificationsTable,
   migrateCertificateNotificationsPermissions,
   migratePaymentsTable,
+  migrateRenameYokMikroSalesFilter,
+  migrateInstructorVerificationsTable,
+  migrateInstructorVerificationsPermissions,
 ];

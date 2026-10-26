@@ -15,6 +15,7 @@ import adminNormalUsersBulkRoutes from "./admin/normalUsersBulk.routes.js";
 import adminCrudRoutes from "./admin/crud.routes.js";
 import adminPermissionsRoutes from "./admin/permissions.routes.js";
 import adminEducationModulesRoutes from "./admin/educationModules.routes.js";
+import adminInstructorVerificationsRoutes from "./admin/instructorVerifications.routes.js";
 
 /** Routers keep full /api/... paths from the original monolith. */
 export function registerRoutes(app) {
@@ -31,6 +32,7 @@ export function registerRoutes(app) {
   app.use(adminMessagingRoutes);
   app.use(adminEducationModulesRoutes);
   app.use(adminEducationApplicationsRoutes);
+  app.use(adminInstructorVerificationsRoutes);
   app.use(adminCertificateNotificationsRoutes);
   app.use(adminNormalUsersBulkRoutes);
   app.use(adminCrudRoutes);
