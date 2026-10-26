@@ -6596,15 +6596,43 @@ textarea {
   font-size: 1.08rem;
 }
 
-.training-detail-meta {
+.training-detail-meta,
+ul.rbt-meta.training-detail-meta {
   margin: 0;
+  padding: 0;
+  list-style: none;
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 18px;
+  gap: 12px 14px;
+}
+
+ul.rbt-meta.training-detail-meta > li {
+  margin: 0;
+  padding: 8px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+ul.rbt-meta.training-detail-meta > li::before,
+ul.rbt-meta.training-detail-meta > li::after {
+  content: none;
+  display: none;
+}
+
+ul.rbt-meta.training-detail-meta > li > i {
+  margin: 0;
+  font-size: 0.95em;
+  opacity: 0.9;
 }
 
 .training-detail-code {
-  margin: 14px 0 0;
+  margin: 18px 0 0;
   font-size: 1.06rem;
 }
 

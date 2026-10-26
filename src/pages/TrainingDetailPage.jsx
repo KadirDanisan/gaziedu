@@ -882,7 +882,7 @@ function TrainingDetailPage() {
                 href={institutionSiteHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() => setPartnerRedirectOpen(false)}
+                onClick={() => window.setTimeout(() => setPartnerRedirectOpen(false), 0)}
               >
                 Yönlendir
               </a>
