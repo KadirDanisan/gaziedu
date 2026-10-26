@@ -8,7 +8,7 @@ import { parseDateRangePeriod, buildIstanbulDateFilterSql } from "../../utils/da
 import { normalizeEducationCodeValue, isValidEducationCode } from "../../services/education/payload.js";
 import { signExamPortalLink } from "../../examPortalLinkToken.js";
 import { fetchCertificateRowContext, fetchCertificateListRows, normalizeCompletionFilter } from "../../services/exam/adminQueries.js";
-import { fetchExamSuccessPaymentRows } from "../../services/exam/successPayments.js";
+import { fetchExamSuccessPaymentRows, deleteExamBestScore } from "../../services/exam/successPayments.js";
 import { allocateCertificateDocumentNumber } from "../../services/certificate/serial.js";
 import { prepareEdevletExcelExport } from "../../services/certificate/edevletExcel.js";
 import { buildCertificateBulkZip } from "../../services/certificate/bulkPdf.js";
@@ -243,7 +243,7 @@ router.delete("/api/admin/exam-success-payments/:id", auth, checkPermission("exa
     if (previous.edevlet_processed === true) {
       return res.status(400).json({ message: "E-devlete işlenmiş kayıt silinemez. Önce sertifika listesinden e-devlet durumunu Hayır yapın." });
     }
-    await pool.query(`DELETE FROM exam_portal_best_scores WHERE id = $1`, [id]);
+    await deleteExamBestScore(id);
     await writeActivityLog({ req, action: "delete", moduleName: "examSuccessPayments", entityId: id, oldData: previous });
     return res.status(204).send();
   } catch (error) {
@@ -567,7 +567,7 @@ router.delete("/api/admin/exam-results/:id", auth, checkPermission("examResults"
     const id = String(req.params.id || "").trim();
     const previous = await pool.query(`SELECT * FROM exam_portal_best_scores WHERE id = $1 LIMIT 1`, [id]);
     if (!previous.rows[0]) return res.status(404).json({ message: "Kayıt bulunamadı." });
-    await pool.query(`DELETE FROM exam_portal_best_scores WHERE id = $1`, [id]);
+    await deleteExamBestScore(id);
     await writeActivityLog({ req, action: "delete", moduleName: "examResults", entityId: id, oldData: previous.rows[0] });
     return res.status(204).send();
   } catch (error) {

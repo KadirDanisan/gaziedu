@@ -80,4 +80,32 @@ const fetchExamSuccessPaymentRows = async ({ search = "", period = "all", page, 
   };
 };
 
-export { fetchExamSuccessPaymentRows };
+/**
+ * Sınav özet kaydını siler ve silme kaydı bırakır; açılıştaki backfill
+ * silme anından önceki denemelerden kaydı yeniden oluşturmaz.
+ */
+const deleteExamBestScore = async (id) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const deleted = await client.query(`DELETE FROM exam_portal_best_scores WHERE id = $1 RETURNING *`, [id]);
+    const row = deleted.rows[0];
+    if (row) {
+      await client.query(
+        `INSERT INTO exam_portal_best_score_deletions (education_code, national_id, deleted_at)
+         VALUES (UPPER(TRIM($1)), TRIM($2), NOW())
+         ON CONFLICT (education_code, national_id) DO UPDATE SET deleted_at = NOW()`,
+        [row.education_code, row.national_id],
+      );
+    }
+    await client.query("COMMIT");
+    return row || null;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+export { fetchExamSuccessPaymentRows, deleteExamBestScore };

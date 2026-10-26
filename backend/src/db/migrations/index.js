@@ -408,6 +408,18 @@ const migrateExamPortalParticipantNameColumns = async () => {
   `);
 };
 
+/** Admin panelinden silinen sınav özetleri; backfill bu tarihten önceki denemelerden kaydı yeniden oluşturmaz. */
+const migrateExamPortalBestScoreDeletionsTable = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS exam_portal_best_score_deletions (
+      education_code TEXT NOT NULL,
+      national_id TEXT NOT NULL,
+      deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (education_code, national_id)
+    )
+  `);
+};
+
 /** Tamamlanmış sınav oturumlarından eksik özet kayıtlarını doldurur (GZM-1-32-03 formatı). */
 const migrateBackfillExamPortalBestScores = async () => {
   await pool.query(`
@@ -425,12 +437,19 @@ const migrateBackfillExamPortalBestScores = async () => {
           PARTITION BY UPPER(TRIM(education_code)), TRIM(national_id)
           ORDER BY COALESCE(submitted_at, updated_at, started_at) DESC
         ) AS last_rank
-      FROM exam_attempts
+      FROM exam_attempts ea
       WHERE status = 'completed'
         AND education_code IS NOT NULL
         AND TRIM(education_code) <> ''
         AND national_id IS NOT NULL
         AND TRIM(national_id) <> ''
+        AND NOT EXISTS (
+          SELECT 1
+          FROM exam_portal_best_score_deletions d
+          WHERE d.education_code = UPPER(TRIM(ea.education_code))
+            AND d.national_id = TRIM(ea.national_id)
+            AND COALESCE(ea.submitted_at, ea.updated_at, ea.started_at) <= d.deleted_at
+        )
     ),
     best AS (
       SELECT education_code, national_id, score, attempt_at
@@ -877,6 +896,7 @@ export {
   migrateExamPortalVisitTable,
   migrateExamPortalBestScoresTable,
   migrateExamPortalParticipantNameColumns,
+  migrateExamPortalBestScoreDeletionsTable,
   migrateBackfillExamPortalBestScores,
   migrateExamPortalAccessPermissions,
   migrateExamResultsPermissions,
@@ -912,6 +932,7 @@ export const migrations = [
   migrateExamPortalVisitTable,
   migrateExamPortalBestScoresTable,
   migrateExamPortalParticipantNameColumns,
+  migrateExamPortalBestScoreDeletionsTable,
   migrateBackfillExamPortalBestScores,
   migrateExamPortalAccessPermissions,
   migrateExamResultsPermissions,
