@@ -428,6 +428,8 @@ function TrainingDetailPage() {
   }, [course?.id, slug, course, displayCourse]);
 
   const isPaidGuzem = normalizeSalesFilter(activeCourse?.salesFilter) === "guzem-ucretli";
+  const isCollaboration =
+    normalizeSalesFilter(activeCourse?.salesFilter) === "egitim-isbirligi-sertifikasyon";
   const needsInstructorVerification = salesFilterRequiresInstructorVerification(activeCourse?.salesFilter);
   const usesModulePreview = usesFirstModulePreview(activeCourse?.salesFilter);
   const needsCurriculumAuth = usesModulePreview;
@@ -862,7 +864,7 @@ function TrainingDetailPage() {
                     ? "Doğrulama Bekleniyor"
                     : "Eğitmen Doğrulama"}
             </button>
-          ) : institutionSiteHref ? (
+          ) : isCollaboration && institutionSiteHref ? (
             <button
               type="button"
               className="btn btn-outline training-detail-btn training-detail-btn-external"

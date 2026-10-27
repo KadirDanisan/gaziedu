@@ -1,4 +1,4 @@
-import { normalizeSalesFilter, salesFilterRequiresInstitution } from "../../config/salesFilters.js";
+import { normalizeSalesFilter } from "../../config/salesFilters.js";
 
 const normalizeUploadPath = (value) => {
   if (typeof value !== "string" || !value.length) return value;
@@ -6,7 +6,8 @@ const normalizeUploadPath = (value) => {
   return `/uploads/${value.split("/uploads/").pop()}`;
 };
 
-const EDUCATION_CODE_RE = /^[A-Z]{3}-\d+-\d+-\d+$/;
+/** Serbest eğitim kodu: boşluklar kaldırılır; harf, rakam ve güvenli ayraçlar kullanılabilir. */
+const EDUCATION_CODE_RE = /^[\p{L}\p{N}._:/+-]{1,100}$/u;
 
 const normalizeEducationCodeValue = (value) => {
   const code = String(value || "")
@@ -14,7 +15,7 @@ const normalizeEducationCodeValue = (value) => {
     .toUpperCase()
     .replace(/\s+/g, "");
   if (!EDUCATION_CODE_RE.test(code)) {
-    throw new Error("Eğitim kodu GZM-1-32-03 formatında olmalıdır (Önek-Kurum-Kategori-Sıra).");
+    throw new Error("Eğitim kodu boş olamaz; en fazla 100 karakter ve harf, rakam, -, _, ., :, /, + içerebilir.");
   }
   return code;
 };
@@ -90,10 +91,6 @@ const prepareEducationPayload = (payload, { table } = {}) => {
       throw new Error("Geçerli bir satış filtresi seçin.");
     }
     payload.sales_filter = salesFilter;
-    /** Kurum yalnızca işbirliği sertifikasyon türünde tutulur. */
-    if (!salesFilterRequiresInstitution(salesFilter)) {
-      payload.institution_id = null;
-    }
     if (isEducationsTable && salesFilter !== "guzem-ucretli") {
       payload.price = null;
       payload.has_discount = false;

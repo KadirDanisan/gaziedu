@@ -9,11 +9,18 @@ import {
   renderModuleResourcesPreview,
   VideoUploadField,
 } from "../components/EducationContentFields";
-import { normalizeEducationCode, parseEducationCode } from "../utils/educationCode";
+import { normalizeEducationCode } from "../utils/educationCode";
 import { lookupCodeMatches, normalizeLookupCode, parseApprovedEducationExcelBuffer } from "../utils/parseApprovedEducationExcel";
 import { parseBulkUsersExcelBuffer } from "../utils/parseBulkUsersExcel";
 import { downloadBlob } from "../utils/downloadBlob";
-import { DEFAULT_SALES_FILTER, SALES_FILTERS, normalizeSalesFilter, salesFilterLabel, salesFilterRequiresInstitution } from "../../constants/salesFilters";
+import {
+  DEFAULT_SALES_FILTER,
+  SALES_FILTERS,
+  normalizeSalesFilter,
+  salesFilterLabel,
+  salesFilterRequiresInstitution,
+  salesFilterSupportsInstitution,
+} from "../../constants/salesFilters";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
@@ -314,15 +321,16 @@ export default function CrudListPage({ moduleKey }) {
   const educationsById = Object.fromEntries((data.educations || []).map((education) => [education.id, education]));
   const lockEducationFromApproved = isEducationsModule && Boolean(String(form._approvedEducationId || "").trim());
   const isSalesFilterModule = isApprovedEducationsModule || isEducationsModule;
-  const showInstitutionFilter = isSalesFilterModule && salesFilterRequiresInstitution(salesFilterTab);
+  const showInstitutionFilter = isSalesFilterModule && salesFilterSupportsInstitution(salesFilterTab);
   const activeInstitutionFilter = showInstitutionFilter ? institutionFilter : "";
-  const formNeedsInstitution = salesFilterRequiresInstitution(form.salesFilter);
+  const formSupportsInstitution = salesFilterSupportsInstitution(form.salesFilter);
+  const formRequiresInstitution = salesFilterRequiresInstitution(form.salesFilter);
   const formIsPaidGuzem = isEducationsModule && normalizeSalesFilter(form.salesFilter) === "guzem-ucretli";
   const formFields = isContactFormsModule
     ? config.fields.filter((field) => field !== "createdAt" && field !== "isRead")
     : isSalesFilterModule
       ? config.fields.filter((field) => {
-          if (field === "institutionId" && !formNeedsInstitution) return false;
+          if (field === "institutionId" && !formSupportsInstitution) return false;
           if (field === "createdAt" && editing === "new") return false;
           if (isEducationsModule && ["price", "hasDiscount", "discountRate"].includes(field) && !formIsPaidGuzem) {
             return false;
@@ -492,7 +500,7 @@ export default function CrudListPage({ moduleKey }) {
       delete payload.password;
     }
     delete payload._approvedEducationId;
-    if (isSalesFilterModule && !formNeedsInstitution) {
+    if (isSalesFilterModule && !formSupportsInstitution) {
       payload.institutionId = null;
     }
     if (isEducationsModule) {
@@ -648,14 +656,7 @@ export default function CrudListPage({ moduleKey }) {
         setExcelImportProgress({ status: "running", current: i + 1, total: rows.length, fileName: file.name, lastCode: row.code });
 
         if (!row.code || !row.name) {
-          setError(`Satır ${row.sheetRow}: KOD (GZM-1-32-03) ve EĞİTİM ADI dolu olmalıdır. İçe aktarma durduruldu.`);
-          setExcelImportProgress(null);
-          return;
-        }
-
-        const parsedCode = parseEducationCode(row.code);
-        if (!parsedCode.ok) {
-          setError(`Satır ${row.sheetRow}: ${parsedCode.error} İçe aktarma durduruldu.`);
+          setError(`Satır ${row.sheetRow}: KOD ve EĞİTİM ADI dolu olmalıdır. İçe aktarma durduruldu.`);
           setExcelImportProgress(null);
           return;
         }
@@ -709,7 +710,7 @@ export default function CrudListPage({ moduleKey }) {
         }
 
         const created = await data.createItem("approvedEducations", {
-          code: parsedCode.code,
+          code: normalizeEducationCode(row.code),
           name: String(row.name).trim(),
           categoryId: category.id,
           salesFilter: salesFilterTab || DEFAULT_SALES_FILTER,
@@ -818,7 +819,7 @@ export default function CrudListPage({ moduleKey }) {
                 <button
                   type="button"
                   className="btn btn-outline"
-                  title="Zorunlu sütunlar: KOD (ör. GZM-1-32-03) ve EĞİTİM ADI. Kurum ve kategori kodu KOD içinden okunur."
+                  title="Zorunlu sütunlar: KOD ve EĞİTİM ADI. Serbest kodlarda KURUM KODU ile EĞİTİM KATEGORİ KODU sütunlarını da doldurun."
                   onClick={() => approvedExcelInputRef.current?.click()}
                 >
                   Excel ile toplu ekle
@@ -1219,7 +1220,7 @@ export default function CrudListPage({ moduleKey }) {
                             setForm((prev) => ({
                               ...prev,
                               salesFilter: event.target.value,
-                              institutionId: salesFilterRequiresInstitution(event.target.value) ? prev.institutionId : "",
+                              institutionId: salesFilterSupportsInstitution(event.target.value) ? prev.institutionId : "",
                             }))
                           }
                           required
@@ -1237,7 +1238,7 @@ export default function CrudListPage({ moduleKey }) {
                         <small style={{ opacity: 0.85 }}>
                           {isEducationsModule
                             ? "Onaylanmış eğitim seçildiğinde otomatik gelir."
-                            : "Kurum seçimi yalnızca “İş Birliği ve Sertifika Programları” türünde istenir."}
+                            : "Dört eğitim türünde de kurum atanabilir; İş Birliği ve Sertifika Programları türünde zorunludur."}
                         </small>
                       </div>
                     ) : isEducationsModule && field === "price" ? (
@@ -1304,11 +1305,11 @@ export default function CrudListPage({ moduleKey }) {
                       <select
                         value={form[field] ?? ""}
                         onChange={(event) => setForm((prev) => ({ ...prev, [field]: event.target.value }))}
-                        required
+                        required={formRequiresInstitution}
                         disabled={lockEducationFromApproved}
                       >
-                        <option value="" disabled>
-                          Kurum Seçin
+                        <option value="" disabled={formRequiresInstitution}>
+                          {formRequiresInstitution ? "Kurum Seçin" : "Kurum seçimi (isteğe bağlı)"}
                         </option>
                         {(data.institutions || []).map((institution) => (
                           <option key={institution.id} value={institution.id}>
@@ -1403,7 +1404,11 @@ export default function CrudListPage({ moduleKey }) {
                         onChange={(event) =>
                           setForm((prev) => ({
                             ...prev,
-                            [field]: event.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ""),
+                            [field]: event.target.value
+                              .toUpperCase()
+                              .replace(/\s+/g, "")
+                              .replace(/[^\p{L}\p{N}._:/+-]/gu, "")
+                              .slice(0, 100),
                           }))
                         }
                         onBlur={(event) =>
@@ -1412,9 +1417,8 @@ export default function CrudListPage({ moduleKey }) {
                             [field]: normalizeEducationCode(event.target.value),
                           }))
                         }
-                        placeholder="Örnek: GZM-1-32-03"
-                        pattern="[A-Z]{3}-[0-9]+-[0-9]+-[0-9]+"
-                        title="Önek-Kurum-Kategori-Sıra (Örnek: GZM-1-32-03)"
+                        placeholder="İstediğiniz eğitim kodunu girin"
+                        title="En fazla 100 karakter; harf, rakam, -, _, ., :, /, + kullanılabilir."
                         required
                       />
                     ) : isEducationLikeModule && field === "duration" ? (
@@ -1516,7 +1520,7 @@ export default function CrudListPage({ moduleKey }) {
                 {config.fields
                   .filter(
                     (field) =>
-                      !isSalesFilterModule || field !== "institutionId" || salesFilterRequiresInstitution(detail.salesFilter),
+                      !isSalesFilterModule || field !== "institutionId" || salesFilterSupportsInstitution(detail.salesFilter),
                   )
                   .map((field) => (
                   <div key={field} className="admin-detail-sheet__row">

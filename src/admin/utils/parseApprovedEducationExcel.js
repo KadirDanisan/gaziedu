@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { codesMatch, parseEducationCode } from "./educationCode";
+import { codesMatch, EDUCATION_CODE_PATTERN, normalizeEducationCode, parseEducationCode } from "./educationCode";
 
 /** Başlık hücresini karşılaştırma için sadeleştirir (Türkçe karakter → ASCII benzeri). */
 export function normalizeExcelHeader(value) {
@@ -32,8 +32,7 @@ function findColumnIndex(headers, matcher) {
 
 /**
  * Excel ilk sayfasını okur.
- * Zorunlu: KOD (GZM-1-32-03), EĞİTİM ADI
- * İsteğe bağlı: SIRA, KURUM KODU, EĞİTİM KATEGORİ KODU (KOD ile uyumlu olmalı)
+ * Zorunlu: KOD, EĞİTİM ADI. Serbest kod kullanılırsa KURUM KODU ve EĞİTİM KATEGORİ KODU sütunları gerekir.
  * @returns {{ rows: Array<{ sheetRow: number, sortKey: number, institutionCode: string, categoryCode: string, code: string, name: string }>, error: string|null }}
  */
 export function parseApprovedEducationExcelBuffer(arrayBuffer) {
@@ -68,7 +67,7 @@ export function parseApprovedEducationExcelBuffer(arrayBuffer) {
     if (missing.length) {
       return {
         rows: [],
-        error: `Zorunlu sütun başlıkları bulunamadı: ${missing.join(", ")}. İlk satırda KOD (ör. GZM-1-32-03) ve EĞİTİM ADI olmalıdır.`,
+        error: `Zorunlu sütun başlıkları bulunamadı: ${missing.join(", ")}. İlk satırda KOD ve EĞİTİM ADI olmalıdır.`,
       };
     }
 
@@ -86,22 +85,25 @@ export function parseApprovedEducationExcelBuffer(arrayBuffer) {
 
       if (!codeRaw && !name && !institutionFromSheet && !categoryFromSheet) continue;
 
-      const parsed = parseEducationCode(codeRaw);
-      if (!parsed.ok) {
+      const code = normalizeEducationCode(codeRaw);
+      if (!EDUCATION_CODE_PATTERN.test(code)) {
         return {
           rows: [],
-          error: `Satır ${r + 1}: ${parsed.error} Bulunan kod: "${codeRaw || "(boş)"}".`,
+          error: `Satır ${r + 1}: Eğitim kodu geçersiz veya boş. Bulunan kod: "${codeRaw || "(boş)"}".`,
         };
       }
+      const parsed = parseEducationCode(code);
+      const institutionCode = institutionFromSheet || (parsed.ok ? parsed.institutionCode : "");
+      const categoryCode = categoryFromSheet || (parsed.ok ? parsed.categoryCode : "");
 
-      if (institutionFromSheet && !codesMatch(institutionFromSheet, parsed.institutionCode)) {
+      if (parsed.ok && institutionFromSheet && !codesMatch(institutionFromSheet, parsed.institutionCode)) {
         return {
           rows: [],
           error: `Satır ${r + 1}: KOD içindeki kurum (${parsed.institutionCode}) ile KURUM KODU sütunu (${institutionFromSheet}) uyuşmuyor.`,
         };
       }
 
-      if (categoryFromSheet && !codesMatch(categoryFromSheet, parsed.categoryCode)) {
+      if (parsed.ok && categoryFromSheet && !codesMatch(categoryFromSheet, parsed.categoryCode)) {
         return {
           rows: [],
           error: `Satır ${r + 1}: KOD içindeki kategori (${parsed.categoryCode}) ile kategori kodu sütunu (${categoryFromSheet}) uyuşmuyor.`,
@@ -114,13 +116,19 @@ export function parseApprovedEducationExcelBuffer(arrayBuffer) {
           error: `Satır ${r + 1}: EĞİTİM ADI boş olamaz.`,
         };
       }
+      if (!institutionCode || !categoryCode) {
+        return {
+          rows: [],
+          error: `Satır ${r + 1}: Serbest eğitim kodlarında KURUM KODU ve EĞİTİM KATEGORİ KODU sütunları dolu olmalıdır.`,
+        };
+      }
 
       rows.push({
         sheetRow: r + 1,
         sortKey: sortKeySafe,
-        institutionCode: institutionFromSheet || parsed.institutionCode,
-        categoryCode: categoryFromSheet || parsed.categoryCode,
-        code: parsed.code,
+        institutionCode,
+        categoryCode,
+        code,
         name,
       });
     }

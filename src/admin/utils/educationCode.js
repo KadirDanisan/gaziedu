@@ -1,5 +1,5 @@
-/** GZM-1-32-03 → önek, kurum kodu, kategori kodu, eğitim sıra no */
-export const EDUCATION_CODE_PATTERN = /^[A-Z]{3}-\d+-\d+-\d+$/;
+/** Manuel girişte kabul edilen serbest eğitim kodu. */
+export const EDUCATION_CODE_PATTERN = /^[\p{L}\p{N}._:/+-]{1,100}$/u;
 
 export function normalizeEducationCode(value) {
   return String(value ?? "")
@@ -9,6 +9,7 @@ export function normalizeEducationCode(value) {
 }
 
 /**
+ * Toplu Excel aktarımında eski yapıdan kurum/kategori kodlarını okuyabilmek için kullanılır.
  * @returns {{ ok: true, code: string, prefix: string, institutionCode: string, categoryCode: string, educationSeq: string } | { ok: false, code: string, error: string }}
  */
 export function parseEducationCode(value) {

@@ -420,7 +420,7 @@ const migrateExamPortalBestScoreDeletionsTable = async () => {
   `);
 };
 
-/** Tamamlanmış sınav oturumlarından eksik özet kayıtlarını doldurur (GZM-1-32-03 formatı). */
+/** Tamamlanmış sınav oturumlarından eksik özet kayıtlarını doldurur. */
 const migrateBackfillExamPortalBestScores = async () => {
   await pool.query(`
     WITH ranked AS (
@@ -465,7 +465,8 @@ const migrateBackfillExamPortalBestScores = async () => {
     SELECT b.education_code, b.national_id, b.score, b.attempt_at, l.attempt_at, l.score
     FROM best b
     INNER JOIN last l ON l.education_code = b.education_code AND l.national_id = b.national_id
-    WHERE b.education_code ~ '^[A-Z]{3}-[0-9]+-[0-9]+-[0-9]+$'
+    WHERE b.education_code IS NOT NULL
+      AND LENGTH(TRIM(b.education_code)) BETWEEN 1 AND 100
       AND b.national_id ~ '^[0-9]{11}$'
     ON CONFLICT (education_code, national_id) DO UPDATE SET
       best_score = GREATEST(exam_portal_best_scores.best_score, EXCLUDED.best_score),

@@ -1,11 +1,12 @@
 /** Onaylanmış eğitimlerin satış/listeleme türü. Backend kopyası: backend/src/config/salesFilters.js */
 export const SALES_FILTERS = [
-  { key: "guzem-ucretli", label: "Ücretli Eğitim Programları", requiresInstitution: false },
-  { key: "egitim-isbirligi-sertifikasyon", label: "İş Birliği ve Sertifika Programları", requiresInstitution: true },
-  { key: "guzem-kamu-yarari-ucretsiz", label: "Kamu Yararına Yönelik Ücretsiz Eğitim Programları", requiresInstitution: false },
+  { key: "guzem-ucretli", label: "Ücretli Eğitim Programları", supportsInstitution: true, requiresInstitution: false },
+  { key: "egitim-isbirligi-sertifikasyon", label: "İş Birliği ve Sertifika Programları", supportsInstitution: true, requiresInstitution: true },
+  { key: "guzem-kamu-yarari-ucretsiz", label: "Kamu Yararına Yönelik Ücretsiz Eğitim Programları", supportsInstitution: true, requiresInstitution: false },
   {
     key: "kalite-egitim",
     label: "Kalite Eğitim",
+    supportsInstitution: true,
     requiresInstitution: false,
     requiresInstructorVerification: true,
   },
@@ -33,6 +34,9 @@ export const salesFilterLabel = (value) => salesFilterByKey[normalizeSalesFilter
 
 export const salesFilterRequiresInstitution = (value) =>
   Boolean(salesFilterByKey[normalizeSalesFilter(value)]?.requiresInstitution);
+
+export const salesFilterSupportsInstitution = (value) =>
+  Boolean(salesFilterByKey[normalizeSalesFilter(value)]?.supportsInstitution);
 
 /** Müfredat ve sınav erişimi için admin panelinden eğitmen doğrulaması gereken türler. */
 export const salesFilterRequiresInstructorVerification = (value) =>

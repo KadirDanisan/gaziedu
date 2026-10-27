@@ -168,7 +168,7 @@ router.delete("/api/admin/exam-portal/limit-exceeded", auth, checkPermission("ex
       .replace(/\s+/g, "");
     const nationalId = String(req.body?.nationalId || "").trim();
     if (!isValidEducationCode(educationCode)) {
-      return res.status(400).json({ message: "Geçerli eğitim kodu gerekli (ör. GZM-1-32-03)." });
+      return res.status(400).json({ message: "Geçerli bir eğitim kodu gereklidir." });
     }
     if (!/^\d{11}$/.test(nationalId)) {
       return res.status(400).json({ message: "T.C. kimlik no 11 haneli olmalıdır." });

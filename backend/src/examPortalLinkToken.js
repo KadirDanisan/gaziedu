@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 const ISSUER = "gaziedu-exam-portal";
 const AUDIENCE = "exam-portal-v1";
 
-const EDUCATION_CODE_RE = /^[A-Z]{3}-\d+-\d+-\d+$/;
+const EDUCATION_CODE_RE = /^[\p{L}\p{N}._:/+-]{1,100}$/u;
 
 function getLinkSecret() {
   const explicit = String(process.env.EXAM_PORTAL_LINK_SECRET || "").trim();
