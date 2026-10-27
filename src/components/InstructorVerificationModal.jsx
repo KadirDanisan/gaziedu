@@ -10,7 +10,7 @@ const STEPS = [
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * Türk Eğitim Sen İşbirliği eğitimleri: giriş yapmış kullanıcı e-postasını doğrulama için gönderir,
+ * Kalite Eğitim eğitimleri: giriş yapmış kullanıcı e-postasını doğrulama için gönderir,
  * admin panelinde "Eğitmen Doğrulama" listesinden onaylanınca eğitim içeriği açılır.
  */
 function InstructorVerificationModal({ open, onClose, course, user, onStatusChange }) {
@@ -78,7 +78,7 @@ function InstructorVerificationModal({ open, onClose, course, user, onStatusChan
           <div>
             <h2 id="instructor-verify-title">Eğitmen Doğrulama</h2>
             <p className="paid-apply-modal__subtitle">
-              {course?.title || "Türk Eğitim Sen İşbirliği"}
+              {course?.title || "Kalite Eğitim"}
               {course?.code ? ` · ${course.code}` : ""}
             </p>
           </div>
@@ -120,7 +120,7 @@ function InstructorVerificationModal({ open, onClose, course, user, onStatusChan
                   disabled={submitting}
                 />
                 <p className="paid-apply-result__muted">
-                  E-posta adresiniz yönetici onayına gönderilir. Onaylandıktan sonra Türk Eğitim Sen İşbirliği eğitimlerinin
+                  E-posta adresiniz yönetici onayına gönderilir. Onaylandıktan sonra Kalite Eğitim eğitimlerinin
                   video, PDF ve doküman içeriklerine erişip sınava girebilirsiniz.
                 </p>
               </label>

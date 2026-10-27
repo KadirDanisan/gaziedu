@@ -92,7 +92,7 @@ export default function InstructorVerificationsPage() {
         <div>
           <h2>Eğitmen Doğrulama</h2>
           <p>
-            Türk Eğitim Sen İşbirliği eğitimleri için gelen e-posta doğrulama talepleri. Doğrulanan kullanıcılar bu
+            Kalite Eğitim eğitimleri için gelen e-posta doğrulama talepleri. Doğrulanan kullanıcılar bu
             eğitimlerin modül içeriklerine ve sınavına erişebilir.
             {pendingCount > 0 ? (
               <>
@@ -260,7 +260,7 @@ export default function InstructorVerificationsPage() {
                 </p>
                 <p className="admin-modal__subtitle admin-modal__subtitle--dense" style={{ marginTop: 8 }}>
                   {confirm.action === "verify"
-                    ? "Doğrulanan kullanıcı Türk Eğitim Sen İşbirliği eğitimlerinin içeriklerine ve sınavına erişebilecek."
+                    ? "Doğrulanan kullanıcı Kalite Eğitim eğitimlerinin içeriklerine ve sınavına erişebilecek."
                     : "Kullanıcı bu eğitimlerin içeriklerine erişemeyecek; isterse tekrar doğrulama talebi gönderebilir."}
                 </p>
               </div>

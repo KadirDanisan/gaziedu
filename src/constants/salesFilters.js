@@ -4,8 +4,8 @@ export const SALES_FILTERS = [
   { key: "egitim-isbirligi-sertifikasyon", label: "İş Birliği ve Sertifika Programları", requiresInstitution: true },
   { key: "guzem-kamu-yarari-ucretsiz", label: "Kamu Yararına Yönelik Ücretsiz Eğitim Programları", requiresInstitution: false },
   {
-    key: "turk-egitim-sen",
-    label: "Türk Eğitim Sen İşbirliği",
+    key: "kalite-egitim",
+    label: "Kalite Eğitim",
     requiresInstitution: false,
     requiresInstructorVerification: true,
   },
@@ -13,7 +13,8 @@ export const SALES_FILTERS = [
 
 /** Eski anahtar → yeni anahtar (eski linkler / önbellekteki veriler için). */
 export const LEGACY_SALES_FILTER_KEYS = {
-  "yok-mikro-yeterlilik": "turk-egitim-sen",
+  "yok-mikro-yeterlilik": "kalite-egitim",
+  "turk-egitim-sen": "kalite-egitim",
 };
 
 export const DEFAULT_SALES_FILTER = "egitim-isbirligi-sertifikasyon";
@@ -41,7 +42,7 @@ export const salesFilterRequiresInstructorVerification = (value) =>
 export const FIRST_MODULE_PREVIEW_FILTERS = [
   "guzem-ucretli",
   "guzem-kamu-yarari-ucretsiz",
-  "turk-egitim-sen",
+  "kalite-egitim",
 ];
 
 export const usesFirstModulePreview = (value) =>

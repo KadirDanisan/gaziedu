@@ -80,7 +80,7 @@ const migrateApprovedEducationsTable = async () => {
   await pool.query(`CREATE INDEX IF NOT EXISTS approved_educations_institution_id_idx ON approved_educations(institution_id)`);
 };
 
-/** Onaylanmış eğitim türü (GUZEM ücretli / işbirliği / kamu yararı / Türk Eğitim Sen işbirliği). */
+/** Onaylanmış eğitim türü (GUZEM ücretli / işbirliği / kamu yararı / Kalite Eğitim). */
 const migrateEducationSalesFilterColumn = async () => {
   await pool.query(`ALTER TABLE approved_educations ADD COLUMN IF NOT EXISTS sales_filter TEXT`);
   await pool.query(`ALTER TABLE educations ADD COLUMN IF NOT EXISTS sales_filter TEXT`);
@@ -820,16 +820,17 @@ const migratePaymentsTable = async () => {
   await pool.query(`ALTER TABLE education_applications ADD COLUMN IF NOT EXISTS payment_id UUID`);
 };
 
-/** "YÖK Mikro Yeterlilik" satış filtresi "Türk Eğitim Sen İşbirliği" olarak yeniden adlandırıldı. */
+/** "YÖK Mikro Yeterlilik" (ve ara ad "turk-egitim-sen") satış filtresi "kalite-egitim" olarak yeniden adlandırıldı. */
 const migrateRenameYokMikroSalesFilter = async () => {
   for (const table of ["educations", "approved_educations", "education_calendar"]) {
     await pool.query(
-      `UPDATE ${table} SET sales_filter = 'turk-egitim-sen' WHERE LOWER(TRIM(sales_filter)) = 'yok-mikro-yeterlilik'`,
+      `UPDATE ${table} SET sales_filter = 'kalite-egitim'
+       WHERE LOWER(TRIM(sales_filter)) IN ('yok-mikro-yeterlilik', 'turk-egitim-sen')`,
     );
   }
 };
 
-/** Türk Eğitim Sen eğitimleri için kullanıcı bazlı eğitmen doğrulama talepleri. */
+/** Kalite Eğitim eğitimleri için kullanıcı bazlı eğitmen doğrulama talepleri. */
 const migrateInstructorVerificationsTable = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS instructor_verifications (
