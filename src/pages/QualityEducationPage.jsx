@@ -237,6 +237,24 @@ function QualityTrackedVideo({ item, educationId, onStateUpdated }) {
     };
   }, [flush, item.id, item.moduleId, item.path, source.src, source.type]);
 
+  useEffect(() => {
+    const pauseAndSave = () => {
+      const video = videoRef.current;
+      if (!video) return;
+      if (!video.paused) video.pause();
+      if (rangeStartRef.current != null) flush(video, true);
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden) pauseAndSave();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", pauseAndSave);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", pauseAndSave);
+    };
+  }, [flush]);
+
   if (source.type === "none") return <div className="quality-player-empty">Video kaynağı bulunamadı.</div>;
 
   if (source.type === "embed" || source.type === "link") {
@@ -644,7 +662,6 @@ export default function QualityEducationPage() {
           <>
             <section className="quality-course-hero">
               <div className="quality-course-hero__content">
-                <p className="quality-eyebrow">{state.course.category || "Kalite Eğitim"}</p>
                 <h1>{state.course.title}</h1>
                 <p>{state.course.description || "Bu eğitim için açıklama henüz eklenmedi."}</p>
                 <div className="quality-course-hero__meta">

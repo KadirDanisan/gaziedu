@@ -73,7 +73,7 @@ function App() {
 
           <Route path="/sinavportali/:educationCode/:nationalId" element={<ExamPortalLegacyPage />} />
           <Route path="/sinavportali/:portalToken" element={<ExamPortalPage />} />
-          <Route path="/kalite-egitim" element={<QualityEducationPage />} />
+          <Route path="/kalite" element={<QualityEducationPage />} />
 
           <Route element={<AdminRouteShell />}>
             <Route path="/admin/giris" element={<AdminLoginPage />} />
