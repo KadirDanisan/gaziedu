@@ -8,7 +8,7 @@ export const SALES_FILTERS = [
     label: "Kalite Eğitim",
     supportsInstitution: true,
     requiresInstitution: false,
-    requiresInstructorVerification: true,
+    requiresLdap: true,
   },
 ];
 
@@ -21,6 +21,7 @@ export const LEGACY_SALES_FILTER_KEYS = {
 export const DEFAULT_SALES_FILTER = "egitim-isbirligi-sertifikasyon";
 
 export const SALES_FILTER_KEYS = SALES_FILTERS.map((item) => item.key);
+export const PUBLIC_SALES_FILTERS = SALES_FILTERS.filter((item) => item.key !== "kalite-egitim");
 
 export const salesFilterByKey = Object.fromEntries(SALES_FILTERS.map((item) => [item.key, item]));
 

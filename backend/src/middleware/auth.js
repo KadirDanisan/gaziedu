@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import pool from "../db/pool.js";
 import { jwtSecret } from "../config/env.js";
+import { verifyQualityToken } from "../services/quality/identity.js";
 
 const auth = async (req, res, next) => {
   const token = req.headers.authorization?.replace("Bearer ", "");
@@ -29,6 +30,21 @@ const userAuth = async (req, res, next) => {
   }
 };
 
+const qualityAuth = async (req, res, next) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (!token) return res.status(401).json({ message: "Kalite Eğitim oturumu gerekli.", code: "QUALITY_AUTH_REQUIRED" });
+  try {
+    const payload = verifyQualityToken(token);
+    if (payload.userType !== "qualityLdap" || !payload.ldapSubject) {
+      return res.status(401).json({ message: "Geçersiz Kalite Eğitim oturumu.", code: "QUALITY_AUTH_INVALID" });
+    }
+    req.qualityUser = payload;
+    next();
+  } catch {
+    return res.status(401).json({ message: "Kalite Eğitim oturumu geçersiz veya süresi dolmuş.", code: "QUALITY_AUTH_INVALID" });
+  }
+};
+
 const checkPermission = (moduleName, action) => async (req, res, next) => {
   const result = await pool.query(
     `SELECT can_view, can_create, can_update, can_delete FROM permissions WHERE role_id = $1 AND module_name = $2 LIMIT 1`,
@@ -48,4 +64,4 @@ const isUuidParam = (value) => {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 };
 
-export { auth, userAuth, checkPermission, isAdminMessagingLead, isUuidParam };
+export { auth, userAuth, qualityAuth, checkPermission, isAdminMessagingLead, isUuidParam };

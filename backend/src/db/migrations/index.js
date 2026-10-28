@@ -862,6 +862,78 @@ const migrateInstructorVerificationsPermissions = async () => {
   `);
 };
 
+/** LDAP korumalı Kalite Eğitim alanı: personel kimliği ve video ilerleme kayıtları. */
+const migrateQualityEducationProgressTables = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quality_ldap_users (
+      ldap_subject TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      display_name TEXT,
+      email TEXT,
+      national_id VARCHAR(11),
+      last_login_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quality_education_progress (
+      ldap_subject TEXT NOT NULL REFERENCES quality_ldap_users(ldap_subject) ON DELETE CASCADE,
+      education_id UUID NOT NULL REFERENCES educations(id) ON DELETE CASCADE,
+      module_id UUID NOT NULL REFERENCES education_modules(id) ON DELETE CASCADE,
+      resource_index INT NOT NULL CHECK (resource_index >= 0),
+      resource_id TEXT NOT NULL,
+      watched_seconds NUMERIC(12,2) NOT NULL DEFAULT 0,
+      duration_seconds NUMERIC(12,2) NOT NULL DEFAULT 0,
+      last_position_seconds NUMERIC(12,2) NOT NULL DEFAULT 0,
+      watched_ranges JSONB NOT NULL DEFAULT '[]'::jsonb,
+      completed BOOLEAN NOT NULL DEFAULT FALSE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (ldap_subject, education_id, module_id, resource_id)
+    )
+  `);
+  await pool.query(`
+    ALTER TABLE quality_education_progress
+    ADD COLUMN IF NOT EXISTS resource_id TEXT
+  `);
+  await pool.query(`
+    UPDATE quality_education_progress
+    SET resource_id = 'legacy:' || resource_index::text
+    WHERE resource_id IS NULL OR resource_id = ''
+  `);
+  await pool.query(`
+    ALTER TABLE quality_education_progress
+    ALTER COLUMN resource_id SET NOT NULL
+  `);
+  await pool.query(`
+    DO $$
+    DECLARE current_primary_key TEXT;
+    BEGIN
+      SELECT pg_get_constraintdef(oid)
+      INTO current_primary_key
+      FROM pg_constraint
+      WHERE conrelid = 'quality_education_progress'::regclass
+        AND contype = 'p';
+
+      IF current_primary_key IS NULL OR current_primary_key NOT LIKE '%resource_id%' THEN
+        ALTER TABLE quality_education_progress
+          DROP CONSTRAINT IF EXISTS quality_education_progress_pkey;
+        ALTER TABLE quality_education_progress
+          ADD PRIMARY KEY (ldap_subject, education_id, module_id, resource_id);
+      END IF;
+    END
+    $$
+  `);
+  await pool.query(`
+    ALTER TABLE quality_education_progress
+    ADD COLUMN IF NOT EXISTS watched_ranges JSONB NOT NULL DEFAULT '[]'::jsonb
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS quality_education_progress_lookup_idx
+      ON quality_education_progress (ldap_subject, education_id, completed)
+  `);
+};
+
 /** E-Devlet sertifika bildirim / onay kuyruğu */
 const migrateCertificateNotificationsTable = async () => {
   await pool.query(`
@@ -923,6 +995,7 @@ export {
   migrateRenameYokMikroSalesFilter,
   migrateInstructorVerificationsTable,
   migrateInstructorVerificationsPermissions,
+  migrateQualityEducationProgressTables,
   migrateEducationDocColumns,
   migrateEducationCalendarColumns,
   migrateEducationCategoryColumns,
@@ -1005,4 +1078,5 @@ export const migrations = [
   migrateRenameYokMikroSalesFilter,
   migrateInstructorVerificationsTable,
   migrateInstructorVerificationsPermissions,
+  migrateQualityEducationProgressTables,
 ];

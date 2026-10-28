@@ -24,7 +24,7 @@ function normalizeNationalId(value) {
 }
 
 /**
- * @param {{ educationCode: string, nationalId: string, participantName?: string }} payload
+ * @param {{ educationCode: string, nationalId: string, participantName?: string, qualityEducationId?: string, qualityLdapSubject?: string }} payload
  * @param {{ expiresIn?: string }} [opts]
  */
 export function signExamPortalLink(payload, opts = {}) {
@@ -39,8 +39,13 @@ export function signExamPortalLink(payload, opts = {}) {
   const pn = String(payload.participantName || "")
     .trim()
     .slice(0, 200);
+  const qid = String(payload.qualityEducationId || "").trim();
+  const qsub = String(payload.qualityLdapSubject || "").trim().slice(0, 500);
+  if (Boolean(qid) !== Boolean(qsub) || (qid && !/^[0-9a-f-]{36}$/i.test(qid))) {
+    throw new Error("Geçersiz Kalite Eğitim sınav bilgisi.");
+  }
   const expiresIn = opts.expiresIn || "30d";
-  return jwt.sign({ ec, tc, pn }, getLinkSecret(), {
+  return jwt.sign({ ec, tc, pn, ...(qid ? { qid, qsub } : {}) }, getLinkSecret(), {
     algorithm: "HS256",
     expiresIn,
     issuer: ISSUER,
@@ -49,7 +54,7 @@ export function signExamPortalLink(payload, opts = {}) {
 }
 
 /**
- * @returns {{ educationCode: string, nationalId: string, participantName: string }}
+ * @returns {{ educationCode: string, nationalId: string, participantName: string, qualityEducationId: string, qualityLdapSubject: string }}
  */
 export function verifyExamPortalLink(tokenRaw) {
   const token = String(tokenRaw || "").trim();
@@ -67,6 +72,8 @@ export function verifyExamPortalLink(tokenRaw) {
     const ec = normalizeEducationCode(decoded.ec);
     const tc = normalizeNationalId(decoded.tc);
     const pn = String(decoded.pn || "").trim().slice(0, 200);
+    const qid = String(decoded.qid || "").trim();
+    const qsub = String(decoded.qsub || "").trim().slice(0, 500);
     if (!EDUCATION_CODE_RE.test(ec)) {
       const err = new Error("Sınav bağlantısı geçersiz.");
       err.statusCode = 401;
@@ -77,7 +84,18 @@ export function verifyExamPortalLink(tokenRaw) {
       err.statusCode = 401;
       throw err;
     }
-    return { educationCode: ec, nationalId: tc, participantName: pn || "—" };
+    if (Boolean(qid) !== Boolean(qsub) || (qid && !/^[0-9a-f-]{36}$/i.test(qid))) {
+      const err = new Error("Sınav bağlantısı geçersiz.");
+      err.statusCode = 401;
+      throw err;
+    }
+    return {
+      educationCode: ec,
+      nationalId: tc,
+      participantName: pn || "—",
+      qualityEducationId: qid,
+      qualityLdapSubject: qsub,
+    };
   } catch (e) {
     if (e.statusCode) throw e;
     const err = new Error("Sınav bağlantısı geçersiz veya süresi dolmuş.");

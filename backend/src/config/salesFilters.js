@@ -8,7 +8,7 @@ const SALES_FILTERS = [
     label: "Kalite Eğitim",
     supportsInstitution: true,
     requiresInstitution: false,
-    requiresInstructorVerification: true,
+    requiresLdap: true,
   },
 ];
 

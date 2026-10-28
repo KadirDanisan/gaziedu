@@ -4,6 +4,9 @@ import { sqlTitleSlugTrimmed } from "../../utils/slug.js";
 import { loadEducationModules, normalizeTopicHeadings } from "./modules.js";
 import { SALES_FILTERS, normalizeSalesFilter, salesFilterLabel } from "../../config/salesFilters.js";
 
+const HIDDEN_PUBLIC_SALES_FILTER = "kalite-egitim";
+const PUBLIC_SALES_FILTERS = SALES_FILTERS.filter((item) => item.key !== HIDDEN_PUBLIC_SALES_FILTER);
+
 const formatRatingAggregateFields = (row) => {
   const ratingCount = Number(row.rating_count ?? 0) || 0;
   const rawAvg = row.rating_average;
@@ -86,7 +89,22 @@ const formatPublicCourse = (row) => ({
 });
 
 const loadPublicCategoryOptions = async () => {
-  const categoryRows = await pool.query(`SELECT id, category_name FROM education_categories ORDER BY category_name ASC`);
+  const categoryRows = await pool.query(
+    `SELECT c.id, c.category_name
+     FROM education_categories c
+     WHERE EXISTS (
+       SELECT 1 FROM educations e
+       WHERE e.category_id = c.id
+         AND COALESCE(e.sales_filter, '') <> $1
+     )
+     OR EXISTS (
+       SELECT 1 FROM education_calendar ec
+       WHERE ec.category_id = c.id
+         AND COALESCE(ec.sales_filter, '') <> $1
+     )
+     ORDER BY c.category_name ASC`,
+    [HIDDEN_PUBLIC_SALES_FILTER],
+  );
   return [
     { id: "", name: "Tüm Eğitimler" },
     ...categoryRows.rows.map((row) => ({ id: row.id, name: row.category_name })),
@@ -109,7 +127,7 @@ const buildEducationCalendarQuery = (query) => {
   const dateFrom = String(query.dateFrom || "").trim();
   const dateTo = String(query.dateTo || "").trim();
   const params = [];
-  const conditions = [];
+  const conditions = [`COALESCE(e.sales_filter, '') <> '${HIDDEN_PUBLIC_SALES_FILTER}'`];
 
   if (categoryId) {
     params.push(categoryId);
@@ -169,7 +187,7 @@ const parseEducationsCatalogQuery = (query) => {
   ];
 
   const params = [];
-  const conditions = [];
+  const conditions = [`COALESCE(e.sales_filter, '') <> '${HIDDEN_PUBLIC_SALES_FILTER}'`];
 
   if (searchRaw) {
     params.push(`%${escapeIlikePattern(searchRaw)}%`);
@@ -244,7 +262,7 @@ const queryPublicEducationsList = async (query) => {
 /** Ana sayfada her satış filtresi için ayrı bir şerit; tek sorguda gruplanır. */
 const queryLatestCoursesBySalesFilter = async ({ limit = 4 } = {}) => {
   const perGroup = Math.min(12, Math.max(1, Number(limit) || 4));
-  const keys = SALES_FILTERS.map((item) => item.key);
+  const keys = PUBLIC_SALES_FILTERS.map((item) => item.key);
 
   const listSql = `SELECT * FROM (
       SELECT ${EDUCATION_LIST_SELECT},
@@ -274,7 +292,7 @@ const queryLatestCoursesBySalesFilter = async ({ limit = 4 } = {}) => {
   });
 
   return {
-    groups: SALES_FILTERS.map((item) => ({
+    groups: PUBLIC_SALES_FILTERS.map((item) => ({
       key: item.key,
       label: item.label,
       total: totalsByKey[item.key] || 0,
@@ -310,5 +328,7 @@ export {
   parseEducationsCatalogQuery,
   queryPublicEducationsList,
   queryLatestCoursesBySalesFilter,
+  HIDDEN_PUBLIC_SALES_FILTER,
+  PUBLIC_SALES_FILTERS,
   formatEducationReviewRow,
 };

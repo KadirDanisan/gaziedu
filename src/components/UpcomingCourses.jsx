@@ -2,13 +2,13 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { makeSlug } from "../data/homeData";
 import { publicApi, resolvePublicImageUrl } from "../api/publicApi";
-import { SALES_FILTERS } from "../constants/salesFilters";
+import { PUBLIC_SALES_FILTERS } from "../constants/salesFilters";
 import CourseCardThumb from "./CourseCardThumb";
 import { useAuth } from "../context/AuthContext";
 
 const COURSES_PER_FILTER = 4;
 
-const emptyGroups = SALES_FILTERS.map((item) => ({ key: item.key, label: item.label, total: 0, courses: [] }));
+const emptyGroups = PUBLIC_SALES_FILTERS.map((item) => ({ key: item.key, label: item.label, total: 0, courses: [] }));
 
 function UpcomingCourses() {
   const [groups, setGroups] = useState(emptyGroups);

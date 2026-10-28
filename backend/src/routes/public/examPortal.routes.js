@@ -10,6 +10,7 @@ import {
 } from "../../services/exam/engine.js";
 import { EXAM_SECONDS_PER_QUESTION } from "../../services/exam/constants.js";
 import { upsertExamPortalBestScore, getExamPortalAccessState } from "../../services/exam/portal.js";
+import { loadQualityCourseState } from "../../services/quality/progress.js";
 
 const router = Router();
 
@@ -18,10 +19,25 @@ const LIMIT_EXCEEDED_MESSAGE =
 const ALREADY_PASSED_MESSAGE =
   "Bu eğitim için sınavdan başarıyla geçtiniz. Tekrar girmenize gerek yoktur.";
 
+const ensureQualityExamUnlocked = async (tokenPayload) => {
+  if (!tokenPayload.qualityEducationId || !tokenPayload.qualityLdapSubject) return;
+  const state = await loadQualityCourseState(
+    tokenPayload.qualityLdapSubject,
+    tokenPayload.qualityEducationId,
+  );
+  if (!state?.examUnlocked) {
+    const error = new Error("Değerlendirme sınavı için tüm videoları en az %90 tamamlamanız gerekir.");
+    error.statusCode = 403;
+    error.code = "QUALITY_EXAM_LOCKED";
+    throw error;
+  }
+};
+
 router.post("/api/public/exam-portal/validate-token", async (req, res, next) => {
   try {
     const portalToken = String(req.body?.portalToken || "").trim();
     const out = verifyExamPortalLink(portalToken);
+    await ensureQualityExamUnlocked(out);
     const access = await getExamPortalAccessState(out.educationCode, out.nationalId);
     return res.json({
       educationCode: out.educationCode,
@@ -46,6 +62,7 @@ router.post("/api/public/exam-portal/visit", async (req, res, next) => {
     let participantName = "";
     try {
       const v = verifyExamPortalLink(portalToken);
+      await ensureQualityExamUnlocked(v);
       educationCode = v.educationCode;
       nationalId = v.nationalId;
       participantName = v.participantName;
@@ -80,6 +97,7 @@ router.post("/api/public/exam-portal/start", async (req, res, next) => {
     let participantName = "";
     try {
       const v = verifyExamPortalLink(portalToken);
+      await ensureQualityExamUnlocked(v);
       educationCode = v.educationCode;
 
       nationalId = v.nationalId;

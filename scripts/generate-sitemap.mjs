@@ -43,10 +43,12 @@ async function fetchCourseSlugs() {
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    (data.courses || []).forEach((course) => {
+    (data.courses || [])
+      .filter((course) => String(course.salesFilter || "").toLowerCase() !== "kalite-egitim")
+      .forEach((course) => {
       const slug = makeSlug(course.title);
       if (slug) slugs.add(slug);
-    });
+      });
     totalPages = Number(data.pagination?.totalPages) || 1;
     page += 1;
   } while (page <= totalPages);

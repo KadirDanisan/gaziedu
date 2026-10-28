@@ -393,7 +393,10 @@ function TrainingDetailPage() {
     };
   }, [slug]);
 
-  const fallbackCourse = useMemo(() => stateCourse || null, [stateCourse]);
+  const fallbackCourse = useMemo(
+    () => (normalizeSalesFilter(stateCourse?.salesFilter) === "kalite-egitim" ? null : stateCourse || null),
+    [stateCourse],
+  );
   const course = apiCourse || fallbackCourse;
 
   useEffect(() => {

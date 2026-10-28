@@ -13,9 +13,11 @@ import {
   EDUCATION_LIST_SELECT,
   EDUCATION_DETAIL_SELECT,
   CALENDAR_DETAIL_SELECT,
+  HIDDEN_PUBLIC_SALES_FILTER,
+  PUBLIC_SALES_FILTERS,
 } from "../../services/education/publicCourses.js";
 import { loadEducationModules, lockEducationModulesForPublic } from "../../services/education/modules.js";
-import { normalizeSalesFilter, SALES_FILTERS, usesFirstModulePreview } from "../../config/salesFilters.js";
+import { normalizeSalesFilter, usesFirstModulePreview } from "../../config/salesFilters.js";
 
 const router = Router();
 
@@ -31,6 +33,13 @@ router.get("/api/public/education-reviews", async (req, res, next) => {
 
     let result;
     if (educationId) {
+      const target = await pool.query(
+        `SELECT 1 FROM educations
+         WHERE id = $1 AND COALESCE(sales_filter, '') <> 'kalite-egitim'
+         LIMIT 1`,
+        [educationId],
+      );
+      if (!target.rows[0]) return res.status(404).json({ message: "Eğitim bulunamadı." });
       result = await pool.query(
         `SELECT r.id, r.rating, r.comment, r.created_at, u.first_name, u.last_name
          FROM education_reviews r
@@ -40,6 +49,13 @@ router.get("/api/public/education-reviews", async (req, res, next) => {
         [educationId],
       );
     } else {
+      const target = await pool.query(
+        `SELECT 1 FROM education_calendar
+         WHERE id = $1 AND COALESCE(sales_filter, '') <> 'kalite-egitim'
+         LIMIT 1`,
+        [calendarId],
+      );
+      if (!target.rows[0]) return res.status(404).json({ message: "Eğitim bulunamadı." });
       result = await pool.query(
         `SELECT r.id, r.rating, r.comment, r.created_at, u.first_name, u.last_name
          FROM education_reviews r
@@ -69,6 +85,7 @@ router.get("/api/public/search/trainings", async (req, res, next) => {
         `SELECT e.id, e.name, e.image_url, e.category_id, 'education'::text AS source_type
          FROM educations e
          WHERE e.name ILIKE $1 ESCAPE '\\'
+           AND COALESCE(e.sales_filter, '') <> '${HIDDEN_PUBLIC_SALES_FILTER}'
          ORDER BY e.name ASC
          LIMIT $2`,
         [pattern, limit],
@@ -77,6 +94,7 @@ router.get("/api/public/search/trainings", async (req, res, next) => {
         `SELECT ec.id, ec.education_name AS name, ec.image_url, ec.category_id, 'calendar'::text AS source_type
          FROM education_calendar ec
          WHERE ec.education_name ILIKE $1 ESCAPE '\\'
+           AND COALESCE(ec.sales_filter, '') <> '${HIDDEN_PUBLIC_SALES_FILTER}'
          ORDER BY ec.education_name ASC
          LIMIT $2`,
         [pattern, limit],
@@ -106,6 +124,7 @@ router.get("/api/public/top-rated-courses", async (req, res, next) => {
        LEFT JOIN institutions i ON i.id = e.institution_id
        LEFT JOIN instructors ins ON ins.id = e.instructor_id
        WHERE e.rating_count > 0
+         AND COALESCE(e.sales_filter, '') <> '${HIDDEN_PUBLIC_SALES_FILTER}'
        ORDER BY e.rating_count DESC, e.rating_average DESC NULLS LAST, e.created_at DESC
        LIMIT $1`;
     const result = await pool.query(listSql, [limit]);
@@ -135,6 +154,7 @@ router.get("/api/public/hero-courses", async (req, res, next) => {
        LEFT JOIN education_categories c ON c.id = e.category_id
        LEFT JOIN institutions i ON i.id = e.institution_id
        LEFT JOIN instructors ins ON ins.id = e.instructor_id
+       WHERE COALESCE(e.sales_filter, '') <> '${HIDDEN_PUBLIC_SALES_FILTER}'
        ORDER BY RANDOM()
        LIMIT $1`;
     const result = await pool.query(listSql, [limit]);
@@ -162,6 +182,7 @@ router.get("/api/public/upcoming-courses", async (req, res, next) => {
        LEFT JOIN education_categories c ON c.id = e.category_id
        LEFT JOIN institutions i ON i.id = e.institution_id
        LEFT JOIN instructors ins ON ins.id = e.instructor_id
+       WHERE COALESCE(e.sales_filter, '') <> '${HIDDEN_PUBLIC_SALES_FILTER}'
        ORDER BY e.created_at DESC
        LIMIT $1`;
     const result = await pool.query(listSql, [limit]);
@@ -173,7 +194,7 @@ router.get("/api/public/upcoming-courses", async (req, res, next) => {
 });
 
 router.get("/api/public/sales-filters", (req, res) => {
-  return res.json({ salesFilters: SALES_FILTERS.map(({ key, label }) => ({ key, label })) });
+  return res.json({ salesFilters: PUBLIC_SALES_FILTERS.map(({ key, label }) => ({ key, label })) });
 });
 
 router.get("/api/public/upcoming-courses-by-filter", async (req, res, next) => {
@@ -252,6 +273,9 @@ router.get("/api/public/educations/detail/:slug", async (req, res, next) => {
       row = (await pool.query(educationSql, [slug])).rows[0];
     }
     if (!row) {
+      return res.status(404).json({ message: "Eğitim bulunamadı." });
+    }
+    if (normalizeSalesFilter(row.sales_filter) === HIDDEN_PUBLIC_SALES_FILTER) {
       return res.status(404).json({ message: "Eğitim bulunamadı." });
     }
 

@@ -3,7 +3,7 @@ import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { publicApi, resolvePublicImageUrl } from "../api/publicApi";
 import CourseCardThumb from "../components/CourseCardThumb";
 import { makeSlug } from "../data/homeData";
-import { SALES_FILTERS, normalizeSalesFilter, salesFilterLabel } from "../constants/salesFilters";
+import { PUBLIC_SALES_FILTERS, normalizeSalesFilter, salesFilterLabel } from "../constants/salesFilters";
 import { useAuth } from "../context/AuthContext";
 
 function CourseRatingStars({ value, max = 5 }) {
@@ -388,7 +388,7 @@ function AllTrainingsPage() {
           <div className="sidebar-widget">
             <h4>Program Türü</h4>
             <div className="sidebar-check-list">
-              {SALES_FILTERS.map((option) => (
+              {PUBLIC_SALES_FILTERS.map((option) => (
                 <label key={option.key} className="sidebar-check-item">
                   <input
                     type="checkbox"

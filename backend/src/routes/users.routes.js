@@ -405,14 +405,14 @@ router.get("/api/users/favorites", userAuth, async (req, res, next) => {
        INNER JOIN educations e ON f.target_type = 'education' AND e.id = f.education_id
        LEFT JOIN education_categories c ON c.id = e.category_id
        LEFT JOIN institutions i ON i.id = e.institution_id
-       WHERE f.user_id = $1
+       WHERE f.user_id = $1 AND COALESCE(e.sales_filter, '') <> 'kalite-egitim'
        UNION ALL
        SELECT f.created_at, ec.id, ec.education_name AS name, ec.description, ec.image_url, ec.code, ec.duration, ec.content_doc_path, ec.category_id, c2.category_name, ec.calendar_date, f.target_type AS source_type, ec.rating_average, ec.rating_count, ec.institution_id, inst2.name AS institution_name, inst2.logo_url AS institution_logo_url, inst2.website_url AS institution_website_url
        FROM user_favorites f
        INNER JOIN education_calendar ec ON f.target_type = 'calendar' AND ec.id = f.calendar_id
        LEFT JOIN education_categories c2 ON c2.id = ec.category_id
        LEFT JOIN institutions inst2 ON inst2.id = ec.institution_id
-       WHERE f.user_id = $1
+       WHERE f.user_id = $1 AND COALESCE(ec.sales_filter, '') <> 'kalite-egitim'
        ORDER BY sort_date DESC`,
       [req.user.id],
     );
@@ -437,7 +437,10 @@ router.post("/api/users/favorites", userAuth, async (req, res, next) => {
       return res.status(400).json({ message: "Yalnızca educationId veya calendarId gönderin." });
     }
     if (educationId) {
-      const education = await pool.query(`SELECT id FROM educations WHERE id = $1 LIMIT 1`, [educationId]);
+      const education = await pool.query(
+        `SELECT id FROM educations WHERE id = $1 AND COALESCE(sales_filter, '') <> 'kalite-egitim' LIMIT 1`,
+        [educationId],
+      );
       if (!education.rows[0]) {
         return res.status(404).json({ message: "Eğitim bulunamadı." });
       }
@@ -450,7 +453,10 @@ router.post("/api/users/favorites", userAuth, async (req, res, next) => {
         [req.user.id, educationId],
       );
     } else {
-      const cal = await pool.query(`SELECT id FROM education_calendar WHERE id = $1 LIMIT 1`, [calendarId]);
+      const cal = await pool.query(
+        `SELECT id FROM education_calendar WHERE id = $1 AND COALESCE(sales_filter, '') <> 'kalite-egitim' LIMIT 1`,
+        [calendarId],
+      );
       if (!cal.rows[0]) {
         return res.status(404).json({ message: "Takvim kaydı bulunamadı." });
       }
