@@ -5,6 +5,45 @@ import { describeVideoSource, fixUploadedFileName, resolveAssetUrl } from "../ut
 
 const resourceKey = (item) => `${item.moduleId}:${item.id || item.resourceIndex}:${item.kind}`;
 
+const qualityAboutItems = (value) => {
+  const plain = String(value || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(?:p|li)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .trim();
+  if (!plain) return ["İçerik bilgisi yakında eklenecektir."];
+  const lines = plain
+    .split(/\r?\n|[•●▪]\s*|;\s+/)
+    .map((item) => item.replace(/^[-–—]\s*/, "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  if (lines.length > 1) return lines;
+  const sentences = plain.match(/[^.!?]+[.!?]?/g)?.map((item) => item.trim()).filter(Boolean) || [];
+  return sentences.length > 1 ? sentences : [plain];
+};
+
+function QualityBrand() {
+  return (
+    <div className="quality-brand-lockup">
+      <span className="quality-brand-lockup__logo">
+        <img src="/Guzem-05.png" alt="" />
+      </span>
+      <span className="quality-brand-lockup__text">
+        <strong>Gazi Üniversitesi</strong>
+        <span>Kalite Eğitim Programı</span>
+      </span>
+    </div>
+  );
+}
+
+function QualityWatermarkBackground() {
+  return (
+    <div className="quality-watermarks" aria-hidden="true">
+      {Array.from({ length: 96 }, (_, index) => <span key={index}>GAZİ ÜNİVERSİTESİ</span>)}
+    </div>
+  );
+}
+
 const flattenResources = (modules = []) => {
   const rows = [];
   modules.forEach((moduleRow, moduleIndex) => {
@@ -67,8 +106,7 @@ function QualityLogin({ onLoggedIn }) {
     <main className="quality-entry">
       <section className="quality-login-card">
         <div className="quality-login-card__brand">
-          <img src="/Guzem-05.png" alt="Gazi Üniversitesi" />
-          <span>Kalite Eğitim</span>
+          <QualityBrand />
         </div>
         <div>
           <p className="quality-eyebrow">Gazi Üniversitesi Personel Girişi</p>
@@ -345,6 +383,10 @@ function QualityLearningRoom({ state, onStateChange, onClose, onExam }) {
     || resources.find((item) => !item.locked)
     || null;
   const [activeKey, setActiveKey] = useState(firstAvailable ? resourceKey(firstAvailable) : "");
+  const handleStateUpdated = useCallback(
+    (result) => onStateChange((current) => ({ ...current, ...result })),
+    [onStateChange],
+  );
   const active = resources.find((item) => resourceKey(item) === activeKey && !item.locked) || firstAvailable;
 
   useEffect(() => {
@@ -379,7 +421,7 @@ function QualityLearningRoom({ state, onStateChange, onClose, onExam }) {
           <QualityResourceView
             item={active}
             educationId={state.course.id}
-            onStateUpdated={(result) => onStateChange({ ...state, ...result })}
+            onStateUpdated={handleStateUpdated}
           />
         </main>
         <aside className="quality-playlist">
@@ -545,15 +587,23 @@ export default function QualityEducationPage() {
   }
 
   const selectedSummary = courses.find((course) => course.id === selectedId);
+  const aboutItems = qualityAboutItems(state?.course?.content || state?.course?.description);
   return (
     <main className="quality-portal">
+      <QualityWatermarkBackground />
       <header className="quality-portal__header">
         <div className="quality-portal__brand">
-          <img src="/Guzem-05.png" alt="Gazi Üniversitesi" />
-          <span>Kalite Eğitim</span>
+          <QualityBrand />
+        </div>
+        <div className="quality-portal__nav-title">
+          <i className="fa-solid fa-graduation-cap" aria-hidden />
+          <span>Personel Gelişim Portalı</span>
         </div>
         <div className="quality-portal__user">
-          <span>{user?.displayName || user?.username}</span>
+          <span className="quality-portal__avatar" aria-hidden>
+            <i className="fa-regular fa-user" />
+          </span>
+          <span className="quality-portal__user-name">{user?.displayName || user?.username}</span>
           <button
             type="button"
             className="btn btn-outline"
@@ -623,7 +673,15 @@ export default function QualityEducationPage() {
             <section className="quality-course-info">
               <article>
                 <h2>Eğitim Hakkında</h2>
-                <p>{state.course.content || state.course.description || "İçerik bilgisi yakında eklenecektir."}</p>
+                <p className="quality-about-intro">Bu eğitim kapsamında ele alınan başlıklar:</p>
+                <ul className="quality-about-list">
+                  {aboutItems.map((item, index) => (
+                    <li key={`${index}-${item}`}>
+                      <i className="fa-solid fa-check" aria-hidden />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
               </article>
               <aside>
                 <h3>Eğitim Durumu</h3>
